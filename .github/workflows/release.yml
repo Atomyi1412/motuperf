@@ -1,0 +1,110 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag.TrimStart('v')
+          [xml]$project = Get-Content motuperf_cross_platform/src/MoTuPerf.Desktop/MoTuPerf.Desktop.csproj
+          $projectVersion = @($project.Project.PropertyGroup | ForEach-Object { if ($_.Version) { [string]$_.Version } } | Where-Object { $_ }) | Select-Object -First 1
+          if ($projectVersion -ne $version) { throw "Tag $version does not match project version $projectVersion" }
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.x
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: dotnet restore motuperf_cross_platform/MoTuPerf.CrossPlatform.sln --locked-mode
+      - run: dotnet test motuperf_cross_platform/MoTuPerf.CrossPlatform.sln --configuration Release --no-restore
+
+  windows:
+    needs: validate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.x
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Install packaging tools
+        shell: pwsh
+        run: |
+          choco install nsis.install -y --no-progress
+          $tools = "${{ github.workspace }}\android-platform-tools"
+          Invoke-WebRequest -Uri "https://dl.google.com/android/repository/platform-tools-latest-windows.zip" -OutFile "$env:TEMP\platform-tools.zip"
+          Expand-Archive "$env:TEMP\platform-tools.zip" -DestinationPath "${{ github.workspace }}" -Force
+          "${{ github.workspace }}\platform-tools" >> $env:GITHUB_PATH
+      - name: Build Windows installer
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File motuperf_cross_platform/packaging/windows/build-installer.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: motuperf_cross_platform/dist/installer/MoTuPerf-Setup-v${{ needs.validate.outputs.version }}.exe*
+
+  macos:
+    needs: validate
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.x
+      - name: Install Android platform-tools
+        run: brew install --cask android-platform-tools
+      - name: Build macOS arm64 DMG
+        env:
+          MOTUPERF_VERSION: ${{ needs.validate.outputs.version }}
+          CREATE_DMG: '1'
+        run: bash motuperf_cross_platform/packaging/macos-arm64/build-app.sh
+      - name: Normalize DMG name
+        run: |
+          mv "motuperf_cross_platform/dist/macos-arm64/MoTuPerf-${{ needs.validate.outputs.version }}-osx-arm64-internal.dmg" "motuperf_cross_platform/dist/macos-arm64/MoTuPerf-${{ needs.validate.outputs.version }}-osx-arm64.dmg"
+          mv "motuperf_cross_platform/dist/macos-arm64/MoTuPerf-${{ needs.validate.outputs.version }}-osx-arm64-internal.dmg.sha256" "motuperf_cross_platform/dist/macos-arm64/MoTuPerf-${{ needs.validate.outputs.version }}-osx-arm64.dmg.sha256"
+          shasum -a 256 "motuperf_cross_platform/dist/macos-arm64/MoTuPerf-${{ needs.validate.outputs.version }}-osx-arm64.dmg" > "motuperf_cross_platform/dist/macos-arm64/MoTuPerf-${{ needs.validate.outputs.version }}-osx-arm64.dmg.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-release
+          path: motuperf_cross_platform/dist/macos-arm64/MoTuPerf-${{ needs.validate.outputs.version }}-osx-arm64.dmg*
+
+  publish:
+    needs: [validate, windows, macos]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+          path: release-assets
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-release
+          path: release-assets
+      - name: Generate update manifest
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File scripts/generate-update-manifest.ps1 -Version "${{ needs.validate.outputs.version }}" -AssetsDirectory release-assets -OutputPath release-assets/latest.json
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          gh release create "${{ github.ref_name }}" release-assets/* --title "MoTuPerf ${{ github.ref_name }}" --generate-notes

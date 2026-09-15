@@ -1,0 +1,37 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MoTuPerf.Desktop.DataDirectorySettingsWindow"
+        Title="设置数据目录"
+        Width="610"
+        Height="270"
+        MinWidth="560"
+        MinHeight="240"
+        CanResize="False"
+        WindowDecorations="None"
+        WindowStartupLocation="CenterOwner">
+  <Border Classes="secondaryWindowFrame">
+    <Grid RowDefinitions="50,*,62">
+      <Border Classes="dialogTitleBar">
+        <Grid ColumnDefinitions="*,42">
+          <TextBlock Text="设置数据目录" Classes="sectionTitle" VerticalAlignment="Center" Margin="18,0,0,0" />
+          <Button Grid.Column="1" Classes="dialogCloseButton" Content="&#x00D7;" Click="Cancel" ToolTip.Tip="关闭" />
+        </Grid>
+      </Border>
+      <StackPanel Grid.Row="1" Margin="20,18" Spacing="9">
+        <TextBlock Text="当前数据保存目录" Classes="dialogLabel" />
+        <Grid ColumnDefinitions="*,88" ColumnSpacing="8">
+          <TextBox x:Name="DirectoryTextBox" Classes="dialogTextBox" IsReadOnly="True" TextWrapping="NoWrap" />
+          <Button Grid.Column="1" Classes="dialogFooterButton" Content="浏览..." Click="Browse" />
+        </Grid>
+        <TextBlock Text="更换目录时会迁移现有日志、截图和现场缓存；目录不可写时不会切换。" Classes="dialogHint" TextWrapping="Wrap" />
+        <TextBlock x:Name="StatusText" Classes="dialogHint" TextWrapping="Wrap" />
+      </StackPanel>
+      <Border Grid.Row="2" Classes="dialogFooter" Padding="12,0">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="8">
+          <Button Classes="toolbarButton" Content="取消" Click="Cancel" />
+          <Button Classes="primaryToolbarButton" Content="保存" Click="Apply" />
+        </StackPanel>
+      </Border>
+    </Grid>
+  </Border>
+</Window>

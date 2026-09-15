@@ -1,0 +1,5 @@
+# Optional dependencies for real iOS USB collection.
+# Install only when you want to test a physical iOS device:
+#   python -m pip install -r requirements-ios.txt
+py-ios-device
+tidevice

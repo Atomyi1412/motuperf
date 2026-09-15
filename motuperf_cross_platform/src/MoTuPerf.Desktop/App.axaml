@@ -1,0 +1,1077 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="MoTuPerf.Desktop.App">
+  <Application.Resources>
+    <SolidColorBrush x:Key="Theme.WindowBackground">#0F1018</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.TitleBarBackground">#181A24</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.ToolbarBackground">#181820</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.PanelBackground">#181923</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.PanelHeaderBackground">#191A24</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.CardBackground">#1B1C27</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.InputBackground">#31313F</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.HoverBackground">#242532</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.PressedBackground">#303240</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.SelectedBackground">#2A2C3C</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.ChartBackground">#161720</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.ChartGrid">#383A4A</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.TextPrimary">#EBECF4</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.TextSecondary">#ACAEBE</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.TextMuted">#777A8C</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.TextOnAccent">#FFFFFF</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.Border">#292B3A</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.BorderStrong">#424456</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.ScrollTrack">#0D0E15</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.ScrollThumb">#5B5C60</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.ScrollThumbHover">#7B7D84</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.Cursor">#FFFFFF</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.OverlayBackground">#08090D</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.CheckboxBackground">#FFFFFF</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.CheckboxGlyph">#1A1B22</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.CheckboxHover">#F4F4F5</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.CheckboxPressed">#E3E4E8</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.CheckboxDisabled">#B8B9BE</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.Accent">#1476FF</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.DialogBackground">#151620</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.DialogSurface">#1D1F2B</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.DialogFooterBackground">#171923</SolidColorBrush>
+    <x:Double x:Key="Theme.WorkspaceTextureOpacity">0</x:Double>
+  </Application.Resources>
+  <Application.Styles>
+    <FluentTheme />
+
+    <Style Selector="Window">
+      <Setter Property="Background" Value="{DynamicResource Theme.WindowBackground}" />
+      <Setter Property="FontFamily" Value="Microsoft YaHei UI, Inter, sans-serif" />
+    </Style>
+
+    <Style Selector="Border.mainWindowFrame">
+      <Setter Property="Background" Value="{DynamicResource Theme.WindowBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <Style Selector="Border.sessionLoadingOverlay">
+      <Setter Property="Background" Value="{DynamicResource Theme.WindowBackground}" />
+      <Setter Property="Opacity" Value="0.97" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="VerticalAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Border.sessionLoadingPanel">
+      <Setter Property="Background" Value="{DynamicResource Theme.PanelBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="30,25" />
+      <Setter Property="Width" Value="420" />
+      <Setter Property="BoxShadow" Value="0 4 18 0 #66000000" />
+    </Style>
+    <Style Selector="TextBlock.sessionLoadingTitle">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="FontSize" Value="17" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ProgressBar.sessionLoadingProgress">
+      <Setter Property="Height" Value="6" />
+      <Setter Property="MinWidth" Value="360" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.Accent}" />
+      <Setter Property="Background" Value="{DynamicResource Theme.ScrollTrack}" />
+    </Style>
+    <Style Selector="TextBlock.sessionLoadingProgressText">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.Accent}" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="TextAlignment" Value="Center" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="MaxWidth" Value="360" />
+    </Style>
+    <Style Selector="TextBlock.sessionLoadingDetail">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.helpLinkButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.Accent}" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="Button.helpLinkButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="Padding" Value="6,3" />
+    </Style>
+
+    <Style Selector="Border.secondaryWindowFrame">
+      <Setter Property="Background" Value="{DynamicResource Theme.DialogBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="2" />
+      <Setter Property="BoxShadow" Value="inset 0 0 8 0 #66000000" />
+    </Style>
+    <Style Selector="Border.dialogTitleBar">
+      <Setter Property="Background" Value="{DynamicResource Theme.TitleBarBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+    <Style Selector="Border.dialogFooter">
+      <Setter Property="Background" Value="{DynamicResource Theme.DialogFooterBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="BorderThickness" Value="0,1,0,0" />
+    </Style>
+
+    <Style Selector="Button">
+      <Setter Property="FontFamily" Value="Microsoft YaHei UI, Inter, sans-serif" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+    <Style Selector="Button:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Theme.PressedBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+    <Style Selector="Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Theme.CardBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="Opacity" Value="0.45" />
+    </Style>
+    <Style Selector="Button.toolbarButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Padding" Value="13,8" />
+      <Setter Property="Margin" Value="5,0" />
+      <Setter Property="MinWidth" Value="84" />
+      <Setter Property="Height" Value="40" />
+    </Style>
+    <Style Selector="Button.toolbarButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+    </Style>
+    <Style Selector="Button.toolbarButton:pressed">
+      <Setter Property="Background" Value="{DynamicResource Theme.PressedBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+    </Style>
+    <Style Selector="TextBlock.toolbarIcon">
+      <Setter Property="FontFamily" Value="Segoe MDL2 Assets, sans-serif" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+      <Setter Property="FontSize" Value="19" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.toolbarText">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.primaryToolbarButton">
+      <Setter Property="Background" Value="{DynamicResource Theme.Accent}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextOnAccent}" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="Padding" Value="15,8" />
+      <Setter Property="MinWidth" Value="150" />
+    </Style>
+    <Style Selector="Button.primaryToolbarButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+    </Style>
+    <Style Selector="Button.primaryToolbarButton:pressed">
+      <Setter Property="Background" Value="{DynamicResource Theme.PressedBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+    </Style>
+    <Style Selector="Button.captureToolbarButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Padding" Value="14,9" />
+      <Setter Property="MinWidth" Value="150" />
+      <Setter Property="Margin" Value="6,0" />
+      <Setter Property="Height" Value="44" />
+    </Style>
+    <Style Selector="Button.captureToolbarButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+    </Style>
+    <Style Selector="Button.captureToolbarButton:pressed">
+      <Setter Property="Background" Value="{DynamicResource Theme.PressedBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+    </Style>
+    <Style Selector="TextBlock.captureStartIcon">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.Accent}" />
+      <Setter Property="FontSize" Value="22" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.captureStopIcon">
+      <Setter Property="Foreground" Value="#F45B86" />
+      <Setter Property="FontSize" Value="18" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.captureButtonText">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.captureToolbarButton:pointerover TextBlock.captureButtonText">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+    <Style Selector="TextBlock.followText">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextMuted}" />
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Opacity" Value="0.55" />
+      <Setter Property="Margin" Value="20,0,6,0" />
+    </Style>
+    <Style Selector="Button.windowButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="Width" Value="46" />
+      <Setter Property="Height" Value="40" />
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="Button.windowButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+    </Style>
+    <Style Selector="Button.windowButton.closeButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+    <Style Selector="Button.themeSelectorButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="Width" Value="46" />
+      <Setter Property="Height" Value="40" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.themeSelectorButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+    </Style>
+    <Style Selector="Button.themeSelectorButton:pressed">
+      <Setter Property="Background" Value="{DynamicResource Theme.PressedBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+    </Style>
+    <Style Selector="TextBlock.themeSelectorIcon">
+      <Setter Property="FontFamily" Value="Segoe MDL2 Assets, sans-serif" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+      <Setter Property="FontSize" Value="18" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.settingsMenuIcon">
+      <Setter Property="FontFamily" Value="Segoe MDL2 Assets, sans-serif" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="FlyoutPresenter.themeFlyoutPresenter">
+      <Setter Property="Background" Value="{DynamicResource Theme.PanelBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="Border.themeMenuSurface">
+      <Setter Property="Background" Value="{DynamicResource Theme.PanelBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="4" />
+      <Setter Property="MinWidth" Value="132" />
+    </Style>
+    <Style Selector="Button.themeOptionButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="Height" Value="38" />
+      <Setter Property="Padding" Value="9,0" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Button.themeOptionButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+    </Style>
+    <Style Selector="Button.themeOptionButton:pressed">
+      <Setter Property="Background" Value="{DynamicResource Theme.PressedBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+    </Style>
+    <Style Selector="Button.smallDialogButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Padding" Value="8,4" />
+      <Setter Property="Height" Value="28" />
+    </Style>
+    <Style Selector="Button.smallDialogButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+    </Style>
+    <Style Selector="Border.dataCleanupListSurface">
+      <Setter Property="Background" Value="{DynamicResource Theme.DialogSurface}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="ListBox.dataCleanupList > ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Border.dataCleanupRow">
+      <Setter Property="Background" Value="{DynamicResource Theme.DialogSurface}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+    <Style Selector="ListBox.dataCleanupList > ListBoxItem:pointerover Border.dataCleanupRow">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+    </Style>
+    <Style Selector="TextBlock.dataCleanupSize">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.Accent}" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBox.dialogTextBox">
+      <Setter Property="Background" Value="{DynamicResource Theme.InputBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="Padding" Value="10,8" />
+      <Setter Property="Height" Value="40" />
+    </Style>
+    <Style Selector="TextBlock.themeOptionText">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.panelToggleButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+      <Setter Property="Width" Value="28" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="Button.deviceInfoButton">
+      <Setter Property="Background" Value="{DynamicResource Theme.OverlayBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.OverlayBackground}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.Accent}" />
+      <Setter Property="Width" Value="46" />
+      <Setter Property="Height" Value="46" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="FontSize" Value="23" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.deviceInfoButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+    </Style>
+    <Style Selector="Button.panelToggleButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+    <Style Selector="Button.chartZoomResetButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+      <Setter Property="Width" Value="28" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="FontSize" Value="15" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.chartZoomResetButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+    <Style Selector="Button.chartZoomResetButton:pressed">
+      <Setter Property="Background" Value="{DynamicResource Theme.PressedBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+    </Style>
+    <Style Selector="Button.collapsedPanelButton">
+      <Setter Property="Background" Value="{DynamicResource Theme.SelectedBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+      <Setter Property="Width" Value="30" />
+      <Setter Property="Height" Value="30" />
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="Button.collapsedPanelButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+
+    <Style Selector="Button.dataTab">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.SelectedBackground}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextMuted}" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Padding" Value="8,6" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="VerticalAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Button.dataTab:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+    <Style Selector="Button.dataTab.activeTab">
+      <Setter Property="Background" Value="{DynamicResource Theme.SelectedBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.dataTabText">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextMuted}" />
+    </Style>
+    <Style Selector="Button.dataTab:pointerover TextBlock.dataTabText">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+    <Style Selector="Button.dataTab.activeTab TextBlock.dataTabText">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+    <Style Selector="Button.dataTab.activeTab:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+    </Style>
+
+    <Style Selector="TextBlock.sectionTitle">
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+    <Style Selector="TextBlock.symbol">
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+      <Setter Property="FontFamily" Value="Segoe MDL2 Assets, sans-serif" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.muted">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextMuted}" />
+      <Setter Property="FontSize" Value="11" />
+    </Style>
+    <Style Selector="TextBlock.dialogLabel">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.dialogHint">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="Button.driverDownloadButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.Accent}" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Padding" Value="8,3" />
+      <Setter Property="MinHeight" Value="26" />
+    </Style>
+    <Style Selector="Button.driverDownloadButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+    <Style Selector="Border.helpSection">
+      <Setter Property="Background" Value="{DynamicResource Theme.DialogSurface}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="Padding" Value="14,12" />
+    </Style>
+    <Style Selector="TextBlock.helpTitle">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,0,0,6" />
+    </Style>
+    <Style Selector="TextBlock.helpBody">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="LineHeight" Value="19" />
+    </Style>
+    <Style Selector="Button.iconDialogButton">
+      <Setter Property="Background" Value="{DynamicResource Theme.InputBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.InputBackground}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+      <Setter Property="Width" Value="38" />
+      <Setter Property="Height" Value="38" />
+      <Setter Property="FontSize" Value="23" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="10,0,0,0" />
+    </Style>
+    <Style Selector="Button.iconDialogButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+    <Style Selector="Button.dialogFooterButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="Width" Value="100" />
+      <Setter Property="MinWidth" Value="92" />
+      <Setter Property="Height" Value="40" />
+      <Setter Property="Padding" Value="16,7" />
+      <Setter Property="Margin" Value="6,0" />
+    </Style>
+    <Style Selector="Button.dialogFooterButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+    </Style>
+    <Style Selector="Button.dialogPrimaryButton">
+      <Setter Property="Background" Value="{DynamicResource Theme.Accent}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextOnAccent}" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="MinWidth" Value="96" />
+      <Setter Property="Height" Value="40" />
+      <Setter Property="Padding" Value="12,7" />
+      <Setter Property="Margin" Value="4,0" />
+    </Style>
+    <Style Selector="Button.dialogPrimaryButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+    </Style>
+    <Style Selector="Button.exportModeButton">
+      <Setter Property="Background" Value="{DynamicResource Theme.DialogSurface}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Height" Value="76" />
+      <Setter Property="Padding" Value="16,8" />
+    </Style>
+    <Style Selector="Button.exportModeButton.recommended">
+      <Setter Property="Background" Value="{DynamicResource Theme.SelectedBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+    </Style>
+    <Style Selector="Button.exportModeButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+    </Style>
+    <Style Selector="Button.exportModeButton:pressed">
+      <Setter Property="Background" Value="{DynamicResource Theme.PressedBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+    </Style>
+    <Style Selector="Button.dialogLaunchButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="Width" Value="78" />
+      <Setter Property="Height" Value="32" />
+      <Setter Property="Padding" Value="12,5" />
+      <Setter Property="Margin" Value="6,0,0,0" />
+    </Style>
+    <Style Selector="Button.dialogLaunchButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+    </Style>
+    <Style Selector="Button.dialogLaunchButton:pressed">
+      <Setter Property="Background" Value="{DynamicResource Theme.PressedBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+    </Style>
+    <Style Selector="Button.dialogTab">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="FontSize" Value="15" />
+      <Setter Property="MinWidth" Value="130" />
+      <Setter Property="Height" Value="38" />
+      <Setter Property="Padding" Value="24,5" />
+    </Style>
+    <Style Selector="Button.dialogTab:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+    <Style Selector="Button.dialogTab.activeDialogTab">
+      <Setter Property="Background" Value="{DynamicResource Theme.SelectedBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.Accent}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.dialogTabText">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+    <Style Selector="Button.dialogTab:pointerover TextBlock.dialogTabText">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+    <Style Selector="Button.dialogTab.activeDialogTab TextBlock.dialogTabText">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.Accent}" />
+    </Style>
+    <Style Selector="Button.dialogTab.activeDialogTab:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+    </Style>
+
+    <Style Selector="Button.dialogCloseButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="Width" Value="42" />
+      <Setter Property="Height" Value="42" />
+      <Setter Property="FontSize" Value="22" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="Button.dialogCloseButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+
+    <Style Selector="Border.dataPanel">
+      <Setter Property="Background" Value="{DynamicResource Theme.TitleBarBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Border.dataTile">
+      <Setter Property="Background" Value="{DynamicResource Theme.CardBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+    </Style>
+    <Style Selector="Border.metricCard">
+      <Setter Property="Background" Value="{DynamicResource Theme.SelectedBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="MinHeight" Value="58" />
+    </Style>
+    <Style Selector="Border.metricOption">
+      <Setter Property="Background" Value="{DynamicResource Theme.SelectedBackground}" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="7" />
+    </Style>
+    <Style Selector="Border.chartRow">
+      <Setter Property="Background" Value="{DynamicResource Theme.CardBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="0,1,0,1" />
+    </Style>
+    <Style Selector="Border.chartLabel">
+      <Setter Property="Background" Value="{DynamicResource Theme.SelectedBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="0,1,1,1" />
+    </Style>
+    <Style Selector="StackPanel.chartLegendItem">
+      <Setter Property="Spacing" Value="8" />
+    </Style>
+    <Style Selector="Border.chartLegendSwatch">
+      <Setter Property="Width" Value="11" />
+      <Setter Property="Height" Value="11" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.chartLegendText">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.chartHost">
+      <Setter Property="Background" Value="{DynamicResource Theme.CardBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="0,1,0,1" />
+    </Style>
+    <Style Selector="TextBlock.chartTitle">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="FontSize" Value="15" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="Border.screenshotCard">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="ListBox">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="ListBoxItem">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="ListBoxItem:pointerover Border.screenshotCard">
+      <Setter Property="Background" Value="{DynamicResource Theme.CardBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+    </Style>
+    <Style Selector="ListBoxItem:selected Border.screenshotCard">
+      <Setter Property="Background" Value="{DynamicResource Theme.CardBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+    </Style>
+    <Style Selector="ListBox.dialogList">
+      <Setter Property="Background" Value="{DynamicResource Theme.DialogSurface}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.InputBackground}" />
+      <Setter Property="BorderThickness" Value="1,0,1,1" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="ListBox.dialogList > ListBoxItem">
+      <Setter Property="Background" Value="{DynamicResource Theme.DialogSurface}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="Padding" Value="6,4" />
+      <Setter Property="MinHeight" Value="38" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="ListBox.dialogList > ListBoxItem:nth-child(2n)">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+    </Style>
+    <Style Selector="ListBox.processList > ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinHeight" Value="26" />
+    </Style>
+    <Style Selector="ListBox.appList > ListBoxItem">
+      <Setter Property="Padding" Value="6,4" />
+      <Setter Property="MinHeight" Value="38" />
+    </Style>
+    <Style Selector="ListBox.dialogList > ListBoxItem:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+    <Style Selector="ListBox.dialogList > ListBoxItem:selected">
+      <Setter Property="Background" Value="{DynamicResource Theme.Accent}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextOnAccent}" />
+    </Style>
+    <Style Selector="Border.processRow">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox.processList > ListBoxItem:selected Border.processRow">
+      <Setter Property="Background" Value="{DynamicResource Theme.Accent}" />
+    </Style>
+    <Style Selector="ListBox.processList > ListBoxItem:selected /template/ Border#PART_SelectedPipe">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="ScrollBar">
+      <Setter Property="Background" Value="{DynamicResource Theme.ScrollTrack}" />
+      <Setter Property="AllowAutoHide" Value="False" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal">
+      <Setter Property="Height" Value="12" />
+      <Setter Property="MinHeight" Value="12" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal /template/ Grid#Root">
+      <Setter Property="Background" Value="{DynamicResource Theme.ScrollTrack}" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal /template/ Border#HorizontalRoot">
+      <Setter Property="Background" Value="{DynamicResource Theme.ScrollTrack}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.ScrollTrack}" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal /template/ Rectangle#TrackRect">
+      <Setter Property="Fill" Value="{DynamicResource Theme.ScrollTrack}" />
+      <Setter Property="Stroke" Value="{DynamicResource Theme.ScrollTrack}" />
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal[IsExpanded=true] /template/ Rectangle#TrackRect">
+      <Setter Property="Fill" Value="{DynamicResource Theme.ScrollTrack}" />
+      <Setter Property="Stroke" Value="{DynamicResource Theme.ScrollTrack}" />
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal /template/ RepeatButton#PART_LineUpButton">
+      <Setter Property="Width" Value="0" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal /template/ RepeatButton#PART_LineDownButton">
+      <Setter Property="Width" Value="0" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal /template/ RepeatButton#PART_PageUpButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal /template/ RepeatButton#PART_PageDownButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal /template/ Thumb">
+      <Setter Property="Background" Value="{DynamicResource Theme.ScrollThumb}" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="MinWidth" Value="24" />
+      <Setter Property="RenderTransform" Value="none" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal /template/ Thumb /template/ Border">
+      <Setter Property="Background" Value="{DynamicResource Theme.ScrollThumb}" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="Margin" Value="2,3" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal /template/ Thumb:pointerover /template/ Border">
+      <Setter Property="Background" Value="{DynamicResource Theme.ScrollThumbHover}" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal /template/ Thumb:pressed /template/ Border">
+      <Setter Property="Background" Value="{DynamicResource Theme.ScrollThumbHover}" />
+    </Style>
+    <Style Selector="ScrollBar:vertical">
+      <Setter Property="Width" Value="14" />
+      <Setter Property="MinWidth" Value="14" />
+    </Style>
+    <Style Selector="ScrollBar:vertical /template/ Grid#Root">
+      <Setter Property="Background" Value="{DynamicResource Theme.ScrollTrack}" />
+    </Style>
+    <Style Selector="ScrollBar:vertical /template/ Border#VerticalRoot">
+      <Setter Property="Background" Value="{DynamicResource Theme.ScrollTrack}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.ScrollTrack}" />
+    </Style>
+    <Style Selector="ScrollBar:vertical /template/ Rectangle#TrackRect">
+      <Setter Property="Fill" Value="{DynamicResource Theme.ScrollTrack}" />
+      <Setter Property="Stroke" Value="{DynamicResource Theme.ScrollTrack}" />
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="ScrollBar:vertical[IsExpanded=true] /template/ Rectangle#TrackRect">
+      <Setter Property="Fill" Value="{DynamicResource Theme.ScrollTrack}" />
+      <Setter Property="Stroke" Value="{DynamicResource Theme.ScrollTrack}" />
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="ScrollBar:vertical /template/ RepeatButton#PART_LineUpButton">
+      <Setter Property="Height" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="ScrollBar:vertical /template/ RepeatButton#PART_LineDownButton">
+      <Setter Property="Height" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="ScrollBar:vertical /template/ RepeatButton#PART_PageUpButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="ScrollBar:vertical /template/ RepeatButton#PART_PageDownButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="ScrollBar:vertical /template/ Thumb">
+      <Setter Property="Background" Value="{DynamicResource Theme.ScrollThumb}" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="MinHeight" Value="24" />
+      <Setter Property="RenderTransform" Value="none" />
+    </Style>
+    <Style Selector="ScrollBar:vertical /template/ Thumb /template/ Border">
+      <Setter Property="Background" Value="{DynamicResource Theme.ScrollThumb}" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="Margin" Value="3,2" />
+    </Style>
+    <Style Selector="Thumb">
+      <Setter Property="Background" Value="{DynamicResource Theme.ScrollThumb}" />
+      <Setter Property="CornerRadius" Value="4" />
+    </Style>
+    <Style Selector="Thumb:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.ScrollThumbHover}" />
+    </Style>
+    <Style Selector="CheckBox">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="MinWidth" Value="18" />
+      <Setter Property="MinHeight" Value="18" />
+      <Setter Property="Padding" Value="8,0,0,0" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Grid ColumnDefinitions="18,*" MinHeight="18">
+            <Border x:Name="PART_CheckBox"
+                    Width="16"
+                    Height="16"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Background="{DynamicResource Theme.CheckboxBackground}"
+                    BorderBrush="{DynamicResource Theme.BorderStrong}"
+                    BorderThickness="1"
+                    CornerRadius="0">
+              <Grid>
+                <Viewbox Width="10" Height="10" HorizontalAlignment="Center" VerticalAlignment="Center">
+                  <Path x:Name="PART_CheckGlyph"
+                        Data="M5.5 10.586 1.707 6.793A1 1 0 0 0 .293 8.207l4.5 4.5a1 1 0 0 0 1.414 0l11-11A1 1 0 0 0 15.793.293L5.5 10.586Z"
+                        Fill="{DynamicResource Theme.CheckboxGlyph}"
+                        Stretch="Uniform"
+                        Opacity="0" />
+                </Viewbox>
+                <Border x:Name="PART_IndeterminateGlyph"
+                        Width="8"
+                        Height="2"
+                        Background="{DynamicResource Theme.CheckboxGlyph}"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Opacity="0" />
+              </Grid>
+            </Border>
+            <ContentPresenter x:Name="PART_ContentPresenter"
+                              Grid.Column="1"
+                              Content="{TemplateBinding Content}"
+                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                              Margin="{TemplateBinding Padding}"
+                              HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                              VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                              RecognizesAccessKey="True" />
+          </Grid>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="CheckBox:pointerover">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+    <Style Selector="CheckBox:pointerover /template/ Border#PART_CheckBox">
+      <Setter Property="Background" Value="{DynamicResource Theme.CheckboxHover}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+    </Style>
+    <Style Selector="CheckBox:pressed /template/ Border#PART_CheckBox">
+      <Setter Property="Background" Value="{DynamicResource Theme.CheckboxPressed}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+    </Style>
+    <Style Selector="CheckBox:checked /template/ Path#PART_CheckGlyph">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="CheckBox:indeterminate /template/ Border#PART_IndeterminateGlyph">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="CheckBox:disabled /template/ Border#PART_CheckBox">
+      <Setter Property="Background" Value="{DynamicResource Theme.CheckboxDisabled}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.TextMuted}" />
+      <Setter Property="Opacity" Value="0.55" />
+    </Style>
+    <Style Selector="CheckBox:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextMuted}" />
+    </Style>
+    <Style Selector="TextBox">
+      <Setter Property="Background" Value="{DynamicResource Theme.InputBackground}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="SelectionBrush" Value="{DynamicResource Theme.Accent}" />
+    </Style>
+    <Style Selector="TextBox.dialogSearch">
+      <Setter Property="Background" Value="{DynamicResource Theme.InputBackground}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="SelectionBrush" Value="{DynamicResource Theme.Accent}" />
+      <Setter Property="CornerRadius" Value="0" />
+    </Style>
+    <Style Selector="TextBox.dialogSearch /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="{DynamicResource Theme.InputBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="0" />
+    </Style>
+    <Style Selector="TextBox.dialogSearch:pointerover /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="{DynamicResource Theme.InputBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+    </Style>
+    <Style Selector="TextBox.dialogSearch:focus /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="{DynamicResource Theme.InputBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+    </Style>
+    <Style Selector="TextBox.dialogSearch /template/ TextBlock#PART_Watermark">
+      <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="TextBox.dialogSearch /template/ Button#PART_ClearButton">
+      <Setter Property="IsVisible" Value="False" />
+      <Setter Property="Width" Value="0" />
+      <Setter Property="MinWidth" Value="0" />
+    </Style>
+    <Style Selector="TextBox.dialogSearch /template/ ScrollBar">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="ComboBox">
+      <Setter Property="Background" Value="{DynamicResource Theme.InputBackground}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="8,5" />
+    </Style>
+    <Style Selector="ComboBox.dialogCombo">
+      <Setter Property="Background" Value="{DynamicResource Theme.InputBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.InputBackground}" />
+      <Setter Property="Padding" Value="6,4" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="ComboBox:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+    </Style>
+    <Style Selector="ComboBoxItem">
+      <Setter Property="Background" Value="{DynamicResource Theme.CardBackground}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="Padding" Value="8,5" />
+    </Style>
+    <Style Selector="ComboBoxItem:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+    <Style Selector="ComboBoxItem:selected">
+      <Setter Property="Background" Value="{DynamicResource Theme.Accent}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextOnAccent}" />
+    </Style>
+  </Application.Styles>
+</Application>

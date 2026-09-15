@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RuntimeIdentifiers>win-x64;osx-arm64</RuntimeIdentifiers>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>MoTuPerf.CrossPlatform</AssemblyName>
+    <RootNamespace>MoTuPerf.Desktop</RootNamespace>
+    <Version>0.21.7</Version>
+    <ApplicationIcon Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(MSBuildProjectDirectory)\..\..\..\csharp_perf_monitor\assets\motu-icon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MoTuPerf.Core\MoTuPerf.Core.csproj" />
+    <ProjectReference Include="..\MoTuPerf.Platform\MoTuPerf.Platform.csproj" />
+    <PackageReference Include="Avalonia" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.1" />
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
+    <AvaloniaResource Include="..\..\..\csharp_perf_monitor\assets\motu-icon.png" Link="Assets\motu-icon.png" />
+    <AvaloniaResource Include="Assets\motu-logo-titlebar.png" />
+    <AvaloniaResource Include="Assets\retro-sage-texture.png" />
+    <Content Include="..\..\..\csharp_perf_monitor\tools\*.py" Link="tools\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>MoTuPerf.Desktop.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,71 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MoTuPerf.Desktop"
+        x:Class="MoTuPerf.Desktop.DataCleanupWindow"
+        x:DataType="vm:DataCleanupWindow"
+        Title="清理数据"
+        Width="620"
+        Height="590"
+        MinWidth="560"
+        MinHeight="500"
+        CanResize="False"
+        WindowDecorations="None"
+        WindowStartupLocation="CenterOwner">
+  <Border Classes="secondaryWindowFrame">
+    <Grid RowDefinitions="50,*,64">
+      <Border Classes="dialogTitleBar">
+        <Grid ColumnDefinitions="*,42">
+          <TextBlock Text="清理数据" Classes="sectionTitle" VerticalAlignment="Center" Margin="18,0,0,0" />
+          <Button Grid.Column="1" Classes="dialogCloseButton" Content="&#x00D7;" Click="Cancel" ToolTip.Tip="关闭" />
+        </Grid>
+      </Border>
+
+      <Grid Grid.Row="1" RowDefinitions="Auto,*,Auto" Margin="18,14,18,10">
+        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,10">
+          <StackPanel>
+            <TextBlock Text="选择需要清理的数据" Classes="dialogLabel" />
+            <TextBlock Text="只删除选中的类别，不会删除软件本身。" Classes="dialogHint" Margin="0,4,0,0" />
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <Button Classes="smallDialogButton" Content="全选" Click="SelectAll" />
+            <Button Classes="smallDialogButton" Content="取消全选" Click="ClearAll" />
+          </StackPanel>
+        </Grid>
+
+        <Border Grid.Row="1" Classes="dataCleanupListSurface">
+          <Grid>
+            <TextBlock Text="正在计算数据大小..." Classes="dialogHint" HorizontalAlignment="Center" VerticalAlignment="Center"
+                       IsVisible="{Binding IsLoading}" />
+            <ListBox x:Name="CategoryList" ItemsSource="{Binding Items}" Classes="dataCleanupList"
+                     IsVisible="{Binding !IsLoading}" Background="Transparent" BorderThickness="0"
+                     Padding="0,0,16,0">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:DataCleanupItem">
+                  <Border Classes="dataCleanupRow">
+                    <Grid ColumnDefinitions="34,*,126" RowDefinitions="Auto,Auto" Margin="10,8,10,8">
+                      <CheckBox Grid.RowSpan="2" IsChecked="{Binding IsSelected}" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="1" Text="{Binding DisplayName}" Classes="dialogLabel" />
+                      <TextBlock Grid.Column="2" Text="{Binding SizeLabel}" Classes="dataCleanupSize"
+                                 Width="116" HorizontalAlignment="Right" TextAlignment="Right" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Description}" Classes="dialogHint" Margin="0,3,0,0" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </Grid>
+        </Border>
+        <TextBlock Grid.Row="2" Text="{Binding StatusText}" Classes="dialogHint" Margin="2,10,2,0" TextTrimming="CharacterEllipsis" />
+      </Grid>
+
+      <Border Grid.Row="2" Classes="dialogFooter" Padding="14,0">
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto" VerticalAlignment="Center">
+          <Button Classes="toolbarButton" Content="打开数据目录" Click="OpenDirectory" IsEnabled="{Binding !IsBusy}" />
+          <TextBlock Grid.Column="1" Text="{Binding SelectedSummary}" Classes="dialogHint" VerticalAlignment="Center" Margin="0,0,12,0" />
+          <Button Grid.Column="2" Classes="toolbarButton" Content="取消" Click="Cancel" IsEnabled="{Binding !IsBusy}" />
+          <Button Grid.Column="3" Classes="primaryToolbarButton" Content="清理" Click="ClearSelected" IsEnabled="{Binding CanClear}" />
+        </Grid>
+      </Border>
+    </Grid>
+  </Border>
+</Window>

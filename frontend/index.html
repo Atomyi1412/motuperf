@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>iOS 性能采集</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="topbar">
+        <div>
+          <h1>iOS 性能采集</h1>
+          <p id="statusText">正在读取状态...</p>
+        </div>
+        <div class="badges">
+          <span id="modeBadge" class="badge active">iOS USB</span>
+          <span id="runningBadge" class="badge">未采集</span>
+        </div>
+      </section>
+
+      <section class="controls" aria-label="采集控制">
+        <div class="control-fields">
+          <label>
+            <span>iOS 设备</span>
+            <select id="deviceSelect">
+              <option value="">先刷新设备</option>
+            </select>
+          </label>
+          <label>
+            <span>应用</span>
+            <input id="appSearchInput" placeholder="搜索应用名 / Bundle" autocomplete="off" />
+            <select id="appSelect">
+              <option value="">先选择设备</option>
+            </select>
+          </label>
+          <label>
+            <span>目标 Bundle</span>
+            <input id="bundleInput" value="com.tencent.xin" autocomplete="off" />
+          </label>
+          <label>
+            <span>iOS 进程</span>
+            <input id="processSearchInput" placeholder="搜索进程 / Bundle / pid" autocomplete="off" />
+            <select id="processSelect">
+              <option value="">先刷新进程</option>
+            </select>
+          </label>
+        </div>
+        <div class="control-actions">
+          <div class="button-row">
+            <button id="refreshDevicesBtn" type="button">刷新设备</button>
+            <button id="refreshAppsBtn" type="button">刷新应用</button>
+            <button id="refreshProcessesBtn" type="button">刷新进程</button>
+            <button id="startBtn" class="primary">开始</button>
+            <button id="stopBtn">停止</button>
+            <button id="clearBtn">清空</button>
+            <button id="exportBtn">导出 CSV</button>
+          </div>
+          <div class="capture-options">
+            <label class="checkbox-row">
+              <input id="captureScreenshotsInput" type="checkbox" />
+              <span>记录截图</span>
+            </label>
+            <label class="interval-field">
+              <span>截图间隔</span>
+              <input id="screenshotIntervalInput" type="number" min="5" max="300" step="5" value="10" />
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section id="processHint" class="process-hint" hidden></section>
+
+      <section id="warnings" class="warnings" hidden></section>
+
+      <section class="metrics" aria-label="实时指标">
+        <div class="metric">
+          <span>FPS</span>
+          <strong id="fpsValue">--</strong>
+        </div>
+        <div class="metric">
+          <span>Jank*</span>
+          <strong id="jankValue">--</strong>
+        </div>
+        <div class="metric">
+          <span>BigJank*</span>
+          <strong id="bigJankValue">--</strong>
+        </div>
+        <div class="metric">
+          <span>Memory</span>
+          <strong id="memoryValue">--</strong>
+        </div>
+        <div class="metric">
+          <span>Duration</span>
+          <strong id="durationValue">0s</strong>
+        </div>
+      </section>
+
+      <section class="panel screenshot-panel">
+        <div class="panel-head">
+          <h2>截图时间轴</h2>
+          <div class="panel-actions">
+            <span id="screenshotStatus">等待截图</span>
+            <button id="latestBtn" type="button">定位最新</button>
+          </div>
+        </div>
+        <div class="screenshot-layout">
+          <div class="screenshot-view">
+            <img id="latestScreenshot" alt="选中时刻游戏截图" hidden />
+            <div id="screenshotEmpty">iOS USB 采集开始后显示截图</div>
+          </div>
+          <canvas id="screenshotTimeline" width="1200" height="260"></canvas>
+        </div>
+      </section>
+
+      <section class="charts">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>FPS / Jank</h2>
+            <div class="legend">
+              <span><i class="fps"></i>FPS</span>
+              <span><i class="jank"></i>Jank*</span>
+              <span><i class="big"></i>BigJank*</span>
+            </div>
+          </div>
+          <canvas id="fpsChart" width="1200" height="320"></canvas>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Memory</h2>
+            <div class="legend">
+              <span><i class="memory"></i>Memory MB</span>
+            </div>
+          </div>
+          <canvas id="memoryChart" width="1200" height="320"></canvas>
+        </article>
+      </section>
+
+      <section class="panel samples-panel">
+        <div class="panel-head">
+          <h2>最近采样</h2>
+          <span id="sampleCount">0 samples</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>秒</th>
+                <th>FPS</th>
+                <th>Jank*</th>
+                <th>BigJank*</th>
+                <th>Memory MB</th>
+                <th>截图</th>
+                <th>来源</th>
+                <th>备注</th>
+              </tr>
+            </thead>
+            <tbody id="samplesBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>

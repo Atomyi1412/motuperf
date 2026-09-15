@@ -1,0 +1,77 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MoTuPerf.Desktop.HelpWindow"
+        Title="MoTuPerf 使用帮助"
+        Width="700"
+        Height="640"
+        MinWidth="620"
+        MinHeight="520"
+        WindowDecorations="None"
+        WindowStartupLocation="CenterOwner">
+  <Border Classes="secondaryWindowFrame">
+    <Grid RowDefinitions="48,*,58">
+      <Border Grid.Row="0" Classes="dialogTitleBar"
+              PointerPressed="DialogTitlePointerPressed">
+        <Grid ColumnDefinitions="*,46">
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="24,0,0,0">
+            <TextBlock Text="&#xE897;" Foreground="{DynamicResource Theme.Accent}" FontSize="18" FontFamily="Segoe MDL2 Assets, sans-serif" Margin="0,0,10,0" />
+            <TextBlock Text="使用帮助" Classes="sectionTitle" />
+          </StackPanel>
+          <Button Grid.Column="1" Classes="windowButton closeButton" Content="&#x00D7;" Click="CloseWindow" ToolTip.Tip="关闭" />
+        </Grid>
+      </Border>
+      <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="22,10,18,12" Spacing="9">
+          <Border Classes="helpSection">
+            <StackPanel>
+              <TextBlock Text="快速开始" Classes="helpTitle" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="MoTuPerf 支持 Windows x64 和 macOS Apple Silicon（M 系列），可连接 Android 与 iOS 真机。&#x0A;1. 连接并解锁设备，完成设备授权。&#x0A;2. 点击顶部“选择设备及应用”，选择设备、应用和目标进程。&#x0A;3. 在左侧勾选需要记录的指标，点击“开始采集”；再次点击同一按钮停止。&#x0A;采集过程中不能重新选择设备或应用。工具只记录真实采集结果，不用模拟值填充缺失数据。" />
+              <Button Classes="helpLinkButton" Content="查看在线版本更新日志" Click="OpenVersionLog"
+                      HorizontalAlignment="Left" Margin="0,8,0,0" ToolTip.Tip="打开在线版本更新日志" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel>
+              <TextBlock Text="设备、应用与进程" Classes="helpTitle" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="在设备页点击刷新获取当前连接设备；选择应用后，应用名称、图标和可用进程会同步更新。进程列表显示进程名与 PID，支持按名称、包名或 PID 模糊搜索；带“推荐”标记的进程是工具根据应用归属和前台状态筛出的优先目标。&#x0A;“启动 APP”页可从设备上选择并启动应用，再回到进程页确认目标。最终采集目标以确认时的 PID 为准，尤其是微信小游戏应选择实际宿主/目标进程，不要只凭名称猜测。Android 与 iOS 的可见进程数量和推荐结果可能不同。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel>
+              <TextBlock Text="连接与权限" Classes="helpTitle" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="Android：解锁设备，开启“USB 调试”，在设备上允许此电脑调试，并保持 USB 连接稳定。&#x0A;iOS：解锁设备并点击“信任此电脑”；iOS 17 及以上还需要开启“开发者模式”。Windows 上如果检测不到 iOS 设备，请在选择设备窗口按提示安装或修复 Apple 设备驱动，安装完成后重新插拔并刷新；macOS 不使用 Windows 驱动。&#x0A;无设备时先检查数据线、USB 端口、授权状态和系统驱动，再点击刷新。设备拔出会停止采集，并询问是否保存已有数据。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel>
+              <TextBlock Text="指标口径" Classes="helpTitle" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="CSV 秒级汇总：FrameTime Mean 按各窗口的帧数加权；多个窗口缺少帧数时不猜测均值。WindowP95Max 是这一秒各采样窗口 P95 的最大值，不是整秒 P95。原始明细保留每个窗口的 Mean、P95 和 Max；曲线与原始采样不受汇总影响。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="FPS：来自设备可用的显示帧来源，属于屏幕级数据，不按所选 PID 过滤；高刷新率设备可能超过 60。&#x0A;Display FrameTime：相邻显示帧的实际间隔，曲线使用当前采样窗口的最大值；CSV 还会提供 Mean 和 P95。没有可靠有序帧源时保持无数据，不用 FPS 波动推算。&#x0A;Jank / BigJank：基于采集器获得的真实显示帧事件统计，分别表示普通和严重卡顿；没有有效帧事件时保持空缺，不平滑、不插值。&#x0A;Process Memory：所选 PID 的进程内存，具体内存口径和来源会随平台写入数据。Process CPU Raw：所选 PID 的原始 CPU 使用率，多核设备可能超过 100%；Normalized 是按设备总 CPU 能力归一化的视图，Core 曲线是各 CPU 核的使用率。&#x0A;Device Temperature：设备传感器温度，属于设备级数据。Thermal State（iOS）为 0 正常、1 升温、2 严重、3 临界；Thermal Status（Android）为 0 正常、1 轻微、2 中度、3 严重、4 临界、5 紧急、6 关机。平台不提供某项数据时显示等待或空缺。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel>
+              <TextBlock Text="时间线与截图" Classes="helpTitle" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="采集开始后横轴从 0 秒计时；未手动定位时曲线会跟随最新数据。点击或拖动任意曲线可移动时间游标，并在全部曲线和截图区域同步定位；手动选中历史时刻后不会强制跳回最新。&#x0A;勾选“缩放曲线”后，可在曲线上按住鼠标左键框选时间范围，最小查看窗口为 60 秒；点击还原按钮或取消勾选恢复全程视图。缩放只影响查看，不改变正在采集的原始数据、统计结果、保存文件或导出文件。&#x0A;截图固定每 3 秒记录一次。点击缩略图可定位时间，双击可打开大图；大图窗口支持适应窗口、放大、缩小，以及切换上一张和下一张截图。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel>
+              <TextBlock Text="现场文件、导出与主题" Classes="helpTitle" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="保存：生成 .motuperf 现场文件，包含设备、应用、进程、原始采样、截图索引和查看状态；以后用“打开”可以还原曲线和截图。打开大文件时会显示加载遮罩，加载期间暂时不能操作主界面。现场文件中的设备和进程是历史记录，仅用于还原查看；打开现场后再次采集时，点击“开始采集”会要求重新确认当前设备、应用和进程。&#x0A;导出：生成 CSV 表格，包含设备信息、目标 PID、指标统计和采样数据。默认导出按秒汇总，便于阅读和对比；需要完整时间戳时选择原始明细，现场文件本身不受导出方式影响。停止采集、设备断开或退出时选择“保存”，功能与顶部保存按钮一致。&#x0A;右上角调色板图标可选择深色、明亮或绿色主题；主题只改变界面显示，不写入采集数据，也不改变指标口径。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel>
+              <TextBlock Text="常见问题与日志" Classes="helpTitle" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="没有设备：确认设备已解锁并授权，Android 检查 USB 调试，iOS 检查信任、开发者模式和 Apple 驱动，再点击设备刷新。&#x0A;没有 CPU 或内存：确认选中了有效应用进程和 PID；目标重启后 PID 可能变化，刷新进程并重新选择。&#x0A;没有 FPS、FrameTime 或 Jank：这些指标依赖设备实际提供的显示帧源，先等待采集器建立帧源；仍无数据时不要用其他指标替代，查看状态提示和导出中的 Source、Scope、Updated 字段。&#x0A;采集中断或报错：先保存现场文件，再查看软件安装目录下的 data\\logs\\collector-*.log。日志中的 source、PID、设备断开和帧源状态可用于定位问题。" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+      <Border Grid.Row="2" Classes="dialogFooter">
+        <Button Classes="primaryToolbarButton" Content="知道了" Click="CloseWindow" Width="104" HorizontalAlignment="Right" Margin="0,0,18,0" />
+      </Border>
+    </Grid>
+  </Border>
+</Window>

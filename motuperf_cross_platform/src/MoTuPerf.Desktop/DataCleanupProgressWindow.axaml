@@ -1,0 +1,31 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MoTuPerf.Desktop"
+        x:Class="MoTuPerf.Desktop.DataCleanupProgressWindow"
+        x:DataType="vm:DataCleanupProgressWindow"
+        Title="清理数据"
+        Width="500"
+        Height="300"
+        MinWidth="500"
+        MinHeight="300"
+        CanResize="False"
+        WindowDecorations="None"
+        WindowStartupLocation="CenterOwner">
+  <Border Classes="secondaryWindowFrame">
+    <Grid RowDefinitions="50,*,54">
+      <Border Classes="dialogTitleBar">
+        <TextBlock Text="清理数据" Classes="sectionTitle" VerticalAlignment="Center" Margin="18,0,0,0" />
+      </Border>
+      <StackPanel Grid.Row="1" VerticalAlignment="Center" Margin="34,16">
+        <TextBlock Text="正在清理数据，请稍候" Classes="sessionLoadingTitle" />
+        <ProgressBar Margin="0,22,0,12" Classes="sessionLoadingProgress" Minimum="0" Maximum="100" Value="{Binding Percent}" />
+        <TextBlock Text="{Binding ProgressText}" Classes="sessionLoadingProgressText" />
+        <TextBlock Text="{Binding DetailText}" Classes="sessionLoadingDetail" Margin="0,8,0,0" />
+        <TextBlock Text="{Binding EstimateText}" Classes="sessionLoadingDetail" Margin="0,5,0,0" />
+      </StackPanel>
+      <Border Grid.Row="2" Classes="dialogFooter">
+        <TextBlock Text="清理完成前无法进行其他操作" Classes="dialogHint" HorizontalAlignment="Center" VerticalAlignment="Center" />
+      </Border>
+    </Grid>
+  </Border>
+</Window>

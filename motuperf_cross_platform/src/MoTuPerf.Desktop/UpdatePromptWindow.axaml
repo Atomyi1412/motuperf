@@ -1,0 +1,28 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MoTuPerf.Desktop.UpdatePromptWindow"
+        Title="发现新版本"
+        Width="500"
+        Height="270"
+        CanResize="False"
+        WindowDecorations="None"
+        WindowStartupLocation="CenterOwner">
+  <Border Classes="secondaryWindowFrame">
+    <Grid RowDefinitions="48,*,62">
+      <Border Classes="dialogTitleBar" PointerPressed="DialogTitlePointerPressed">
+        <TextBlock Text="发现新版本" Classes="sectionTitle" VerticalAlignment="Center" Margin="18,0,0,0" />
+      </Border>
+      <StackPanel Grid.Row="1" Margin="24,18" Spacing="8">
+        <TextBlock x:Name="VersionText" Classes="sectionTitle" />
+        <TextBlock x:Name="MessageText" Classes="dialogHint" TextWrapping="Wrap" />
+      </StackPanel>
+      <Border Grid.Row="2" Classes="dialogFooter" Padding="12,0">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="8">
+          <Button Classes="toolbarButton" Content="跳过此版本" Click="Skip" />
+          <Button Classes="toolbarButton" Content="稍后提醒" Click="Later" />
+          <Button Classes="primaryToolbarButton" Content="更新" Click="Update" />
+        </StackPanel>
+      </Border>
+    </Grid>
+  </Border>
+</Window>

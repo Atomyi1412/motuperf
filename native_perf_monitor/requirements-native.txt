@@ -1,0 +1,7 @@
+PyQt5
+pyqtgraph
+numpy
+pillow
+py-ios-device
+tidevice
+pyinstaller

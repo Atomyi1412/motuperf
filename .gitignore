@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+
+# Any nested build output
+**/bin/
+**/obj/
+**/dist/
+**/artifacts/
+**/.tmp/
+**/__pycache__/
+**/.pytest_cache/
+
+# Local runtime output
+tmp/
+exports/
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local Codex/Trellis runtime state
+.trellis/.runtime/
+.trellis/
+.agents/
+.codex/
+.outputs/
+more2_outputs/
+switch.log
+
+# Build and local verification outputs
+motuperf_cross_platform/bin/
+motuperf_cross_platform/obj/
+motuperf_cross_platform/dist/
+motuperf_cross_platform/artifacts/
+motuperf_cross_platform/.tmp/
+.tmp/
+data/
+*.motuperf
+*.motuperf.*.tmp

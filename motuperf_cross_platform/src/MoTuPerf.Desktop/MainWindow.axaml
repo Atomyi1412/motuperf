@@ -1,0 +1,363 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MoTuPerf.Desktop"
+        x:Class="MoTuPerf.Desktop.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="MoTuPerf"
+        Width="1500"
+        Height="940"
+        MinWidth="1180"
+        MinHeight="760"
+        WindowDecorations="None"
+        WindowStartupLocation="CenterScreen"
+        Closing="WindowClosing">
+  <Border Classes="mainWindowFrame">
+  <Grid RowDefinitions="40,64,*" Background="{DynamicResource Theme.WindowBackground}">
+    <Border Grid.Row="0" Background="{DynamicResource Theme.TitleBarBackground}" BorderBrush="{DynamicResource Theme.Border}" BorderThickness="0,0,0,1"
+            PointerPressed="TitleBarPointerPressed" DoubleTapped="TitleBarDoubleTapped">
+      <Grid ColumnDefinitions="340,*,420,230">
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+          <Image Width="154" Height="38" Stretch="Uniform" Source="avares://MoTuPerf.CrossPlatform/Assets/motu-logo-titlebar.png" />
+          <TextBlock Text="{Binding Version}" Foreground="{DynamicResource Theme.TextSecondary}" FontSize="12" FontWeight="SemiBold"
+                     VerticalAlignment="Center" Margin="9,2,0,0" />
+        </StackPanel>
+        <TextBlock Grid.Column="2" Text="{Binding Status}" Foreground="{DynamicResource Theme.TextSecondary}" FontSize="13"
+                   VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,18,0"
+                   TextTrimming="CharacterEllipsis" />
+        <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
+          <Button x:Name="ThemeSelectorButton" Classes="themeSelectorButton" ToolTip.Tip="{Binding ThemeSelectorToolTip}">
+            <TextBlock Text="&#xE790;" Classes="themeSelectorIcon" />
+            <Button.Flyout>
+              <Flyout Placement="BottomEdgeAlignedRight" ShowMode="TransientWithDismissOnPointerMoveAway"
+                      FlyoutPresenterClasses="themeFlyoutPresenter">
+                <Border Classes="themeMenuSurface">
+                  <ItemsControl ItemsSource="{Binding ThemeOptions}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:AppThemeDefinition">
+                        <Button Classes="themeOptionButton" Click="SelectTheme">
+                          <Grid ColumnDefinitions="22,*" ColumnSpacing="10">
+                            <Border Width="18" Height="18" CornerRadius="3" Background="{Binding PreviewColor}"
+                                    BorderBrush="{DynamicResource Theme.BorderStrong}" BorderThickness="1" />
+                            <TextBlock Grid.Column="1" Text="{Binding DisplayName}" Classes="themeOptionText" />
+                          </Grid>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </Border>
+              </Flyout>
+            </Button.Flyout>
+          </Button>
+          <Button x:Name="SettingsButton" Classes="themeSelectorButton" ToolTip.Tip="软件设置" IsEnabled="{Binding CanChangeDevice}">
+            <TextBlock Text="&#xE713;" Classes="themeSelectorIcon" />
+            <Button.Flyout>
+              <Flyout Placement="BottomEdgeAlignedRight" ShowMode="TransientWithDismissOnPointerMoveAway"
+                      FlyoutPresenterClasses="themeFlyoutPresenter">
+                <Border Classes="themeMenuSurface" MinWidth="190">
+                  <StackPanel>
+                    <CheckBox Content="启动时检查更新" Classes="settingsCheckBox" IsChecked="{Binding CheckForUpdates}" Margin="12,8,12,4" />
+                    <Button Classes="themeOptionButton" Click="CheckForUpdatesManually">
+                      <Grid ColumnDefinitions="22,*" ColumnSpacing="10">
+                        <TextBlock Text="&#xE895;" Classes="settingsMenuIcon" />
+                        <TextBlock Grid.Column="1" Text="检查更新" Classes="themeOptionText" />
+                      </Grid>
+                    </Button>
+                    <Button Classes="themeOptionButton" Click="ShowDataCleanup">
+                      <Grid ColumnDefinitions="22,*" ColumnSpacing="10">
+                        <TextBlock Text="&#xE74D;" Classes="settingsMenuIcon" />
+                        <TextBlock Grid.Column="1" Text="清理数据" Classes="themeOptionText" />
+                      </Grid>
+                    </Button>
+                    <Button Classes="themeOptionButton" Click="ShowDataDirectorySettings">
+                      <Grid ColumnDefinitions="22,*" ColumnSpacing="10">
+                        <TextBlock Text="&#xE713;" Classes="settingsMenuIcon" />
+                        <TextBlock Grid.Column="1" Text="设置目录" Classes="themeOptionText" />
+                      </Grid>
+                    </Button>
+                  </StackPanel>
+                </Border>
+              </Flyout>
+            </Button.Flyout>
+          </Button>
+          <Button Classes="windowButton" Content="&#x2014;" Click="MinimizeWindow" ToolTip.Tip="最小化" />
+          <Button Classes="windowButton" Content="&#x25A1;" Click="MaximizeWindow" ToolTip.Tip="最大化" />
+          <Button Classes="windowButton closeButton" Content="&#x00D7;" Click="CloseWindow" ToolTip.Tip="关闭" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Border Grid.Row="1" Background="{DynamicResource Theme.ToolbarBackground}" BorderBrush="{DynamicResource Theme.Border}" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="438,*,250">
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0">
+          <Button Classes="toolbarButton" Click="OpenSession" IsEnabled="{Binding CanUseFileActions}" ToolTip.Tip="打开现场文件"><StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="&#xE838;" Classes="toolbarIcon" /><TextBlock Text="打开" Classes="toolbarText" /></StackPanel></Button>
+          <Button Classes="toolbarButton" Click="SaveSession" IsEnabled="{Binding CanUseFileActions}" ToolTip.Tip="保存现场文件"><StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="&#xE74E;" Classes="toolbarIcon" /><TextBlock Text="保存" Classes="toolbarText" /></StackPanel></Button>
+          <Button Classes="toolbarButton" Click="ExportCsv" IsEnabled="{Binding CanUseFileActions}" ToolTip.Tip="导出 CSV"><StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="&#xEDE4;" Classes="toolbarIcon" /><TextBlock Text="导出" Classes="toolbarText" /></StackPanel></Button>
+          <Button Classes="toolbarButton" Click="ShowHelp" ToolTip.Tip="查看使用帮助"><StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="&#xE897;" Classes="toolbarIcon" /><TextBlock Text="帮助" Classes="toolbarText" /></StackPanel></Button>
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <Button Classes="captureToolbarButton" Click="ToggleCapture" IsEnabled="{Binding CanToggleCapture}">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+              <Grid Width="18" Height="24">
+                <TextBlock Text="&#x25B6;" Classes="captureStartIcon" IsVisible="{Binding !IsCapturing}" />
+                <TextBlock Text="&#x25A0;" Classes="captureStopIcon" IsVisible="{Binding IsCapturing}" />
+              </Grid>
+              <TextBlock Text="{Binding CaptureLabel}" Classes="captureButtonText" />
+            </StackPanel>
+          </Button>
+          <TextBlock Text="时间轴跟随" Classes="followText" VerticalAlignment="Center" />
+        </StackPanel>
+        <Button Grid.Column="2" Classes="primaryToolbarButton" Content="选择设备及应用"
+                Click="OpenDevicePicker" IsEnabled="{Binding CanChangeDevice}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,18,0" />
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="2" ColumnDefinitions="Auto,*" Background="{DynamicResource Theme.WindowBackground}">
+
+      <Border Grid.Column="0" Width="{Binding ParametersWidth}" Background="{DynamicResource Theme.PanelBackground}" BorderBrush="{DynamicResource Theme.Border}" BorderThickness="0,0,1,0">
+        <Grid>
+          <ScrollViewer x:Name="ParametersScrollViewer" IsVisible="{Binding !IsParametersCollapsed}"
+                        VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="14,10,28,14">
+            <Grid Height="48" Margin="-14,-10,-14,12" Background="{DynamicResource Theme.PanelHeaderBackground}">
+              <Border Height="2" Background="{DynamicResource Theme.Accent}" VerticalAlignment="Top" HorizontalAlignment="Left" Width="128" />
+              <Border Classes="parameterHeaderDivider" Height="1" Background="{DynamicResource Theme.Border}" VerticalAlignment="Bottom" />
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                <TextBlock Text="&#xE9D2;" Classes="symbol" Margin="0,0,10,0" />
+                <TextBlock Text="参数面板" Classes="sectionTitle" />
+              </StackPanel>
+              <Button Classes="panelToggleButton" Content="&#x226A;" Click="CollapseParameters"
+                      HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0"
+                      ToolTip.Tip="收起参数面板" />
+            </Grid>
+
+            <Border Classes="dataPanel" CornerRadius="5" Padding="10" Margin="0,8,0,12">
+              <StackPanel>
+              <Grid ColumnDefinitions="*,*" Margin="0,0,0,10">
+                <Button x:Name="LiveDataTabButton" Classes="dataTab activeTab" Click="ShowLiveDataTab">
+                  <TextBlock Text="实时数据" Classes="dataTabText" />
+                </Button>
+                <Button x:Name="SelectedDataTabButton" Grid.Column="1" Classes="dataTab" Click="ShowSelectedDataTab">
+                  <TextBlock Text="选中数据" Classes="dataTabText" />
+                </Button>
+              </Grid>
+                <Grid>
+                  <ItemsControl ItemsSource="{Binding LiveDataTiles}" IsVisible="{Binding ShowLiveData}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate><UniformGrid Columns="2" ColumnSpacing="8" RowSpacing="6" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:DataMetricTileViewModel">
+                        <Border Classes="dataTile" Padding="9,7">
+                          <StackPanel>
+                            <TextBlock Text="{Binding Label}" Foreground="{DynamicResource Theme.TextSecondary}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding Value}" Foreground="{DynamicResource Theme.TextPrimary}" FontSize="16" FontWeight="SemiBold" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
+                          </StackPanel>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <ItemsControl ItemsSource="{Binding SelectedDataTiles}" IsVisible="{Binding ShowSelectedData}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate><UniformGrid Columns="2" ColumnSpacing="8" RowSpacing="6" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:DataMetricTileViewModel">
+                        <Border Classes="dataTile" Padding="9,7">
+                          <StackPanel>
+                            <TextBlock Text="{Binding Label}" Foreground="{DynamicResource Theme.TextSecondary}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding Value}" Foreground="{DynamicResource Theme.TextPrimary}" FontSize="16" FontWeight="SemiBold" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
+                          </StackPanel>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </Grid>
+              </StackPanel>
+            </Border>
+
+                <ItemsControl ItemsSource="{Binding Metrics}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:MetricRowViewModel">
+                      <Border Classes="metricOption" Margin="0,0,0,10">
+                        <Grid ColumnDefinitions="36,48,*" Margin="14,12">
+                          <CheckBox Grid.Column="0" IsChecked="{Binding IsEnabled}" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                          <Border Grid.Column="1" Width="30" Height="30" Background="Transparent" BorderBrush="{Binding Color}" BorderThickness="1" CornerRadius="4" VerticalAlignment="Center" HorizontalAlignment="Center">
+                            <TextBlock Text="&#x25A3;" Foreground="{Binding Color}" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                          </Border>
+                          <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding DisplayName}" Foreground="{DynamicResource Theme.TextPrimary}" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding Description}" Foreground="{DynamicResource Theme.TextSecondary}" FontSize="13" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" />
+                          </StackPanel>
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+          </ScrollViewer>
+
+          <Button IsVisible="{Binding IsParametersCollapsed}" Classes="collapsedPanelButton"
+                  Content="&#x226B;" Click="ExpandParameters" HorizontalAlignment="Center" VerticalAlignment="Top"
+                  Margin="0,12,0,0" ToolTip.Tip="展开参数面板" />
+        </Grid>
+      </Border>
+
+      <Grid Grid.Column="1" RowDefinitions="48,166,48,*" Background="{DynamicResource Theme.WindowBackground}">
+        <Border Grid.Row="0" Background="{DynamicResource Theme.PanelHeaderBackground}" BorderBrush="{DynamicResource Theme.Border}" BorderThickness="0,0,0,1">
+          <Grid>
+            <Border Height="2" Background="{DynamicResource Theme.Accent}" VerticalAlignment="Top" HorizontalAlignment="Left" Width="128" />
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0">
+              <TextBlock Text="&#xE9D9;" Classes="symbol" Margin="0,0,10,0" />
+              <TextBlock Text="数据显示" Classes="sectionTitle" />
+            </StackPanel>
+            <TextBlock Text="{Binding Status}" Classes="muted" HorizontalAlignment="Right" VerticalAlignment="Center"
+                       Margin="0,0,16,0" TextTrimming="CharacterEllipsis" />
+          </Grid>
+        </Border>
+
+        <Border Grid.Row="1" Background="{DynamicResource Theme.TitleBarBackground}" BorderBrush="{DynamicResource Theme.Border}" BorderThickness="0,1,0,1" Padding="12,8">
+          <Grid>
+            <Image Source="avares://MoTuPerf.CrossPlatform/Assets/retro-sage-texture.png" Stretch="UniformToFill"
+                   Opacity="{DynamicResource Theme.WorkspaceTextureOpacity}" IsHitTestVisible="False" />
+            <TextBlock Text="等待真实截图" Classes="muted" HorizontalAlignment="Center" VerticalAlignment="Center"
+                       IsVisible="{Binding !HasScreenshots}" />
+            <ListBox x:Name="ShotsList" ItemsSource="{Binding Screenshots}" SelectedItem="{Binding SelectedScreenshot}"
+                     SelectionChanged="ScreenshotSelectionChanged" DoubleTapped="ScreenshotDoubleTapped"
+                     IsVisible="{Binding HasScreenshots}" Background="Transparent" BorderThickness="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Disabled">
+              <ListBox.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ListBox.ItemsPanel>
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:ScreenshotItemViewModel">
+                  <Border Classes="screenshotCard" Width="{Binding CardWidth}" Height="134" Padding="4" Margin="3,0,7,0">
+                    <StackPanel>
+                      <Border Width="{Binding ThumbnailViewportWidth}" Height="100" Background="{DynamicResource Theme.OverlayBackground}">
+                        <Image Source="{Binding Image}" Stretch="Uniform" />
+                      </Border>
+                      <TextBlock Text="{Binding TimeLabel}" Foreground="{DynamicResource Theme.TextSecondary}" FontSize="12" FontWeight="SemiBold"
+                                 HorizontalAlignment="Center" Margin="0,2,0,0" />
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </Grid>
+        </Border>
+
+        <Border Grid.Row="2" Background="{DynamicResource Theme.TitleBarBackground}" BorderBrush="{DynamicResource Theme.Border}" BorderThickness="0,0,0,1">
+          <Grid ColumnDefinitions="220,*,180">
+            <TextBlock Text="{Binding TimelineLabel}" Foreground="{DynamicResource Theme.TextSecondary}" FontSize="14" VerticalAlignment="Center" Margin="14,0,0,0" />
+            <TextBlock Grid.Column="1" Text="{Binding TargetSummary}" Foreground="{DynamicResource Theme.TextSecondary}" FontSize="14" VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis" />
+            <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0" Spacing="6">
+              <Border Width="28" Height="28">
+                <Button x:Name="ResetChartZoomButton" Classes="chartZoomResetButton" Content="&#x21BA;"
+                        IsVisible="{Binding ShowChartZoomReset}" Click="ResetChartZoom" ToolTip.Tip="还原曲线视图" />
+              </Border>
+              <CheckBox x:Name="ChartZoomCheckBox" Content="缩放曲线" IsChecked="{Binding IsChartZoomEnabled, Mode=TwoWay}"
+                        Foreground="{DynamicResource Theme.TextSecondary}" VerticalAlignment="Center" ToolTip.Tip="勾选后可拖动框选曲线区域" />
+            </StackPanel>
+          </Grid>
+        </Border>
+
+        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,0,10,0">
+          <StackPanel Spacing="8" Margin="0,0,0,10">
+            <Border Classes="chartRow" Height="156" IsVisible="{Binding ShowFrameMetrics}">
+              <Grid ColumnDefinitions="220,*">
+                <Border Classes="chartLabel">
+                  <StackPanel Margin="12,8,8,8">
+                    <TextBlock Text="FPS" Classes="chartTitle" />
+                    <StackPanel x:Name="FpsLegendPanel" Orientation="Vertical" Margin="0,7,0,0" Spacing="6">
+                    </StackPanel>
+                  </StackPanel>
+                </Border>
+                <Border Grid.Column="1" Classes="chartHost">
+                  <vm:PerformanceChartControl x:Name="FrameChart" Samples="{Binding Samples}" SelectedTime="{Binding SelectedTime}"
+                                              ViewStartTime="{Binding ViewStartTime}" ViewEndTime="{Binding ViewEndTime}" Mode="fps"
+                                              ShowFps="{Binding ShowFps}" ShowJank="{Binding ShowJank}" ShowBigJank="{Binding ShowBigJank}"
+                                              ZoomEnabled="{Binding IsChartZoomEnabled}" />
+                </Border>
+              </Grid>
+            </Border>
+            <Border Classes="chartRow" Height="156" IsVisible="{Binding ShowFrameTime}">
+              <Grid ColumnDefinitions="220,*">
+                <Border Classes="chartLabel"><StackPanel Margin="12,8,8,8"><TextBlock Text="Display FrameTime" Classes="chartTitle" /><StackPanel Classes="chartLegendItem" Orientation="Horizontal" Margin="0,7,0,0"><Border Classes="chartLegendSwatch" Background="#FF6B9A" /><TextBlock Text="FrameTime" Classes="chartLegendText" /></StackPanel></StackPanel></Border>
+                <Border Grid.Column="1" Classes="chartHost"><vm:PerformanceChartControl x:Name="FrameTimeChart" Samples="{Binding Samples}" SelectedTime="{Binding SelectedTime}" ViewStartTime="{Binding ViewStartTime}" ViewEndTime="{Binding ViewEndTime}" Mode="frametime" ZoomEnabled="{Binding IsChartZoomEnabled}" /></Border>
+              </Grid>
+            </Border>
+            <Border Classes="chartRow" Height="156" IsVisible="{Binding ShowMemory}">
+              <Grid ColumnDefinitions="220,*">
+                <Border Classes="chartLabel"><StackPanel Margin="12,8,8,8"><TextBlock Text="Process Memory" Classes="chartTitle" /><StackPanel Classes="chartLegendItem" Orientation="Horizontal" Margin="0,7,0,0"><Border Classes="chartLegendSwatch" Background="#F5C256" /><TextBlock Text="Memory" Classes="chartLegendText" /></StackPanel></StackPanel></Border>
+                <Border Grid.Column="1" Classes="chartHost"><vm:PerformanceChartControl x:Name="MemoryChart" Samples="{Binding Samples}" SelectedTime="{Binding SelectedTime}" ViewStartTime="{Binding ViewStartTime}" ViewEndTime="{Binding ViewEndTime}" Mode="memory" ZoomEnabled="{Binding IsChartZoomEnabled}" /></Border>
+              </Grid>
+            </Border>
+            <Border Classes="chartRow" Height="156" IsVisible="{Binding ShowProcessCpu}">
+              <Grid ColumnDefinitions="220,*">
+                <Border Classes="chartLabel"><StackPanel Margin="12,8,8,8"><TextBlock Text="Process CPU Raw" Classes="chartTitle" /><StackPanel Classes="chartLegendItem" Orientation="Horizontal" Margin="0,7,0,0"><Border Classes="chartLegendSwatch" Background="#B0E086" /><TextBlock Text="CPU Raw" Classes="chartLegendText" /></StackPanel></StackPanel></Border>
+                <Border Grid.Column="1" Classes="chartHost"><vm:PerformanceChartControl x:Name="CpuChart" Samples="{Binding Samples}" SelectedTime="{Binding SelectedTime}" ViewStartTime="{Binding ViewStartTime}" ViewEndTime="{Binding ViewEndTime}" Mode="cpu" ZoomEnabled="{Binding IsChartZoomEnabled}" /></Border>
+              </Grid>
+            </Border>
+            <Border Classes="chartRow" Height="156" IsVisible="{Binding ShowNormalizedCpu}">
+              <Grid ColumnDefinitions="220,*">
+                <Border Classes="chartLabel"><StackPanel Margin="12,8,8,8"><TextBlock Text="Process CPU Normalized" Classes="chartTitle" /><StackPanel Classes="chartLegendItem" Orientation="Horizontal" Margin="0,7,0,0"><Border Classes="chartLegendSwatch" Background="#7EDEEE" /><TextBlock Text="CPU Normalized" Classes="chartLegendText" /></StackPanel></StackPanel></Border>
+                <Border Grid.Column="1" Classes="chartHost"><vm:PerformanceChartControl x:Name="NormalizedCpuChart" Samples="{Binding Samples}" SelectedTime="{Binding SelectedTime}" ViewStartTime="{Binding ViewStartTime}" ViewEndTime="{Binding ViewEndTime}" Mode="cpunormalized" ZoomEnabled="{Binding IsChartZoomEnabled}" /></Border>
+              </Grid>
+            </Border>
+            <Border x:Name="CoreCpuRow" Classes="chartRow" Height="156" MinHeight="156" IsVisible="{Binding ShowCoreCpu}">
+              <Grid ColumnDefinitions="220,*">
+                <Border Classes="chartLabel"><StackPanel Margin="12,8,8,8"><TextBlock Text="Device Core CPU" Classes="chartTitle" /><StackPanel x:Name="CoreCpuLegendPanel" Orientation="Vertical" Spacing="5" Margin="0,7,0,0" /></StackPanel></Border>
+                <Border Grid.Column="1" Classes="chartHost"><vm:PerformanceChartControl x:Name="CoreCpuChart" Samples="{Binding Samples}" SelectedTime="{Binding SelectedTime}" ViewStartTime="{Binding ViewStartTime}" ViewEndTime="{Binding ViewEndTime}" Mode="corecpu" ZoomEnabled="{Binding IsChartZoomEnabled}" /></Border>
+              </Grid>
+            </Border>
+            <Border x:Name="TemperatureRow" Classes="chartRow" Height="156" MinHeight="156" IsVisible="{Binding ShowTemperature}">
+              <Grid ColumnDefinitions="220,*">
+                <Border Classes="chartLabel"><StackPanel Margin="12,8,8,8"><TextBlock Text="Device Temperature" Classes="chartTitle" /><StackPanel x:Name="TemperatureLegendPanel" Orientation="Vertical" Spacing="5" Margin="0,7,0,0" /></StackPanel></Border>
+                <Border Grid.Column="1" Classes="chartHost"><vm:PerformanceChartControl x:Name="TemperatureChart" Samples="{Binding Samples}" SelectedTime="{Binding SelectedTime}" ViewStartTime="{Binding ViewStartTime}" ViewEndTime="{Binding ViewEndTime}" Mode="temperature" ZoomEnabled="{Binding IsChartZoomEnabled}" /></Border>
+              </Grid>
+            </Border>
+            <Border Classes="chartRow" Height="156" IsVisible="{Binding ShowThermalState}">
+              <Grid ColumnDefinitions="220,*">
+                <Border Classes="chartLabel"><StackPanel Margin="12,8,8,8"><TextBlock Text="{Binding ThermalMetricTitle}" Classes="chartTitle" /><StackPanel Classes="chartLegendItem" Orientation="Horizontal" Margin="0,7,0,0"><Border Classes="chartLegendSwatch" Background="#FF5C5C" /><TextBlock Text="{Binding ThermalMetricTitle}" Classes="chartLegendText" /></StackPanel><TextBlock Text="{Binding ThermalMetricLegend}" Foreground="{DynamicResource Theme.TextSecondary}" FontSize="11" Margin="19,5,0,0" TextWrapping="Wrap" /></StackPanel></Border>
+                <Border Grid.Column="1" Classes="chartHost"><vm:PerformanceChartControl x:Name="ThermalStateChart" Samples="{Binding Samples}" SelectedTime="{Binding SelectedTime}" ViewStartTime="{Binding ViewStartTime}" ViewEndTime="{Binding ViewEndTime}" Mode="thermalstate" ZoomEnabled="{Binding IsChartZoomEnabled}" ThermalStateMax="{Binding ThermalAxisMax}" ThermalStateTitle="{Binding ThermalMetricTitle}" ThermalStateLegend="{Binding ThermalMetricLegend}" ThermalStateWaitingText="{Binding ThermalWaitingText}" /></Border>
+              </Grid>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+
+        <Grid x:Name="DeviceInfoOverlay" Grid.Row="0" Grid.RowSpan="4"
+              HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,18,18"
+              ZIndex="20">
+          <StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom">
+            <Border x:Name="DeviceInfoPanel" Width="330" MaxHeight="540"
+                    Background="{DynamicResource Theme.OverlayBackground}" CornerRadius="8" Padding="16,14"
+                    Margin="0,0,0,14" IsVisible="{Binding IsDeviceInfoVisible}">
+              <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <TextBlock x:Name="DeviceInfoText" Text="{Binding DeviceInfoText}"
+                           Foreground="{DynamicResource Theme.TextPrimary}" FontSize="13" LineHeight="20"
+                           TextWrapping="Wrap" />
+              </ScrollViewer>
+            </Border>
+            <Button x:Name="DeviceInfoButton" Classes="deviceInfoButton" Content="&#x25AF;"
+                    Click="ToggleDeviceInfo" HorizontalAlignment="Right"
+                    ToolTip.Tip="设备信息" />
+          </StackPanel>
+        </Grid>
+      </Grid>
+    </Grid>
+
+    <Border x:Name="SessionLoadingOverlay" Grid.Row="0" Grid.RowSpan="3"
+            Classes="sessionLoadingOverlay" IsVisible="{Binding IsFileOperationInProgress}"
+            IsHitTestVisible="True" ZIndex="100">
+      <Border Classes="sessionLoadingPanel" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <StackPanel Spacing="15">
+          <TextBlock Text="{Binding FileOperationText}" Classes="sessionLoadingTitle" />
+          <ProgressBar Classes="sessionLoadingProgress" IsIndeterminate="{Binding IsFileOperationIndeterminate}"
+                       Value="{Binding FileOperationProgress}" Minimum="0" Maximum="100" />
+          <TextBlock Text="{Binding FileOperationProgressText}" Classes="sessionLoadingProgressText"
+                     IsVisible="{Binding IsFileOperationProgressVisible}" TextTrimming="CharacterEllipsis" />
+          <TextBlock Text="{Binding FileOperationDetailText}" Classes="sessionLoadingDetail" />
+        </StackPanel>
+      </Border>
+    </Border>
+  </Grid>
+  </Border>
+</Window>

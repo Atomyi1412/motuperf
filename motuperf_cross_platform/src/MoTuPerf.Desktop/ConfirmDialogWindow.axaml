@@ -1,0 +1,24 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MoTuPerf.Desktop.ConfirmDialogWindow"
+        Title="确认"
+        Width="430"
+        Height="210"
+        CanResize="False"
+        WindowDecorations="None"
+        WindowStartupLocation="CenterOwner">
+  <Border Classes="secondaryWindowFrame">
+    <Grid RowDefinitions="48,*,58">
+      <Border Classes="dialogTitleBar">
+        <TextBlock x:Name="TitleText" Classes="sectionTitle" VerticalAlignment="Center" Margin="18,0,0,0" />
+      </Border>
+      <TextBlock Grid.Row="1" x:Name="MessageText" Classes="dialogHint" TextWrapping="Wrap" VerticalAlignment="Center" Margin="24,12" />
+      <Border Grid.Row="2" Classes="dialogFooter" Padding="12,0">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="8">
+          <Button x:Name="CancelButton" Classes="toolbarButton" Click="Cancel" />
+          <Button x:Name="AcceptButton" Classes="primaryToolbarButton" Click="Accept" />
+        </StackPanel>
+      </Border>
+    </Grid>
+  </Border>
+</Window>

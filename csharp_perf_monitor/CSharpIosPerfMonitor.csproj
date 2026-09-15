@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AssemblyName>CSharpIosPerfMonitor</AssemblyName>
+    <RootNamespace>CSharpIosPerfMonitor</RootNamespace>
+    <Version>0.4.65</Version>
+    <AssemblyTitle>MoTuPerf</AssemblyTitle>
+    <Company>Motutest</Company>
+    <Product>MoTuPerf iOS Performance Monitor</Product>
+    <ApplicationIcon>assets\motu-icon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="assets\motu-icon.png" />
+    <Resource Include="assets\motu-logo-full.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\motuperf_cross_platform\src\MoTuPerf.Core\Shared\*.cs" Link="Shared\Core\%(Filename)%(Extension)" />
+    <Compile Include="..\motuperf_cross_platform\src\MoTuPerf.Platform\Shared\*.cs" Link="Shared\Platform\%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

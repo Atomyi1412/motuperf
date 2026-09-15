@@ -1,0 +1,34 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MoTuPerf.Desktop.ScreenshotViewerWindow"
+        Title="截图查看"
+        Width="980"
+        Height="760"
+        MinWidth="640"
+        MinHeight="480"
+         WindowDecorations="None"
+         WindowStartupLocation="CenterOwner"
+        KeyDown="WindowKeyDown">
+  <Border Classes="secondaryWindowFrame">
+    <Grid RowDefinitions="52,*,42" Background="{DynamicResource Theme.DialogBackground}">
+      <Border Classes="dialogTitleBar" Padding="12,0"
+              PointerPressed="TitleBarPointerPressed">
+        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto,Auto">
+          <Button Classes="toolbarButton" Content="上一张" Click="Previous" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Classes="toolbarButton" Content="下一张" Click="Next" VerticalAlignment="Center" />
+          <Button Grid.Column="2" Classes="toolbarButton" Content="−" Click="ZoomOut" VerticalAlignment="Center" ToolTip.Tip="缩小" />
+          <Button Grid.Column="3" Classes="toolbarButton" Content="+" Click="ZoomIn" VerticalAlignment="Center" ToolTip.Tip="放大" />
+          <Button Grid.Column="4" Classes="toolbarButton" Content="适应窗口" Click="Fit" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="6" x:Name="CounterText" Foreground="{DynamicResource Theme.TextPrimary}" VerticalAlignment="Center" />
+          <Button Grid.Column="7" Classes="windowButton closeButton" Content="&#x00D7;" Click="CloseWindow" ToolTip.Tip="关闭" />
+        </Grid>
+      </Border>
+      <ScrollViewer Grid.Row="1" x:Name="ImageScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="{DynamicResource Theme.OverlayBackground}">
+        <Image x:Name="PreviewImage" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="16" />
+      </ScrollViewer>
+      <Border Grid.Row="2" Classes="dialogFooter">
+        <TextBlock x:Name="TimeText" Foreground="{DynamicResource Theme.TextSecondary}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+      </Border>
+    </Grid>
+  </Border>
+</Window>

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\motuperf_cross_platform\src\MoTuPerf.Core\Shared\Models.cs" Link="Models.cs" />
+    <Compile Include="..\..\motuperf_cross_platform\src\MoTuPerf.Core\Shared\MetricStatistics.cs" Link="MetricStatistics.cs" />
+    <Compile Include="..\..\motuperf_cross_platform\src\MoTuPerf.Platform\Shared\PerfCollector.cs" Link="PerfCollector.cs" />
+    <Compile Include="..\..\motuperf_cross_platform\src\MoTuPerf.Platform\Shared\CaptureDiagnosticsLog.cs" Link="CaptureDiagnosticsLog.cs" />
+    <Compile Include="..\..\motuperf_cross_platform\src\MoTuPerf.Core\Shared\ProcessTargetMatcher.cs" Link="ProcessTargetMatcher.cs" />
+    <Compile Include="..\..\motuperf_cross_platform\src\MoTuPerf.Platform\Shared\ProcessRunner.cs" Link="ProcessRunner.cs" />
+    <Compile Include="..\..\csharp_perf_monitor\src\RuntimeTools.cs" Link="RuntimeTools.cs" />
+    <Compile Include="..\..\motuperf_cross_platform\src\MoTuPerf.Platform\Shared\IosLookupService.cs" Link="IosLookupService.cs" />
+    <Compile Include="..\..\motuperf_cross_platform\src\MoTuPerf.Platform\Shared\AndroidLookupService.cs" Link="AndroidLookupService.cs" />
+    <Compile Include="..\..\motuperf_cross_platform\src\MoTuPerf.Core\Shared\SimpleJson.cs" Link="SimpleJson.cs" />
+    <Compile Include="..\..\motuperf_cross_platform\src\MoTuPerf.Core\Shared\TemperatureChartProjection.cs" Link="TemperatureChartProjection.cs" />
+    <Compile Include="..\..\motuperf_cross_platform\src\MoTuPerf.Core\Shared\ThermalStateChartProjection.cs" Link="ThermalStateChartProjection.cs" />
+    <Compile Include="..\..\motuperf_cross_platform\src\MoTuPerf.Core\Shared\FrameTimeChartProjection.cs" Link="FrameTimeChartProjection.cs" />
+  </ItemGroup>
+</Project>
