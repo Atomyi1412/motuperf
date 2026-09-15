@@ -33,4 +33,6 @@ jobs:
       - name: Install test dependencies
         run: python -m pip install pytest -r requirements.txt
       - name: Test Python collectors
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
         run: python -m pytest tests -q

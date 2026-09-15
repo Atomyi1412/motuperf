@@ -30,11 +30,11 @@ chmod +x packaging/macos-arm64/*.sh
 默认生成：
 
 - `dist/macos-arm64/MoTuPerf.app`
-- `dist/macos-arm64/MoTuPerf-0.21.7-osx-arm64.dmg`
-- `dist/macos-arm64/MoTuPerf-0.21.7-osx-arm64.dmg.sha256`
+- `dist/macos-arm64/MoTuPerf-v0.21.7-osx-arm64.dmg`
+- `dist/macos-arm64/MoTuPerf-v0.21.7-osx-arm64.dmg.sha256`
 
 打开 DMG 后，将 `MoTuPerf.app` 拖到 `Applications`。当前内测包使用 ad-hoc 签名，第一次启动需在 Finder 中右键应用并选择“打开”；它不是已公证的公开发行包。
 
-当前脚本使用目标 Mac 上的 arm64 Python 创建内测运行时并进行 ad-hoc 签名。正式对外分发前，必须改为固定来源的可重定位 Python 运行时，对全部嵌套二进制进行 Developer ID 签名并提交 Apple 公证。
+当前脚本下载固定版本、校验 SHA-256 的可重定位 Python 运行时，并进行 ad-hoc 签名。Developer ID 签名与 Apple 公证尚未配置，不能把构建成功当作已通过 Gatekeeper 验证。
 
 Windows 交叉发布和目录检查不能替代 M 系列 Mac 上的应用启动、USB 设备、采集、截图、现场文件和 CSV 验收。

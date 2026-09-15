@@ -46,7 +46,7 @@ namespace MoTuPerf.Platform
         public const string RepositoryName = "motuperf";
         public const string LatestManifestUrl = "https://github.com/Atomyi1412/motuperf/releases/latest/download/latest.json";
 
-        private static readonly Regex VersionPattern = new Regex(@"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$", RegexOptions.CultureInvariant);
+        private static readonly Regex VersionPattern = new Regex(@"\A(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\z", RegexOptions.CultureInvariant);
         private readonly HttpClient _httpClient;
 
         public ReleaseUpdateService(HttpClient httpClient = null)
@@ -59,10 +59,12 @@ namespace MoTuPerf.Platform
             if (!TryParseVersion(currentVersion, out Version current))
                 return new UpdateCheckResult { Message = "当前版本号格式无法识别" };
 
-            using (HttpResponseMessage response = await _httpClient.GetAsync(LatestManifestUrl, cancellationToken).ConfigureAwait(false))
+            using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(20));
+            using (HttpResponseMessage response = await _httpClient.GetAsync(LatestManifestUrl, timeout.Token).ConfigureAwait(false))
             {
                 response.EnsureSuccessStatusCode();
-                string json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                string json = await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
                 UpdateManifest manifest = ParseManifest(json);
                 if (!TryParseVersion(manifest.Version, out Version latest))
                     throw new InvalidDataException("更新清单中的版本号无效。");
@@ -80,6 +82,7 @@ namespace MoTuPerf.Platform
         public async Task<string> DownloadAsync(UpdateAsset asset, string directory, IProgress<UpdateDownloadProgress> progress, CancellationToken cancellationToken)
         {
             ValidateAsset(asset);
+            cancellationToken.ThrowIfCancellationRequested();
             string root = Path.GetFullPath(directory ?? "");
             Directory.CreateDirectory(root);
             string finalPath = Path.Combine(root, asset.FileName);
@@ -110,9 +113,12 @@ namespace MoTuPerf.Platform
                     }
                 }
 
-                string actualHash = ComputeSha256(temporaryPath);
+                string actualHash;
+                using (FileStream hashStream = File.OpenRead(temporaryPath))
+                    actualHash = Convert.ToHexString(await SHA256.HashDataAsync(hashStream, cancellationToken).ConfigureAwait(false));
                 if (!string.Equals(actualHash, asset.Sha256, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("更新包校验失败。");
+                cancellationToken.ThrowIfCancellationRequested();
                 File.Move(temporaryPath, finalPath, true);
                 progress?.Report(new UpdateDownloadProgress { BytesReceived = new FileInfo(finalPath).Length, TotalBytes = new FileInfo(finalPath).Length, Percent = 100 });
                 return finalPath;
@@ -140,7 +146,8 @@ namespace MoTuPerf.Platform
             if (normalized.StartsWith("v", StringComparison.OrdinalIgnoreCase)) normalized = normalized.Substring(1);
             if (!VersionPattern.IsMatch(normalized)) return false;
             string[] parts = normalized.Split('.');
-            version = new Version(int.Parse(parts[0]), int.Parse(parts[1]), int.Parse(parts[2]));
+            if (!int.TryParse(parts[0], out int major) || !int.TryParse(parts[1], out int minor) || !int.TryParse(parts[2], out int patch)) return false;
+            version = new Version(major, minor, patch);
             return true;
         }
 
@@ -149,10 +156,13 @@ namespace MoTuPerf.Platform
             using (JsonDocument document = JsonDocument.Parse(json ?? ""))
             {
                 JsonElement root = document.RootElement;
+                if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("schema", out JsonElement schema) || !schema.TryGetInt32(out int schemaVersion) || schemaVersion != 1)
+                    throw new InvalidDataException("更新清单版本不受支持。");
                 string version = RequiredString(root, "version");
-                if (!TryParseVersion(version, out _)) throw new InvalidDataException("更新清单中的版本号无效。");
+                if (!TryParseVersion(version, out Version parsedVersion)) throw new InvalidDataException("更新清单中的版本号无效。");
+                version = parsedVersion.ToString(3);
                 string notes = OptionalString(root, "releaseNotesUrl");
-                if (!string.IsNullOrWhiteSpace(notes) && !IsGithubHttpsUrl(notes)) throw new InvalidDataException("更新说明地址不受信任。");
+                if (!string.IsNullOrWhiteSpace(notes) && !IsGithubReleaseNotesUrl(notes)) throw new InvalidDataException("更新说明地址不受信任。");
                 JsonElement assets = RequiredObject(root, "assets");
                 string target = GetCurrentTarget();
                 if (string.IsNullOrWhiteSpace(target)) throw new PlatformNotSupportedException("当前系统或 CPU 架构不支持自动更新。");
@@ -166,6 +176,11 @@ namespace MoTuPerf.Platform
                     Sha256 = RequiredString(assetElement, "sha256").ToLowerInvariant()
                 };
                 ValidateAsset(asset);
+                if (asset.FileName != ExpectedFileName(version, target)
+                    || asset.Url != ReleaseBaseUrl + "/download/v" + version + "/" + asset.FileName)
+                    throw new InvalidDataException("更新包文件名、下载标签和版本不一致。");
+                if (!string.IsNullOrWhiteSpace(notes) && notes != ReleaseBaseUrl + "/tag/v" + version)
+                    throw new InvalidDataException("更新说明与版本不一致。");
                 DateTimeOffset published;
                 return new UpdateManifest
                 {
@@ -185,8 +200,19 @@ namespace MoTuPerf.Platform
             if (string.IsNullOrWhiteSpace(asset.Target) || !string.Equals(asset.Target, GetCurrentTarget(), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("更新包平台与当前系统不匹配。");
             if (!IsGithubReleaseAssetUrl(asset.Url)) throw new InvalidDataException("更新包地址不受信任。");
+            if (string.Equals(asset.Target, "win-x64", StringComparison.OrdinalIgnoreCase) && !asset.FileName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Windows 更新包格式无效。");
+            if (string.Equals(asset.Target, "osx-arm64", StringComparison.OrdinalIgnoreCase) && !asset.FileName.EndsWith(".dmg", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("macOS 更新包格式无效。");
             if (!Regex.IsMatch(asset.Sha256 ?? "", "^[0-9a-fA-F]{64}$", RegexOptions.CultureInvariant))
                 throw new InvalidDataException("更新包 SHA-256 无效。");
+        }
+
+        private const string ReleaseBaseUrl = "https://github.com/" + RepositoryOwner + "/" + RepositoryName + "/releases";
+
+        internal static string ExpectedFileName(string version, string target)
+        {
+            return target == "win-x64" ? "MoTuPerf-Setup-v" + version + ".exe" : "MoTuPerf-v" + version + "-osx-arm64.dmg";
         }
 
         internal static string ComputeSha256(string path)
@@ -207,6 +233,7 @@ namespace MoTuPerf.Platform
         {
             return Uri.TryCreate(value, UriKind.Absolute, out Uri uri)
                 && uri.Scheme == Uri.UriSchemeHttps
+                && uri.IsDefaultPort && string.IsNullOrEmpty(uri.UserInfo) && string.IsNullOrEmpty(uri.Query) && string.IsNullOrEmpty(uri.Fragment)
                 && string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase);
         }
 
@@ -215,6 +242,14 @@ namespace MoTuPerf.Platform
             if (!IsGithubHttpsUrl(value)) return false;
             Uri uri = new Uri(value);
             string prefix = "/" + RepositoryOwner + "/" + RepositoryName + "/releases/download/";
+            return uri.AbsolutePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsGithubReleaseNotesUrl(string value)
+        {
+            if (!IsGithubHttpsUrl(value)) return false;
+            Uri uri = new Uri(value);
+            string prefix = "/" + RepositoryOwner + "/" + RepositoryName + "/releases/";
             return uri.AbsolutePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
         }
 

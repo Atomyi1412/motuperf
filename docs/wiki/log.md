@@ -1,5 +1,6 @@
 # 知识库日志
 
+- 2026-09-15: 完成 GitHub 公共仓库两期自动发布与客户端更新实现，版本提升至 `v0.21.7`；补充 CHANGELOG、MIT License、CI/Release 工作流、平台清单校验和公开仓库过滤规则，远程创建与 Release 回读待 GitHub 设备授权完成。
 - 2026-09-15: 用户确认采用 GitHub 公共仓库 `Atomyi1412/motuperf`，macOS 更新采用下载并打开 DMG 的方式；需求和实现文档已确认，进入两期开发。
 - 2026-09-15: 根据用户确认，新增 GitHub 公共仓库 `Atomyi1412/motuperf` 的自动发布与客户端更新需求草案；范围包含 GitHub Actions、Windows/macOS 安装包、公开 Release 清单、SHA-256 校验和客户端更新设置，待确认 macOS 安装动作后进入实现设计。
 

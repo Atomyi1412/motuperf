@@ -17,8 +17,10 @@ namespace MoTuPerf.Desktop
 
         public UpdateSettingsStore(string path = null)
         {
-            _path = string.IsNullOrWhiteSpace(path) ? Path.Combine(RuntimeTools.DataDirectory, "update-settings.json") : path;
+            _path = path;
         }
+
+        private string SettingsPath { get { return string.IsNullOrWhiteSpace(_path) ? Path.Combine(RuntimeTools.DataDirectory, "update-settings.json") : _path; } }
 
         public bool LoadCheckForUpdates()
         {
@@ -33,26 +35,30 @@ namespace MoTuPerf.Desktop
 
         public void Save(bool checkForUpdates, string skippedVersion)
         {
+            string temporary = null;
             try
             {
-                string directory = Path.GetDirectoryName(_path);
+                string path = SettingsPath;
+                string directory = Path.GetDirectoryName(path);
                 if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
-                string temporary = _path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
                 File.WriteAllText(temporary, JsonSerializer.Serialize(new SettingsDocument { CheckForUpdates = checkForUpdates, SkippedVersion = skippedVersion }, new JsonSerializerOptions { WriteIndented = true }));
-                File.Move(temporary, _path, true);
+                File.Move(temporary, path, true);
             }
             catch
             {
                 // Update preferences are optional and must never block data collection.
             }
+            finally { try { if (temporary != null && File.Exists(temporary)) File.Delete(temporary); } catch { } }
         }
 
         private SettingsDocument Load()
         {
             try
             {
-                if (!File.Exists(_path)) return null;
-                return JsonSerializer.Deserialize<SettingsDocument>(File.ReadAllText(_path));
+                string path = SettingsPath;
+                if (!File.Exists(path)) return null;
+                return JsonSerializer.Deserialize<SettingsDocument>(File.ReadAllText(path));
             }
             catch { return null; }
         }

@@ -298,7 +298,7 @@ namespace MoTuPerf.Desktop.Tests
             string macReadme = LoadText("packaging", "macos-arm64", "README.md");
             Assert.Contains("return \"v" + version + "\";", viewModel);
             Assert.Contains("MOTUPERF_VERSION:-" + version, macBuild);
-            Assert.Contains("MoTuPerf-" + version + "-osx-arm64-internal.dmg", macReadme);
+            Assert.Contains("MoTuPerf-v" + version + "-osx-arm64.dmg", macReadme);
             Assert.DoesNotContain("v" + version + "-", viewModel, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("preview", macBuild, StringComparison.OrdinalIgnoreCase);
         }

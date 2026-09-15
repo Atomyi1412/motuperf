@@ -3,7 +3,7 @@
         x:Class="MoTuPerf.Desktop.UpdatePromptWindow"
         Title="发现新版本"
         Width="500"
-        Height="270"
+        Height="320"
         CanResize="False"
         WindowDecorations="None"
         WindowStartupLocation="CenterOwner">
@@ -15,6 +15,8 @@
       <StackPanel Grid.Row="1" Margin="24,18" Spacing="8">
         <TextBlock x:Name="VersionText" Classes="sectionTitle" />
         <TextBlock x:Name="MessageText" Classes="dialogHint" TextWrapping="Wrap" />
+        <TextBlock x:Name="PublishedText" Classes="dialogHint" />
+        <Button x:Name="ReleaseNotesButton" Classes="helpLinkButton" Content="查看更新说明" Click="OpenReleaseNotes" HorizontalAlignment="Left" />
       </StackPanel>
       <Border Grid.Row="2" Classes="dialogFooter" Padding="12,0">
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="8">

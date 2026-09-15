@@ -86,7 +86,7 @@ cat > "$RESOURCES_DIR/motuperf-package.json" <<JSON
 }
 JSON
 
-"$SCRIPT_DIR/verify-app.sh" "$APP_DIR"
+bash "$SCRIPT_DIR/verify-app.sh" "$APP_DIR"
 
 # Ad-hoc signing is only for internal acceptance. Public distribution requires
 # Developer ID signing and Apple notarization of every nested executable.
@@ -95,7 +95,7 @@ codesign --verify --deep --strict --verbose=2 "$APP_DIR"
 
 if [[ "${CREATE_DMG:-1}" == "1" ]]; then
   DMG_STAGING_DIR="$OUTPUT_ROOT/dmg-staging"
-  DMG_PATH="$OUTPUT_ROOT/MoTuPerf-$VERSION-osx-arm64.dmg"
+  DMG_PATH="$OUTPUT_ROOT/MoTuPerf-v$VERSION-osx-arm64.dmg"
   rm -rf "$DMG_STAGING_DIR"
   rm -f "$DMG_PATH"
   mkdir -p "$DMG_STAGING_DIR"

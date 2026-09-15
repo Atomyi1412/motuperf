@@ -32,7 +32,8 @@ namespace MoTuPerf.Platform.Tests
         public async Task ChecksManifestAndSelectsCurrentPlatformAsset()
         {
             string target = ReleaseUpdateService.GetCurrentTarget();
-            string json = "{\"version\":\"99.1.2\",\"mandatory\":false,\"releaseNotesUrl\":\"https://github.com/Atomyi1412/motuperf/releases/tag/v99.1.2\",\"assets\":{\"" + target + "\":{\"fileName\":\"MoTuPerf.exe\",\"url\":\"https://github.com/Atomyi1412/motuperf/releases/download/v99.1.2/MoTuPerf.exe\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}";
+            string fileName = target == "win-x64" ? "MoTuPerf-Setup-v99.1.2.exe" : "MoTuPerf-v99.1.2-osx-arm64.dmg";
+            string json = "{\"schema\":1,\"version\":\"99.1.2\",\"mandatory\":false,\"releaseNotesUrl\":\"https://github.com/Atomyi1412/motuperf/releases/tag/v99.1.2\",\"assets\":{\"" + target + "\":{\"fileName\":\"" + fileName + "\",\"url\":\"https://github.com/Atomyi1412/motuperf/releases/download/v99.1.2/" + fileName + "\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}";
             ReleaseUpdateService service = new ReleaseUpdateService(new HttpClient(new JsonHandler(json)));
 
             UpdateCheckResult result = await service.CheckAsync("0.21.6", CancellationToken.None);
@@ -59,7 +60,8 @@ namespace MoTuPerf.Platform.Tests
         {
             byte[] content = Encoding.UTF8.GetBytes("package");
             string target = ReleaseUpdateService.GetCurrentTarget();
-            UpdateAsset asset = new UpdateAsset { Target = target, FileName = "update.exe", Url = "https://github.com/Atomyi1412/motuperf/releases/download/v99.1.2/update.exe", Sha256 = new string('a', 64) };
+            string fileName = target == "win-x64" ? "update.exe" : "update.dmg";
+            UpdateAsset asset = new UpdateAsset { Target = target, FileName = fileName, Url = "https://github.com/Atomyi1412/motuperf/releases/download/v99.1.2/" + fileName, Sha256 = new string('a', 64) };
             ReleaseUpdateService service = new ReleaseUpdateService(new HttpClient(new BytesHandler(content)));
             string directory = Directory.CreateTempSubdirectory("motuperf-update-").FullName;
             try

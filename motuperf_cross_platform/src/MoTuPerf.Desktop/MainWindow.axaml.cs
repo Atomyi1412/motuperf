@@ -148,6 +148,11 @@ namespace MoTuPerf.Desktop
                 return;
             }
             UpdateCheckResult result = await viewModel.CheckForUpdatesAsync(manual, CancellationToken.None);
+            if (viewModel.IsCapturing || viewModel.IsFileOperationInProgress)
+            {
+                if (manual) viewModel.Status = "采集或文件操作已开始，更新提示已延后";
+                return;
+            }
             if (!result.HasUpdate || result.Manifest == null)
             {
                 if (manual) viewModel.Status = result.Message ?? "当前已是最新版本";
@@ -161,11 +166,22 @@ namespace MoTuPerf.Desktop
                 return;
             }
             if (choice != UpdatePromptChoice.Update) return;
+            if (viewModel.IsCapturing || viewModel.IsFileOperationInProgress)
+            {
+                viewModel.Status = "采集或文件操作已开始，暂不能安装更新";
+                return;
+            }
+            if (!await OfferSaveAsync()) return;
             await DownloadAndOpenUpdateAsync(viewModel, result.Manifest);
         }
 
         private async Task DownloadAndOpenUpdateAsync(MainWindowViewModel viewModel, UpdateManifest manifest)
         {
+            if (viewModel.IsCapturing || viewModel.IsFileOperationInProgress)
+            {
+                viewModel.Status = "采集或文件操作已开始，已取消更新";
+                return;
+            }
             CancellationTokenSource cancellation = new CancellationTokenSource();
             UpdateDownloadWindow window = new UpdateDownloadWindow();
             window.CancelRequested += delegate { cancellation.Cancel(); };
@@ -174,6 +190,13 @@ namespace MoTuPerf.Desktop
             {
                 System.Progress<UpdateDownloadProgress> progress = new System.Progress<UpdateDownloadProgress>(window.SetProgress);
                 string path = await viewModel.DownloadUpdateAsync(manifest.Asset, progress, cancellation.Token);
+                if (viewModel.IsCapturing || viewModel.IsFileOperationInProgress)
+                {
+                    window.Complete();
+                    await dialogTask;
+                    viewModel.Status = "采集或文件操作已开始，未启动安装程序";
+                    return;
+                }
                 window.Complete();
                 await dialogTask;
                 viewModel.Status = "更新包已校验，正在打开安装程序";
