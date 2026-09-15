@@ -95,7 +95,7 @@ codesign --verify --deep --strict --verbose=2 "$APP_DIR"
 
 if [[ "${CREATE_DMG:-1}" == "1" ]]; then
   DMG_STAGING_DIR="$OUTPUT_ROOT/dmg-staging"
-  DMG_PATH="$OUTPUT_ROOT/MoTuPerf-$VERSION-osx-arm64-internal.dmg"
+  DMG_PATH="$OUTPUT_ROOT/MoTuPerf-$VERSION-osx-arm64.dmg"
   rm -rf "$DMG_STAGING_DIR"
   rm -f "$DMG_PATH"
   mkdir -p "$DMG_STAGING_DIR"
