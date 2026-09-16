@@ -1,5 +1,8 @@
 # Optional dependencies for real iOS USB collection.
 # Install only when you want to test a physical iOS device:
 #   python -m pip install -r requirements-ios.txt
-py-ios-device
-tidevice
+py-ios-device==2.4.25
+tidevice==0.12.11
+# py-ios-device 2.4.25 imports X509Req, which was removed by newer pyOpenSSL releases.
+pyopenssl==24.3.0
+cryptography==44.0.3

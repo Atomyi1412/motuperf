@@ -288,7 +288,7 @@ namespace MoTuPerf.Desktop.Tests
             string version = project.Descendants("Version").Single().Value;
             string[] components = version.Split('.');
 
-            Assert.Equal("0.21.9", version);
+            Assert.Equal("0.21.10", version);
             Assert.Equal(3, components.Length);
             Assert.All(components, component => Assert.True(int.TryParse(component, out _)));
             Assert.DoesNotContain("-", version);
