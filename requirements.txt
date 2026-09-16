@@ -1,1 +1,2 @@
-# First MVP uses only Python standard library.
+# Contract tests inspect packaged image assets.
+Pillow>=12.0,<13.0

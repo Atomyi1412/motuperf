@@ -1,5 +1,10 @@
 # 更新日志
 
+## v0.21.8 - 2026-09-16
+
+- 修复 Avalonia 名称生成器在不同编译环境下与手动控件绑定字段重复定义的问题。
+- 补齐 CI 运行 UI 合约测试所需的 Pillow 依赖，修复发布前自动验证流程。
+
 ## v0.21.7 - 2026-09-15
 
 - 增加 GitHub Actions 自动测试、Windows x64 安装包和 macOS Apple Silicon DMG 发布流程。
