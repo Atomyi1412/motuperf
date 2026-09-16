@@ -9,7 +9,11 @@ namespace MoTuPerf.Desktop
     {
         private const string VersionLogUrl = "https://more2.feishu.cn/docx/EJ6Hdr6lbokuUsxr8FecLA7Qneg";
 
-        public ChangelogWindow() { Avalonia.Markup.Xaml.AvaloniaXamlLoader.Load(this); }
+        public ChangelogWindow()
+        {
+            Avalonia.Markup.Xaml.AvaloniaXamlLoader.Load(this);
+            ContentDialogSizing.Attach(this);
+        }
 
         private void DialogTitlePointerPressed(object sender, PointerPressedEventArgs e)
         {

@@ -2,8 +2,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="MoTuPerf.Desktop.UpdatePromptWindow"
         Title="发现新版本"
-        Width="500"
-        Height="320"
+        Width="600"
+        SizeToContent="Height"
+        MaxHeight="600"
         CanResize="False"
         WindowDecorations="None"
         WindowStartupLocation="CenterOwner">
@@ -12,16 +13,24 @@
       <Border Classes="dialogTitleBar" PointerPressed="DialogTitlePointerPressed">
         <TextBlock Text="发现新版本" Classes="sectionTitle" VerticalAlignment="Center" Margin="18,0,0,0" />
       </Border>
-      <StackPanel Grid.Row="1" Margin="24,18" Spacing="8">
+      <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+      <StackPanel Margin="24,18" Spacing="8">
         <TextBlock x:Name="VersionText" Classes="sectionTitle" />
         <TextBlock x:Name="MessageText" Classes="dialogHint" TextWrapping="Wrap" />
         <TextBlock x:Name="PublishedText" Classes="dialogHint" />
-        <Button x:Name="ReleaseNotesButton" Classes="helpLinkButton" Content="查看更新说明" Click="OpenReleaseNotes" HorizontalAlignment="Left" />
+        <Border Classes="helpSection" Margin="0,4,0,0">
+          <StackPanel Spacing="6">
+            <TextBlock Text="本次更新" Classes="helpTitle" />
+            <TextBlock x:Name="ReleaseNotesText" Classes="helpBody" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+        <Button x:Name="ReleaseNotesButton" Classes="helpLinkButton" Content="查看完整更新说明" Click="OpenReleaseNotes" HorizontalAlignment="Left" />
       </StackPanel>
+      </ScrollViewer>
       <Border Grid.Row="2" Classes="dialogFooter" Padding="12,0">
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="8">
-          <Button Classes="toolbarButton" Content="跳过此版本" Click="Skip" />
-          <Button Classes="toolbarButton" Content="稍后提醒" Click="Later" />
+          <Button x:Name="SkipButton" Classes="toolbarButton" Content="跳过此版本" Click="Skip" ToolTip.Tip="不再自动提示此版本；手动检查更新仍可安装" />
+          <Button Classes="toolbarButton" Content="稍后提醒" Click="Later" ToolTip.Tip="本次暂不更新，下次启动时再检查（需开启启动更新检查）" />
           <Button Classes="primaryToolbarButton" Content="更新" Click="Update" />
         </StackPanel>
       </Border>

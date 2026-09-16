@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
@@ -23,6 +24,7 @@ namespace MoTuPerf.Platform
         public string Version { get; internal set; }
         public bool Mandatory { get; internal set; }
         public string ReleaseNotesUrl { get; internal set; }
+        public IReadOnlyList<string> ReleaseNotes { get; internal set; } = Array.Empty<string>();
         public DateTimeOffset? PublishedAtUtc { get; internal set; }
         public UpdateAsset Asset { get; internal set; }
     }
@@ -202,6 +204,7 @@ namespace MoTuPerf.Platform
                     Version = version,
                     Mandatory = root.TryGetProperty("mandatory", out JsonElement mandatory) && mandatory.ValueKind == JsonValueKind.True,
                     ReleaseNotesUrl = notes,
+                    ReleaseNotes = ReadReleaseNotes(root),
                     PublishedAtUtc = DateTimeOffset.TryParse(OptionalString(root, "publishedAtUtc"), out published) ? (DateTimeOffset?)published : null,
                     Asset = asset
                 };
@@ -221,6 +224,21 @@ namespace MoTuPerf.Platform
                 throw new InvalidDataException("macOS 更新包格式无效。");
             if (!Regex.IsMatch(asset.Sha256 ?? "", "^[0-9a-fA-F]{64}$", RegexOptions.CultureInvariant))
                 throw new InvalidDataException("更新包 SHA-256 无效。");
+        }
+
+        private static IReadOnlyList<string> ReadReleaseNotes(JsonElement root)
+        {
+            if (!root.TryGetProperty("releaseNotes", out JsonElement notes) || notes.ValueKind != JsonValueKind.Array
+                || notes.GetArrayLength() > 24) return Array.Empty<string>();
+            var lines = new List<string>();
+            foreach (JsonElement line in notes.EnumerateArray())
+            {
+                if (line.ValueKind != JsonValueKind.String) return Array.Empty<string>();
+                string text = line.GetString().Trim();
+                if (text.Length > 1000) return Array.Empty<string>();
+                if (text.Length > 0) lines.Add(text);
+            }
+            return lines.AsReadOnly();
         }
 
         private const string ReleaseBaseUrl = "https://github.com/" + RepositoryOwner + "/" + RepositoryName + "/releases";

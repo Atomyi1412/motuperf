@@ -83,6 +83,45 @@ namespace MoTuPerf.Platform.Tests
             finally { Directory.Delete(directory, true); }
         }
 
+        [Theory]
+        [InlineData(null, 0)]
+        [InlineData("null", 0)]
+        [InlineData("{}", 0)]
+        [InlineData("[\"真实更新内容\",\"第二项\"]", 2)]
+        [InlineData("[\"  真实更新内容  \",\"  \"]", 1)]
+        [InlineData("[\"第一项\",123]", 0)]
+        public void ReadsOptionalReleaseNotesWithoutBreakingLegacyManifests(string notesJson, int expectedCount)
+        {
+            UpdateManifest manifest = ParseWithNotes(notesJson);
+            Assert.Equal(expectedCount, manifest.ReleaseNotes.Count);
+            Assert.Equal("99.1.2", manifest.Version);
+            if (expectedCount > 0) Assert.Equal("真实更新内容", manifest.ReleaseNotes[0]);
+        }
+
+        [Fact]
+        public void OversizedNotesDoNotPreventUpdateChecks()
+        {
+            Assert.Empty(ParseWithNotes(System.Text.Json.JsonSerializer.Serialize(new[] { new string('x', 1001) })).ReleaseNotes);
+            Assert.Empty(ParseWithNotes(System.Text.Json.JsonSerializer.Serialize(new string[25])).ReleaseNotes);
+        }
+
+        private static UpdateManifest ParseWithNotes(string notesJson)
+        {
+            string target = ReleaseUpdateService.GetCurrentTarget();
+            string fileName = ReleaseUpdateService.ExpectedFileName("99.1.2", target);
+            string json = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                schema = 1,
+                version = "99.1.2",
+                assets = new System.Collections.Generic.Dictionary<string, object>
+                {
+                    [target] = new { fileName, url = "https://github.com/Atomyi1412/motuperf/releases/download/v99.1.2/" + fileName, sha256 = new string('a', 64) }
+                }
+            });
+            if (notesJson != null) json = json.Substring(0, json.Length - 1) + ",\"releaseNotes\":" + notesJson + "}";
+            return ReleaseUpdateService.ParseManifest(json);
+        }
+
         private sealed class JsonHandler : HttpMessageHandler
         {
             private readonly string _json;

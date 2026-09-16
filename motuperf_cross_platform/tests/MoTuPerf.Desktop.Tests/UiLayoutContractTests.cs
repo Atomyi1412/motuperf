@@ -289,7 +289,7 @@ namespace MoTuPerf.Desktop.Tests
             string version = project.Descendants("Version").Single().Value;
             string[] components = version.Split('.');
 
-            Assert.Equal("0.22.1", version);
+            Assert.Equal("0.23.0", version);
             Assert.Equal(3, components.Length);
             Assert.All(components, component => Assert.True(int.TryParse(component, out _)));
             Assert.DoesNotContain("-", version);
@@ -410,9 +410,9 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Contains(changelog.Descendants(Avalonia + "Border"), border => Attribute(border, "Classes") == "secondaryWindowFrame");
             string changelogText = string.Join(" ", changelog.Descendants(Avalonia + "TextBlock").Select(element => Attribute(element, "Text")));
             Assert.Contains("v0.22.0", changelogText);
-            Assert.Contains("v0.21.11", changelogText);
+            Assert.Contains("v0.23.0", changelogText);
             Assert.Contains("v0.22.1", changelogText);
-            Assert.DoesNotContain("v0.21.10", changelogText);
+            Assert.DoesNotContain("v0.21.11", changelogText);
             Assert.Contains(changelog.Descendants(Avalonia + "Button"), button => Attribute(button, "Content") == "查看完整在线更新日志"
                 && Attribute(button, "Click") == "OpenVersionLog");
 
@@ -616,6 +616,25 @@ namespace MoTuPerf.Desktop.Tests
                 string[] actual = Attribute(text[2], "Text").Split('\n').Select(line => line.TrimStart('\u2022', ' ')).ToArray();
                 Assert.Equal(expected, actual);
             }
+        }
+
+        [Fact]
+        public void ReleaseDialogsFitContentAndManualChecksBypassSkippedVersion()
+        {
+            foreach (string name in new[] { "ChangelogWindow", "UpdatePromptWindow" })
+            {
+                XDocument dialog = LoadXaml("src", "MoTuPerf.Desktop", name + ".axaml");
+                Assert.Equal("Height", Attribute(dialog.Root, "SizeToContent"));
+                Assert.Null(dialog.Root.Attribute("Height"));
+                Assert.Null(dialog.Root.Attribute("MinHeight"));
+                Assert.NotNull(dialog.Root.Attribute("MaxHeight"));
+                Assert.Contains(dialog.Descendants(Avalonia + "ScrollViewer"), scroll => Attribute(scroll, "VerticalScrollBarVisibility") == "Auto");
+                Assert.Contains("ContentDialogSizing.Attach(this)", LoadText("src", "MoTuPerf.Desktop", name + ".axaml.cs"));
+            }
+            Assert.Contains("!manual && !result.Manifest.Mandatory && viewModel.IsUpdateSkipped", LoadText("src", "MoTuPerf.Desktop", "MainWindow.axaml.cs"));
+            string promptCode = LoadText("src", "MoTuPerf.Desktop", "UpdatePromptWindow.axaml.cs");
+            Assert.Contains("manifest.ReleaseNotes", promptCode);
+            Assert.Contains("此版本暂未提供更新内容", promptCode);
         }
 
         [Fact]

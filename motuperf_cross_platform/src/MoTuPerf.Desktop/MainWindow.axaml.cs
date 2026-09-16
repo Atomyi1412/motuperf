@@ -158,7 +158,7 @@ namespace MoTuPerf.Desktop
                 if (manual) viewModel.Status = result.Message ?? "当前已是最新版本";
                 return;
             }
-            if (!result.Manifest.Mandatory && viewModel.IsUpdateSkipped(result.Manifest.Version)) return;
+            if (!manual && !result.Manifest.Mandatory && viewModel.IsUpdateSkipped(result.Manifest.Version)) return;
             UpdatePromptChoice? choice = await new UpdatePromptWindow(result.Manifest).ShowDialog<UpdatePromptChoice?>(this);
             if (choice == UpdatePromptChoice.Skip)
             {

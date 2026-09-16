@@ -23,6 +23,10 @@ namespace MoTuPerf.Desktop
             _publishedText.Text = manifest.PublishedAtUtc.HasValue ? "发布时间：" + manifest.PublishedAtUtc.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm") : "";
             _releaseNotesButton.IsVisible = !string.IsNullOrWhiteSpace(manifest.ReleaseNotesUrl);
             _releaseNotesButton.Tag = manifest.ReleaseNotesUrl;
+            this.FindControl<TextBlock>("ReleaseNotesText").Text = manifest.ReleaseNotes.Count > 0
+                ? "• " + string.Join("\n• ", manifest.ReleaseNotes)
+                : "此版本暂未提供更新内容。";
+            this.FindControl<Button>("SkipButton").IsVisible = !manifest.Mandatory;
         }
         private void InitializeComponent()
         {
@@ -31,6 +35,7 @@ namespace MoTuPerf.Desktop
             _messageText = this.FindControl<TextBlock>("MessageText");
             _publishedText = this.FindControl<TextBlock>("PublishedText");
             _releaseNotesButton = this.FindControl<Button>("ReleaseNotesButton");
+            ContentDialogSizing.Attach(this);
         }
         private void DialogTitlePointerPressed(object sender, PointerPressedEventArgs e) { if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) BeginMoveDrag(e); }
         private void Update(object sender, RoutedEventArgs e) { Close(UpdatePromptChoice.Update); }
