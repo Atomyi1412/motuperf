@@ -11,6 +11,17 @@ namespace MoTuPerf.Platform.Tests
 {
     public sealed class ReleaseUpdateServiceTests
     {
+        [Fact]
+        public void InstallerHandoffUsesCurrentDirectoryIncludingSpacesAndUnicode()
+        {
+            string directory = Path.Combine(Path.GetTempPath(), "MoTuPerf 测试", "Program Files");
+            string package = Path.Combine(Path.GetTempPath(), "downloads", "update.exe");
+            var startInfo = ReleaseUpdateService.CreateInstallerStartInfo(package, directory);
+            Assert.Equal(Path.GetFullPath(package), startInfo.FileName);
+            Assert.True(startInfo.UseShellExecute);
+            Assert.Equal(OperatingSystem.IsWindows() ? "/D=" + Path.GetFullPath(directory) : "", startInfo.Arguments);
+        }
+
         [Theory]
         [InlineData("v0.21.6", "0.21.6", false)]
         [InlineData("0.21.6", "0.21.7", true)]

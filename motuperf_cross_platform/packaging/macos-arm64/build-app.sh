@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REPO_DIR="$(cd "$ROOT_DIR/.." && pwd)"
-VERSION="${MOTUPERF_VERSION:-0.22.0}"
+VERSION="${MOTUPERF_VERSION:-0.22.1}"
 CONFIGURATION="${CONFIGURATION:-Release}"
 VERSION_SHORT="${VERSION%%-*}"
 BUILD_NUMBER="${MOTUPERF_BUILD_NUMBER:-1}"

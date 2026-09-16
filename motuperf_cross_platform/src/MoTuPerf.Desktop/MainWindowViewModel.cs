@@ -96,7 +96,7 @@ namespace MoTuPerf.Desktop
 
         public event PropertyChangedEventHandler PropertyChanged;
         public event Action<string> CaptureStoppedUnexpectedly;
-        public string Version { get { return "v0.22.0"; } }
+        public string Version { get { return "v0.22.1"; } }
         public IReadOnlyList<AppThemeDefinition> ThemeOptions { get { return AppThemeManager.Themes; } }
         public string CurrentThemeName { get { return AppThemeManager.Current.DisplayName; } }
         public string CurrentThemePreviewColor { get { return AppThemeManager.Current.PreviewColor; } }

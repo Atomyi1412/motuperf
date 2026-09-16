@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Security.Cryptography;
@@ -137,6 +138,20 @@ namespace MoTuPerf.Platform
             if (OperatingSystem.IsMacOS() && System.Runtime.InteropServices.RuntimeInformation.OSArchitecture == System.Runtime.InteropServices.Architecture.Arm64)
                 return "osx-arm64";
             return "";
+        }
+
+        public static ProcessStartInfo CreateInstallerStartInfo(string installerPath, string installationDirectory)
+        {
+            var startInfo = new ProcessStartInfo { FileName = Path.GetFullPath(installerPath), UseShellExecute = true };
+            if (OperatingSystem.IsWindows())
+            {
+                string directory = Path.GetFullPath(installationDirectory);
+                if (directory.IndexOfAny(new[] { '"', '\r', '\n' }) >= 0)
+                    throw new ArgumentException("安装目录无效。", nameof(installationDirectory));
+                // NSIS consumes everything after the final, unquoted /D=, including spaces.
+                startInfo.Arguments = "/D=" + directory;
+            }
+            return startInfo;
         }
 
         public static bool TryParseVersion(string value, out Version version)

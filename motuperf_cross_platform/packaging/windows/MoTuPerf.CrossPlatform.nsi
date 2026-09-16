@@ -16,6 +16,9 @@
 !ifndef PROCESS_HELPER
   !error "PROCESS_HELPER is required"
 !endif
+!ifndef DIRECTORY_HELPER
+  !error "DIRECTORY_HELPER is required"
+!endif
 
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
@@ -65,6 +68,29 @@ Function .onInit
   ${IfNot} ${RunningX64}
     MessageBox MB_ICONSTOP|MB_OK "MoTuPerf 仅支持 64 位 Windows。"
     Abort
+  ${EndIf}
+  ClearErrors
+  ; NSIS removes /D from $CMDLINE; inspect the original process command line.
+  System::Call 'kernel32::GetCommandLineW() w .r3'
+  ${GetOptions} $3 "/D=" $1
+  ${IfNot} ${Errors}
+    Return
+  ${EndIf}
+  ${If} $TestMode == "1"
+    SetErrorLevel 4
+    Abort
+  ${EndIf}
+  InitPluginsDir
+  File /oname=$PLUGINSDIR\ResolveInstallDirectory.ps1 "${DIRECTORY_HELPER}"
+  System::Call 'kernel32::GetCurrentProcessId() i .r2'
+  nsExec::ExecToStack /TIMEOUT=10000 '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\ResolveInstallDirectory.ps1" -InstallerProcessId $2 -OutputPath "$PLUGINSDIR\upgrade-directory.ini"'
+  Pop $0
+  Pop $1
+  ${If} $0 == "0"
+    ReadINIStr $1 "$PLUGINSDIR\upgrade-directory.ini" "upgrade" "directory"
+    ${If} $1 != ""
+      StrCpy $INSTDIR $1
+    ${EndIf}
   ${EndIf}
 FunctionEnd
 

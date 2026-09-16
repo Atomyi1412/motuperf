@@ -200,7 +200,7 @@ namespace MoTuPerf.Desktop
                 window.Complete();
                 await dialogTask;
                 viewModel.Status = "更新包已校验，正在打开安装程序";
-                Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true });
+                Process.Start(ReleaseUpdateService.CreateInstallerStartInfo(path, AppContext.BaseDirectory));
             }
             catch (OperationCanceledException)
             {

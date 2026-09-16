@@ -23,6 +23,13 @@
         <StackPanel Margin="22,10,18,12" Spacing="9">
           <Border Classes="helpSection">
             <StackPanel>
+              <TextBlock Text="v0.22.1" Classes="helpTitle" />
+              <TextBlock Text="2026-09-16" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复自动更新安装时未沿用当前软件安装目录的问题。&#x0A;• 兼容旧版客户端启动的更新包，避免残留安装记录导致安装到错误目录。&#x0A;• 加强安装目录与隔离测试校验，保留用户数据和手动选择目录功能。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel>
               <TextBlock Text="v0.22.0" Classes="helpTitle" />
               <TextBlock Text="2026-09-16" Classes="dialogHint" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 新增独立更新日志入口，仅展示最新三个版本。&#x0A;• 从帮助窗口移除重复的在线更新日志入口。&#x0A;• 完善更新日志同步与客户端更新验证。" />
@@ -33,13 +40,6 @@
               <TextBlock Text="v0.21.11" Classes="helpTitle" />
               <TextBlock Text="2026-09-16" Classes="dialogHint" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复 GitHub Actions Windows 打包受 runner 平台变量影响而失败的问题。&#x0A;• 修复 macOS Apple Silicon 构建混入 Windows 可执行文件的问题，并锁定 macOS iOS 运行时依赖。&#x0A;• 统一客户端、崩溃日志和安装包说明中的版本号。" />
-            </StackPanel>
-          </Border>
-          <Border Classes="helpSection">
-            <StackPanel>
-              <TextBlock Text="v0.21.10" Classes="helpTitle" />
-              <TextBlock Text="2026-09-16" Classes="dialogHint" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 锁定 iOS 采集依赖版本，避免上游 pyOpenSSL API 变化导致 CI 和发布校验失败。" />
             </StackPanel>
           </Border>
         </StackPanel>

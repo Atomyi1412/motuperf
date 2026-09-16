@@ -12,6 +12,7 @@ $projectFile = Join-Path $projectRoot "src\MoTuPerf.Desktop\MoTuPerf.Desktop.csp
 $dist = Join-Path $projectRoot "dist"
 $installerScript = Join-Path $packagingRoot "MoTuPerf.CrossPlatform.nsi"
 $processHelper = Join-Path $packagingRoot "StopInstalledProcesses.ps1"
+$directoryHelper = Join-Path $packagingRoot "ResolveInstallDirectory.ps1"
 $icon = Join-Path $repoRoot "csharp_perf_monitor\assets\motu-icon.ico"
 $shortcutIcon = Join-Path $repoRoot "csharp_perf_monitor\assets\motu-shortcut-icon.ico"
 $runtimeScript = Join-Path $repoRoot "csharp_perf_monitor\scripts\build_runtime.ps1"
@@ -21,7 +22,7 @@ $constraints = Join-Path $repoRoot "csharp_perf_monitor\tools\requirements-metri
 if ($OutputName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') {
   throw "OutputName must contain only letters, digits, dot, underscore, or hyphen."
 }
-foreach ($required in @($projectFile, $installerScript, $processHelper, $icon, $shortcutIcon, $runtimeScript, $requirements, $constraints)) {
+foreach ($required in @($projectFile, $installerScript, $processHelper, $directoryHelper, $icon, $shortcutIcon, $runtimeScript, $requirements, $constraints)) {
   if (!(Test-Path -LiteralPath $required)) { throw "Installer source file is missing: $required" }
 }
 
@@ -90,7 +91,7 @@ Copy-Item -LiteralPath $shortcutIcon -Destination (Join-Path $payloadDir "motu-s
 
 New-Item -ItemType Directory -Path $setupDir -Force | Out-Null
 if (Test-Path -LiteralPath $setupFile) { Remove-Item -LiteralPath $setupFile -Force }
-& $makensisPath "/INPUTCHARSET" "UTF8" "/DAPP_VERSION=$appVersion" "/DAPP_FILE_VERSION=$appFileVersion" "/DSOURCE_DIR=$payloadDir" "/DOUTPUT_FILE=$setupFile" "/DSETUP_ICON=$icon" "/DPROCESS_HELPER=$processHelper" $installerScript
+& $makensisPath "/INPUTCHARSET" "UTF8" "/DAPP_VERSION=$appVersion" "/DAPP_FILE_VERSION=$appFileVersion" "/DSOURCE_DIR=$payloadDir" "/DOUTPUT_FILE=$setupFile" "/DSETUP_ICON=$icon" "/DPROCESS_HELPER=$processHelper" "/DDIRECTORY_HELPER=$directoryHelper" $installerScript
 if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $setupFile)) { throw "NSIS installer build failed." }
 
 $hash = Get-FileHash -LiteralPath $setupFile -Algorithm SHA256
