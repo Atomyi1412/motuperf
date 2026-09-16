@@ -3,11 +3,14 @@ param(
   [Parameter(Mandatory = $true)][string]$AssetsDirectory,
   [Parameter(Mandatory = $true)][string]$OutputPath,
   [string]$Repository = "Atomyi1412/motuperf",
-  [string]$ChangelogPath = (Join-Path $PSScriptRoot '../CHANGELOG.md'),
+  [string]$ChangelogPath,
   [string]$ReleaseNotesPath
 )
 
 $ErrorActionPreference = "Stop"
+if ([string]::IsNullOrWhiteSpace($ChangelogPath)) {
+  $ChangelogPath = Join-Path $PSScriptRoot '../CHANGELOG.md'
+}
 $normalized = $Version.TrimStart('v')
 if ($normalized -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') { throw "Invalid release version: $Version" }
 $windows = Get-ChildItem -LiteralPath $AssetsDirectory -File -Filter "MoTuPerf-Setup-v$normalized.exe" | Select-Object -First 1
