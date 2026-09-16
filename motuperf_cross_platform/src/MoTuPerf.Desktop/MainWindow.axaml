@@ -8,7 +8,9 @@
         Height="940"
         MinWidth="1180"
         MinHeight="760"
-        WindowDecorations="None"
+        WindowDecorations="BorderOnly"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="0"
         WindowStartupLocation="CenterScreen"
         Closing="WindowClosing">
   <Border Classes="mainWindowFrame">

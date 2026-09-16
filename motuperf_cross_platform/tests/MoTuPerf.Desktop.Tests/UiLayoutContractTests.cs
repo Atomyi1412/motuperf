@@ -185,7 +185,7 @@ namespace MoTuPerf.Desktop.Tests
             AssertStyle(app, "ListBox.processList > ListBoxItem", "MinHeight", "26");
             AssertStyle(app, "ListBox.dialogList > ListBoxItem:selected", "Background", "{DynamicResource Theme.Accent}");
             AssertStyle(app, "ListBox.processList > ListBoxItem:selected Border.processRow", "Background", "{DynamicResource Theme.Accent}");
-            AssertStyle(app, "TextBox.dialogSearch /template/ Border#PART_BorderElement", "Background", "{DynamicResource Theme.InputBackground}");
+            AssertStyle(app, "TextBox.dialogSearch /template/ Border#PART_BorderElement", "Background", "{DynamicResource Theme.DialogInputBackground}");
             AssertStyle(app, "TextBox.dialogSearch /template/ Button#PART_ClearButton", "IsVisible", "False");
             Assert.All(new[] { Named(dialog, "ProcessSearch"), Named(dialog, "AppSearch") }, search =>
             {
@@ -289,7 +289,7 @@ namespace MoTuPerf.Desktop.Tests
             string version = project.Descendants("Version").Single().Value;
             string[] components = version.Split('.');
 
-            Assert.Equal("0.23.0", version);
+            Assert.Equal("0.24.0", version);
             Assert.Equal(3, components.Length);
             Assert.All(components, component => Assert.True(int.TryParse(component, out _)));
             Assert.DoesNotContain("-", version);
@@ -335,7 +335,13 @@ namespace MoTuPerf.Desktop.Tests
             XElement layout = frame.Elements(Avalonia + "Grid").Single();
             Assert.Equal("40,64,*", Attribute(layout, "RowDefinitions"));
             Assert.Equal("{DynamicResource Theme.WindowBackground}", Attribute(layout, "Background"));
-            Assert.Equal("None", Attribute(main.Root, "WindowDecorations"));
+            Assert.Equal("BorderOnly", Attribute(main.Root, "WindowDecorations"));
+            Assert.Equal("True", Attribute(main.Root, "ExtendClientAreaToDecorationsHint"));
+            Assert.Equal("0", Attribute(main.Root, "ExtendClientAreaTitleBarHeightHint"));
+            AssertStyle(app, "Window", "Win32Properties.WindowCornerPreference", "Round");
+            AssertStyle(app, "Border.mainWindowFrame", "CornerRadius", "8");
+            AssertStyle(app, "Border.mainWindowFrame", "ClipToBounds", "True");
+            AssertStyle(app, "Window[WindowState=Maximized] Border.mainWindowFrame, Window[WindowState=FullScreen] Border.mainWindowFrame", "CornerRadius", "0");
         }
 
         [Fact]
@@ -343,9 +349,11 @@ namespace MoTuPerf.Desktop.Tests
         {
             XDocument app = LoadXaml("src", "MoTuPerf.Desktop", "App.axaml");
             AssertStyle(app, "Border.secondaryWindowFrame", "Background", "{DynamicResource Theme.DialogBackground}");
-            AssertStyle(app, "Border.secondaryWindowFrame", "BorderBrush", "{DynamicResource Theme.BorderStrong}");
-            AssertStyle(app, "Border.secondaryWindowFrame", "BorderThickness", "2");
-            AssertStyle(app, "Border.secondaryWindowFrame", "BoxShadow", "inset 0 0 8 0 #66000000");
+            AssertStyle(app, "Border.secondaryWindowFrame", "BorderBrush", "{DynamicResource Theme.DialogBorder}");
+            AssertStyle(app, "Border.secondaryWindowFrame", "BorderThickness", "1");
+            AssertStyle(app, "Border.secondaryWindowFrame", "CornerRadius", "8");
+            AssertStyle(app, "Border.secondaryWindowFrame", "ClipToBounds", "True");
+            AssertStyle(app, "Window[WindowState=Maximized] Border.secondaryWindowFrame, Window[WindowState=FullScreen] Border.secondaryWindowFrame", "CornerRadius", "0");
             AssertStyle(app, "Border.dialogTitleBar", "Background", "{DynamicResource Theme.TitleBarBackground}");
             AssertStyle(app, "Border.dialogFooter", "Background", "{DynamicResource Theme.DialogFooterBackground}");
             AssertStyle(app, "ListBox.dialogList", "Background", "{DynamicResource Theme.DialogSurface}");
@@ -360,6 +368,9 @@ namespace MoTuPerf.Desktop.Tests
                 "DataDirectorySettingsWindow.axaml",
                 "ExportCsvDialogWindow.axaml",
                 "HelpWindow.axaml",
+                "ChangelogWindow.axaml",
+                "UpdatePromptWindow.axaml",
+                "UpdateDownloadWindow.axaml",
                 "ScreenshotViewerWindow.axaml"
             };
             foreach (string viewFile in secondaryWindows)
@@ -367,7 +378,9 @@ namespace MoTuPerf.Desktop.Tests
                 XDocument view = LoadXaml("src", "MoTuPerf.Desktop", viewFile);
                 XElement frame = view.Root.Elements(Avalonia + "Border").Single();
                 Assert.Equal("secondaryWindowFrame", Attribute(frame, "Classes"));
-                Assert.Equal("None", Attribute(view.Root, "WindowDecorations"));
+                Assert.Equal("BorderOnly", Attribute(view.Root, "WindowDecorations"));
+                Assert.Equal("True", Attribute(view.Root, "ExtendClientAreaToDecorationsHint"));
+                Assert.Equal("0", Attribute(view.Root, "ExtendClientAreaTitleBarHeightHint"));
                 XElement layout = frame.Elements(Avalonia + "Grid").Single();
                 XElement titleBar = layout.Elements(Avalonia + "Border").First();
                 Assert.Equal("dialogTitleBar", Attribute(titleBar, "Classes"));
@@ -409,10 +422,10 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Equal("更新日志", Attribute(changelog.Root, "Title"));
             Assert.Contains(changelog.Descendants(Avalonia + "Border"), border => Attribute(border, "Classes") == "secondaryWindowFrame");
             string changelogText = string.Join(" ", changelog.Descendants(Avalonia + "TextBlock").Select(element => Attribute(element, "Text")));
-            Assert.Contains("v0.22.0", changelogText);
+            Assert.Contains("v0.24.0", changelogText);
             Assert.Contains("v0.23.0", changelogText);
             Assert.Contains("v0.22.1", changelogText);
-            Assert.DoesNotContain("v0.21.11", changelogText);
+            Assert.DoesNotContain("v0.22.0", changelogText);
             Assert.Contains(changelog.Descendants(Avalonia + "Button"), button => Attribute(button, "Content") == "查看完整在线更新日志"
                 && Attribute(button, "Click") == "OpenVersionLog");
 

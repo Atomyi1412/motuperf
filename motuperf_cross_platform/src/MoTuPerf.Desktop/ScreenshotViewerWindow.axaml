@@ -6,7 +6,9 @@
         Height="760"
         MinWidth="640"
         MinHeight="480"
-         WindowDecorations="None"
+        WindowDecorations="BorderOnly"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="0"
          WindowStartupLocation="CenterOwner"
         KeyDown="WindowKeyDown">
   <Border Classes="secondaryWindowFrame">

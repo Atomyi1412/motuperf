@@ -69,7 +69,7 @@ namespace MoTuPerf.Desktop.Tests
                 foreach (string surface in new[]
                 {
                     "Theme.WindowBackground", "Theme.PanelBackground", "Theme.CardBackground",
-                    "Theme.DialogBackground", "Theme.DialogSurface", "Theme.DialogFooterBackground"
+                    "Theme.DialogBackground", "Theme.DialogSurface", "Theme.DialogFooterBackground", "Theme.DialogInputBackground"
                 })
                 {
                     Assert.True(Contrast(theme.Resources["Theme.TextPrimary"], theme.Resources[surface]) >= 4.5,
@@ -108,9 +108,9 @@ namespace MoTuPerf.Desktop.Tests
             Assert.InRange(retro.WorkspaceTextureOpacity, 0.1, 0.25);
             Assert.Equal("#3F6C4B", retro.Resources["Theme.Accent"]);
             Assert.NotEqual(AppThemeManager.Resolve("light").Resources["Theme.Accent"], retro.Resources["Theme.Accent"]);
-            Assert.Equal("#DCE7DA", retro.Resources["Theme.DialogBackground"]);
-            Assert.Equal("#EEF3E8", retro.Resources["Theme.DialogSurface"]);
-            Assert.Equal("#CAD8C7", retro.Resources["Theme.DialogFooterBackground"]);
+            Assert.Equal("#F2EEDD", retro.Resources["Theme.DialogBackground"]);
+            Assert.Equal("#FCFAF2", retro.Resources["Theme.DialogSurface"]);
+            Assert.Equal("#EAE8DA", retro.Resources["Theme.DialogFooterBackground"]);
             Assert.NotEqual(retro.Resources["Theme.DialogBackground"], retro.Resources["Theme.DialogSurface"]);
         }
 

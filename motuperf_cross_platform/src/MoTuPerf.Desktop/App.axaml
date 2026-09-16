@@ -31,9 +31,12 @@
     <SolidColorBrush x:Key="Theme.CheckboxPressed">#E3E4E8</SolidColorBrush>
     <SolidColorBrush x:Key="Theme.CheckboxDisabled">#B8B9BE</SolidColorBrush>
     <SolidColorBrush x:Key="Theme.Accent">#1476FF</SolidColorBrush>
-    <SolidColorBrush x:Key="Theme.DialogBackground">#151620</SolidColorBrush>
-    <SolidColorBrush x:Key="Theme.DialogSurface">#1D1F2B</SolidColorBrush>
-    <SolidColorBrush x:Key="Theme.DialogFooterBackground">#171923</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.DialogBackground">#22242C</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.DialogSurface">#2B2E38</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.DialogFooterBackground">#1E2028</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.DialogBorder">#676D7D</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.DialogSeparator">#404553</SolidColorBrush>
+    <SolidColorBrush x:Key="Theme.DialogInputBackground">#30343F</SolidColorBrush>
     <x:Double x:Key="Theme.WorkspaceTextureOpacity">0</x:Double>
   </Application.Resources>
   <Application.Styles>
@@ -42,12 +45,18 @@
     <Style Selector="Window">
       <Setter Property="Background" Value="{DynamicResource Theme.WindowBackground}" />
       <Setter Property="FontFamily" Value="Microsoft YaHei UI, Inter, sans-serif" />
+      <Setter Property="Win32Properties.WindowCornerPreference" Value="Round" />
     </Style>
 
     <Style Selector="Border.mainWindowFrame">
       <Setter Property="Background" Value="{DynamicResource Theme.WindowBackground}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
       <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <Style Selector="Window[WindowState=Maximized] Border.mainWindowFrame, Window[WindowState=FullScreen] Border.mainWindowFrame">
+      <Setter Property="CornerRadius" Value="0" />
     </Style>
 
     <Style Selector="Border.sessionLoadingOverlay">
@@ -107,18 +116,22 @@
 
     <Style Selector="Border.secondaryWindowFrame">
       <Setter Property="Background" Value="{DynamicResource Theme.DialogBackground}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
-      <Setter Property="BorderThickness" Value="2" />
-      <Setter Property="BoxShadow" Value="inset 0 0 8 0 #66000000" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.DialogBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <Style Selector="Window[WindowState=Maximized] Border.secondaryWindowFrame, Window[WindowState=FullScreen] Border.secondaryWindowFrame">
+      <Setter Property="CornerRadius" Value="0" />
     </Style>
     <Style Selector="Border.dialogTitleBar">
       <Setter Property="Background" Value="{DynamicResource Theme.TitleBarBackground}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.DialogSeparator}" />
       <Setter Property="BorderThickness" Value="0,0,0,1" />
     </Style>
     <Style Selector="Border.dialogFooter">
       <Setter Property="Background" Value="{DynamicResource Theme.DialogFooterBackground}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.DialogSeparator}" />
       <Setter Property="BorderThickness" Value="0,1,0,0" />
     </Style>
 
@@ -366,7 +379,7 @@
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="TextBox.dialogTextBox">
-      <Setter Property="Background" Value="{DynamicResource Theme.InputBackground}" />
+      <Setter Property="Background" Value="{DynamicResource Theme.DialogInputBackground}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
@@ -526,7 +539,7 @@
     </Style>
     <Style Selector="Border.helpSection">
       <Setter Property="Background" Value="{DynamicResource Theme.DialogSurface}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.DialogSeparator}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="5" />
       <Setter Property="Padding" Value="14,12" />
@@ -763,7 +776,7 @@
     </Style>
     <Style Selector="ListBox.dialogList">
       <Setter Property="Background" Value="{DynamicResource Theme.DialogSurface}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource Theme.InputBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.DialogSeparator}" />
       <Setter Property="BorderThickness" Value="1,0,1,1" />
       <Setter Property="Padding" Value="0" />
     </Style>
@@ -1011,7 +1024,7 @@
       <Setter Property="SelectionBrush" Value="{DynamicResource Theme.Accent}" />
     </Style>
     <Style Selector="TextBox.dialogSearch">
-      <Setter Property="Background" Value="{DynamicResource Theme.InputBackground}" />
+      <Setter Property="Background" Value="{DynamicResource Theme.DialogInputBackground}" />
       <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
       <Setter Property="BorderThickness" Value="1" />
@@ -1019,17 +1032,17 @@
       <Setter Property="CornerRadius" Value="0" />
     </Style>
     <Style Selector="TextBox.dialogSearch /template/ Border#PART_BorderElement">
-      <Setter Property="Background" Value="{DynamicResource Theme.InputBackground}" />
+      <Setter Property="Background" Value="{DynamicResource Theme.DialogInputBackground}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="0" />
     </Style>
     <Style Selector="TextBox.dialogSearch:pointerover /template/ Border#PART_BorderElement">
-      <Setter Property="Background" Value="{DynamicResource Theme.InputBackground}" />
+      <Setter Property="Background" Value="{DynamicResource Theme.DialogInputBackground}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
     </Style>
     <Style Selector="TextBox.dialogSearch:focus /template/ Border#PART_BorderElement">
-      <Setter Property="Background" Value="{DynamicResource Theme.InputBackground}" />
+      <Setter Property="Background" Value="{DynamicResource Theme.DialogInputBackground}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
     </Style>
     <Style Selector="TextBox.dialogSearch /template/ TextBlock#PART_Watermark">
@@ -1051,8 +1064,8 @@
       <Setter Property="Padding" Value="8,5" />
     </Style>
     <Style Selector="ComboBox.dialogCombo">
-      <Setter Property="Background" Value="{DynamicResource Theme.InputBackground}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource Theme.InputBackground}" />
+      <Setter Property="Background" Value="{DynamicResource Theme.DialogInputBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.DialogSeparator}" />
       <Setter Property="Padding" Value="6,4" />
       <Setter Property="HorizontalAlignment" Value="Stretch" />
     </Style>

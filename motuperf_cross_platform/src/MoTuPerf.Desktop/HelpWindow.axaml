@@ -6,7 +6,9 @@
         Height="640"
         MinWidth="620"
         MinHeight="520"
-        WindowDecorations="None"
+        WindowDecorations="BorderOnly"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="0"
         WindowStartupLocation="CenterOwner">
   <Border Classes="secondaryWindowFrame">
     <Grid RowDefinitions="48,*,58">

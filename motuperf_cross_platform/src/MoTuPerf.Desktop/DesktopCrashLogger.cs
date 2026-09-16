@@ -20,7 +20,7 @@ namespace MoTuPerf.Desktop
                 StringBuilder text = new StringBuilder();
                 text.AppendLine("Title: " + (title ?? ""));
                 text.AppendLine("Time: " + DateTime.Now.ToString("O"));
-                text.AppendLine("Version: v0.23.0");
+                text.AppendLine("Version: v0.24.0");
                 text.AppendLine("BaseDirectory: " + AppDomain.CurrentDomain.BaseDirectory);
                 text.AppendLine();
                 text.AppendLine(Convert.ToString(exception));

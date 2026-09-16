@@ -100,7 +100,8 @@ namespace MoTuPerf.Desktop
             "Theme.ScrollThumbHover", "Theme.Cursor", "Theme.OverlayBackground",
             "Theme.CheckboxBackground", "Theme.CheckboxGlyph", "Theme.CheckboxHover",
             "Theme.CheckboxPressed", "Theme.CheckboxDisabled", "Theme.Accent",
-            "Theme.DialogBackground", "Theme.DialogSurface", "Theme.DialogFooterBackground"
+            "Theme.DialogBackground", "Theme.DialogSurface", "Theme.DialogFooterBackground",
+            "Theme.DialogBorder", "Theme.DialogSeparator", "Theme.DialogInputBackground"
         };
 
         public static readonly IReadOnlyList<AppThemeDefinition> Themes = new[]
@@ -111,21 +112,21 @@ namespace MoTuPerf.Desktop
                 "#EBECF4", "#ACAEBE", "#777A8C", "#FFFFFF", "#292B3A", "#424456",
                 "#0D0E15", "#5B5C60", "#7B7D84", "#FFFFFF", "#08090D",
                  "#FFFFFF", "#1A1B22", "#F4F4F5", "#E3E4E8", "#B8B9BE", "#1476FF",
-                 "#151620", "#1D1F2B", "#171923"),
+                 "#22242C", "#2B2E38", "#1E2028", "#676D7D", "#404553", "#30343F"),
             Create("light", "明亮", "#F3F5F8", ThemeVariant.Light, 0,
                 "#F3F5F8", "#EAF0F6", "#FFFFFF", "#F7F8FA", "#F0F2F5", "#FFFFFF",
                 "#FFFFFF", "#E9EDF3", "#DDE3EB", "#E7F0FF", "#FFFFFF", "#D7DDE6",
                 "#20232A", "#596170", "#7A8290", "#FFFFFF", "#D8DEE7", "#B8C0CC",
                 "#E4E8EE", "#AAB2BF", "#858E9D", "#1476FF", "#EEF1F5",
                  "#FFFFFF", "#20232A", "#F4F4F5", "#E3E4E8", "#D1D5DC", "#1476FF",
-                 "#F4F6F9", "#FFFFFF", "#EDF1F5"),
+                 "#F4F6F9", "#FFFFFF", "#EDF1F5", "#A4AEBB", "#D8DEE7", "#FFFFFF"),
             Create("retro-sage", "绿色", "#3F6C4B", ThemeVariant.Light, 0.18,
                 "#E4EDE3", "#B0C3AE", "#F2EEDD", "#D7E3D5", "#C9D8C6", "#F7F2E4",
                 "#FBF7EA", "#E0E6D6", "#CCD6C3", "#E9E3CE", "#EDF2E8", "#BBC7B5",
                 "#1D2B22", "#405146", "#5A6B5E", "#FFFDF3", "#B9B9A4", "#8E9278",
                 "#CBD5C5", "#71856F", "#596E58", "#2F7652", "#E9E3D3",
                  "#FBF8EA", "#365A42", "#F0ECD9", "#E5DFC8", "#C8C7B8", "#3F6C4B",
-                 "#DCE7DA", "#EEF3E8", "#CAD8C7")
+                 "#F2EEDD", "#FCFAF2", "#EAE8DA", "#8E9D88", "#D1D4C2", "#FFFDF5")
         };
 
         private static readonly ThemeSettingsStore Settings = new ThemeSettingsStore();

@@ -5,7 +5,9 @@
         Width="430"
         Height="210"
         CanResize="False"
-        WindowDecorations="None"
+        WindowDecorations="BorderOnly"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="0"
         WindowStartupLocation="CenterOwner">
   <Border Classes="secondaryWindowFrame">
     <Grid RowDefinitions="48,*,58">
