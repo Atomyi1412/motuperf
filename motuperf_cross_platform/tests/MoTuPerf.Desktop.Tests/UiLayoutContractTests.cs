@@ -44,14 +44,23 @@ namespace MoTuPerf.Desktop.Tests
             Assert.DoesNotContain(main.Descendants(Avalonia + "TextBlock"), element => Attribute(element, "Text") == "统计指标");
             Assert.DoesNotContain(main.Descendants(Avalonia + "TextBlock"), element => Attribute(element, "Text").StartsWith("勾选指标后", StringComparison.Ordinal));
             XElement parametersScrollViewer = Named(main, "ParametersScrollViewer");
-            Assert.Equal("14,10,28,14", Attribute(parametersScrollViewer.Elements(Avalonia + "StackPanel").Single(), "Margin"));
-            Assert.Contains(parametersScrollViewer.Descendants(Avalonia + "TextBlock"), element => Attribute(element, "Text") == "参数面板");
-            Assert.Contains(parametersScrollViewer.Descendants(Avalonia + "Border"), element => Attribute(element, "Classes") == "parameterHeaderDivider");
-            Assert.Contains(parametersScrollViewer.Descendants(Avalonia + "Border"), element => Attribute(element, "Classes") == "dataPanel");
+            Assert.Equal("2", Attribute(parametersScrollViewer, "Grid.Row"));
+            Assert.Equal("0,0,0,20", Attribute(parametersScrollViewer, "Margin"));
+            XElement parametersContent = Named(main, "ParametersExpandedContent");
+            Assert.Equal("48,Auto,*", Attribute(parametersContent, "RowDefinitions"));
+            Assert.Equal("{Binding !IsParametersCollapsed}", Attribute(parametersContent, "IsVisible"));
+            Assert.Contains(parametersContent.Descendants(Avalonia + "TextBlock"), element => Attribute(element, "Text") == "参数面板");
+            Assert.Contains(parametersContent.Descendants(Avalonia + "Border"), element => Attribute(element, "Classes") == "parameterHeaderDivider");
+            XElement dataPanel = Named(main, "ParameterDataPanel");
+            Assert.Equal(parametersContent, dataPanel.Parent);
+            Assert.Equal("1", Attribute(dataPanel, "Grid.Row"));
+            Assert.Equal("14,20,14,12", Attribute(dataPanel, "Margin"));
+            Assert.DoesNotContain(parametersScrollViewer.Descendants(Avalonia + "Border"), element => Attribute(element, "Classes") == "dataPanel");
             Assert.Contains(parametersScrollViewer.Descendants(Avalonia + "ItemsControl"), element => Attribute(element, "ItemsSource") == "{Binding Metrics}");
             Assert.Empty(parametersScrollViewer.Descendants(Avalonia + "ScrollViewer"));
             XElement metrics = parametersScrollViewer.Descendants(Avalonia + "ItemsControl")
                 .Single(element => Attribute(element, "ItemsSource") == "{Binding Metrics}");
+            Assert.Equal("14,0,28,0", Attribute(metrics, "Margin"));
             Assert.DoesNotContain(metrics.Descendants(Avalonia + "TextBlock"), element => Attribute(element, "Text") == "◉");
             Assert.All(main.Descendants(Avalonia + "UniformGrid").Where(element => Attribute(element, "Columns") == "2"), element =>
             {
@@ -289,7 +298,7 @@ namespace MoTuPerf.Desktop.Tests
             string version = project.Descendants("Version").Single().Value;
             string[] components = version.Split('.');
 
-            Assert.Equal("0.24.0", version);
+            Assert.Equal("0.24.1", version);
             Assert.Equal(3, components.Length);
             Assert.All(components, component => Assert.True(int.TryParse(component, out _)));
             Assert.DoesNotContain("-", version);
@@ -424,8 +433,8 @@ namespace MoTuPerf.Desktop.Tests
             string changelogText = string.Join(" ", changelog.Descendants(Avalonia + "TextBlock").Select(element => Attribute(element, "Text")));
             Assert.Contains("v0.24.0", changelogText);
             Assert.Contains("v0.23.0", changelogText);
-            Assert.Contains("v0.22.1", changelogText);
-            Assert.DoesNotContain("v0.22.0", changelogText);
+            Assert.Contains("v0.24.1", changelogText);
+            Assert.DoesNotContain("v0.22.1", changelogText);
             Assert.Contains(changelog.Descendants(Avalonia + "Button"), button => Attribute(button, "Content") == "查看完整在线更新日志"
                 && Attribute(button, "Click") == "OpenVersionLog");
 

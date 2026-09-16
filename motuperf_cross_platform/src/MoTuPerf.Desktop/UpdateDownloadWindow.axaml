@@ -3,7 +3,8 @@
         x:Class="MoTuPerf.Desktop.UpdateDownloadWindow"
         Title="下载更新"
         Width="520"
-        Height="240"
+        SizeToContent="Height"
+        MaxHeight="360"
         CanResize="False"
         WindowDecorations="BorderOnly"
         ExtendClientAreaToDecorationsHint="True"
@@ -12,14 +13,21 @@
   <Border Classes="secondaryWindowFrame">
     <Grid RowDefinitions="48,*,58">
       <Border Classes="dialogTitleBar" PointerPressed="DialogTitlePointerPressed">
-        <TextBlock Text="正在下载更新" Classes="sectionTitle" VerticalAlignment="Center" Margin="18,0,0,0" />
+        <TextBlock x:Name="TitleText" Text="正在下载更新" Classes="sectionTitle" VerticalAlignment="Center" Margin="18,0,0,0" />
       </Border>
-      <StackPanel Grid.Row="1" Margin="24,20" Spacing="12">
-        <ProgressBar x:Name="Progress" Minimum="0" Maximum="100" Height="10" />
-        <TextBlock x:Name="Detail" Classes="dialogHint" TextTrimming="CharacterEllipsis" />
-      </StackPanel>
+      <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="24,18" Spacing="12">
+          <Grid ColumnDefinitions="*,64" ColumnSpacing="12">
+            <ProgressBar x:Name="Progress" Minimum="0" Maximum="100" Height="8" IsIndeterminate="True"
+                         Foreground="{DynamicResource Theme.Accent}" Background="{DynamicResource Theme.ScrollTrack}" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" x:Name="PercentText" Text="连接中" Classes="dialogHint"
+                       Foreground="{DynamicResource Theme.Accent}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+          </Grid>
+          <TextBlock x:Name="Detail" Text="正在连接下载服务..." Classes="dialogHint" TextWrapping="Wrap" />
+        </StackPanel>
+      </ScrollViewer>
       <Border Grid.Row="2" Classes="dialogFooter" Padding="12,0">
-        <Button x:Name="CancelButton" Classes="toolbarButton" Content="取消" Click="Cancel" HorizontalAlignment="Right" Width="86" />
+        <Button x:Name="CancelButton" Classes="dialogFooterButton" Content="取消" Click="Cancel" HorizontalAlignment="Right" VerticalAlignment="Center" />
       </Border>
     </Grid>
   </Border>

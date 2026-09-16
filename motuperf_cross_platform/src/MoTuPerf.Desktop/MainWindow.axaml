@@ -118,10 +118,8 @@
 
       <Border Grid.Column="0" Width="{Binding ParametersWidth}" Background="{DynamicResource Theme.PanelBackground}" BorderBrush="{DynamicResource Theme.Border}" BorderThickness="0,0,1,0">
         <Grid>
-          <ScrollViewer x:Name="ParametersScrollViewer" IsVisible="{Binding !IsParametersCollapsed}"
-                        VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Margin="14,10,28,14">
-            <Grid Height="48" Margin="-14,-10,-14,12" Background="{DynamicResource Theme.PanelHeaderBackground}">
+          <Grid x:Name="ParametersExpandedContent" RowDefinitions="48,Auto,*" IsVisible="{Binding !IsParametersCollapsed}">
+            <Grid Grid.Row="0" Background="{DynamicResource Theme.PanelHeaderBackground}">
               <Border Height="2" Background="{DynamicResource Theme.Accent}" VerticalAlignment="Top" HorizontalAlignment="Left" Width="128" />
               <Border Classes="parameterHeaderDivider" Height="1" Background="{DynamicResource Theme.Border}" VerticalAlignment="Bottom" />
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
@@ -133,7 +131,7 @@
                       ToolTip.Tip="收起参数面板" />
             </Grid>
 
-            <Border Classes="dataPanel" CornerRadius="5" Padding="10" Margin="0,8,0,12">
+            <Border Grid.Row="1" x:Name="ParameterDataPanel" Classes="dataPanel" CornerRadius="5" Padding="10" Margin="14,20,14,12">
               <StackPanel>
               <Grid ColumnDefinitions="*,*" Margin="0,0,0,10">
                 <Button x:Name="LiveDataTabButton" Classes="dataTab activeTab" Click="ShowLiveDataTab">
@@ -178,7 +176,9 @@
               </StackPanel>
             </Border>
 
-                <ItemsControl ItemsSource="{Binding Metrics}">
+            <ScrollViewer Grid.Row="2" x:Name="ParametersScrollViewer" Margin="0,0,0,20"
+                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding Metrics}" Margin="14,0,28,0">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:MetricRowViewModel">
                       <Border Classes="metricOption" Margin="0,0,0,10">
@@ -196,8 +196,8 @@
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
-            </StackPanel>
-          </ScrollViewer>
+            </ScrollViewer>
+          </Grid>
 
           <Button IsVisible="{Binding IsParametersCollapsed}" Classes="collapsedPanelButton"
                   Content="&#x226B;" Click="ExpandParameters" HorizontalAlignment="Center" VerticalAlignment="Top"

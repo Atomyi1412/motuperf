@@ -181,7 +181,7 @@
           <CheckBox x:Name="AutoStartCheckBox" Content="自动开始采集" Foreground="{DynamicResource Theme.TextPrimary}"
                     Grid.Column="0" VerticalAlignment="Center" Margin="122,0,0,0" />
           <Button Grid.Column="1" Classes="dialogFooterButton" Content="关闭" Click="Cancel" VerticalAlignment="Center" />
-          <Button Grid.Column="2" Classes="dialogFooterButton" Content="选择" Click="Confirm" VerticalAlignment="Center" />
+          <Button Grid.Column="2" Classes="dialogPrimaryButton" Content="选择" Click="Confirm" Width="100" Margin="6,0" VerticalAlignment="Center" />
         </Grid>
       </Border>
     </Grid>

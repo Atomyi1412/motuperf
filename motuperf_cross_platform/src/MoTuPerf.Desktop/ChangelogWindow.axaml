@@ -26,6 +26,13 @@
         <StackPanel Margin="22,10,18,12" Spacing="9">
           <Border Classes="helpSection">
             <StackPanel>
+              <TextBlock Text="v0.24.1" Classes="helpTitle" />
+              <TextBlock Text="2026-09-16" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 收紧更新下载弹框，按内容适配高度，显示下载百分比并完整展示错误提示。&#x0A;• 设备选择框的确认按钮统一为主题主按钮样式。&#x0A;• 参数面板固定标题和实时/选中数据，仅指标列表滚动，底部保留与上方一致的空白。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel>
               <TextBlock Text="v0.24.0" Classes="helpTitle" />
               <TextBlock Text="2026-09-16" Classes="dialogHint" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 统一主窗口和全部二级弹框的整体圆角与系统阴影，最大化时恢复直角边缘。&#x0A;• 绿色主题二级弹框保留绿色标题栏，正文改为浅米色，并协调输入框、列表与底栏配色。&#x0A;• 优化深色主题弹框的背景层次、描边和分隔线，让弹框边界更清晰。" />
@@ -36,13 +43,6 @@
               <TextBlock Text="v0.23.0" Classes="helpTitle" />
               <TextBlock Text="2026-09-16" Classes="dialogHint" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 更新日志弹框按内容自适应高度，减少底部留白，长内容支持滚动。&#x0A;• 发现新版本时直接展示该版本的更新内容，发布时自动同步更新说明。&#x0A;• 修复跳过版本后手动检查无法再次提示的问题，并补充更新按钮的悬浮说明。" />
-            </StackPanel>
-          </Border>
-          <Border Classes="helpSection">
-            <StackPanel>
-              <TextBlock Text="v0.22.1" Classes="helpTitle" />
-              <TextBlock Text="2026-09-16" Classes="dialogHint" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复自动更新安装时未沿用当前软件安装目录的问题。&#x0A;• 兼容旧版客户端启动的更新包，避免残留安装记录导致安装到错误目录。&#x0A;• 加强安装目录与隔离测试校验，保留用户数据和手动选择目录功能。" />
             </StackPanel>
           </Border>
         </StackPanel>
