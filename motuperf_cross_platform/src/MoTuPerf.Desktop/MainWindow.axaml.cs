@@ -601,6 +601,8 @@ namespace MoTuPerf.Desktop
 
         private async void ShowHelp(object sender, RoutedEventArgs e) { await new HelpWindow().ShowDialog(this); }
 
+        private async void ShowChangelog(object sender, RoutedEventArgs e) { await new ChangelogWindow().ShowDialog(this); }
+
         private async void WindowClosing(object sender, WindowClosingEventArgs e)
         {
             if (_allowClose) return;

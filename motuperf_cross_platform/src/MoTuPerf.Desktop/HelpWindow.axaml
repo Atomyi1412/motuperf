@@ -26,8 +26,6 @@
             <StackPanel>
               <TextBlock Text="快速开始" Classes="helpTitle" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="MoTuPerf 支持 Windows x64 和 macOS Apple Silicon（M 系列），可连接 Android 与 iOS 真机。&#x0A;1. 连接并解锁设备，完成设备授权。&#x0A;2. 点击顶部“选择设备及应用”，选择设备、应用和目标进程。&#x0A;3. 在左侧勾选需要记录的指标，点击“开始采集”；再次点击同一按钮停止。&#x0A;采集过程中不能重新选择设备或应用。工具只记录真实采集结果，不用模拟值填充缺失数据。" />
-              <Button Classes="helpLinkButton" Content="查看在线版本更新日志" Click="OpenVersionLog"
-                      HorizontalAlignment="Left" Margin="0,8,0,0" ToolTip.Tip="打开在线版本更新日志" />
             </StackPanel>
           </Border>
           <Border Classes="helpSection">

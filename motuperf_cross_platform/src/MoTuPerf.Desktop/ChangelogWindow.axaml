@@ -1,0 +1,55 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MoTuPerf.Desktop.ChangelogWindow"
+        Title="更新日志"
+        Width="700"
+        Height="620"
+        MinWidth="620"
+        MinHeight="500"
+        WindowDecorations="None"
+        WindowStartupLocation="CenterOwner">
+  <Border Classes="secondaryWindowFrame">
+    <Grid RowDefinitions="48,*,58">
+      <Border Grid.Row="0" Classes="dialogTitleBar" PointerPressed="DialogTitlePointerPressed">
+        <Grid ColumnDefinitions="*,46">
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="24,0,0,0">
+            <TextBlock Text="&#xE8A5;" Foreground="{DynamicResource Theme.Accent}" FontSize="18" FontFamily="Segoe MDL2 Assets, sans-serif" Margin="0,0,10,0" />
+            <TextBlock Text="更新日志" Classes="sectionTitle" />
+          </StackPanel>
+          <Button Grid.Column="1" Classes="windowButton closeButton" Content="&#x00D7;" Click="CloseWindow" ToolTip.Tip="关闭" />
+        </Grid>
+      </Border>
+      <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="22,10,18,12" Spacing="9">
+          <Border Classes="helpSection">
+            <StackPanel>
+              <TextBlock Text="v0.22.0" Classes="helpTitle" />
+              <TextBlock Text="2026-09-16" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 新增独立更新日志入口，仅展示最新三个版本。&#x0A;• 从帮助窗口移除重复的在线更新日志入口。&#x0A;• 完善更新日志同步与客户端更新验证。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel>
+              <TextBlock Text="v0.21.11" Classes="helpTitle" />
+              <TextBlock Text="2026-09-16" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复 GitHub Actions Windows 打包受 runner 平台变量影响而失败的问题。&#x0A;• 修复 macOS Apple Silicon 构建混入 Windows 可执行文件的问题，并锁定 macOS iOS 运行时依赖。&#x0A;• 统一客户端、崩溃日志和安装包说明中的版本号。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel>
+              <TextBlock Text="v0.21.10" Classes="helpTitle" />
+              <TextBlock Text="2026-09-16" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 锁定 iOS 采集依赖版本，避免上游 pyOpenSSL API 变化导致 CI 和发布校验失败。" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+      <Border Grid.Row="2" Classes="dialogFooter">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="8">
+          <Button Classes="helpLinkButton" Content="查看完整在线更新日志" Click="OpenVersionLog" ToolTip.Tip="打开完整在线更新日志" />
+          <Button Classes="primaryToolbarButton" Content="知道了" Click="CloseWindow" Width="104" Margin="0,0,18,0" />
+        </StackPanel>
+      </Border>
+    </Grid>
+  </Border>
+</Window>

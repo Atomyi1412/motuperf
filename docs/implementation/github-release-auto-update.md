@@ -64,5 +64,14 @@ confirmed
 
 ## 当前限制
 
-- GitHub Actions 只能在仓库创建并授权后完成远程发布；本地没有 GitHub CLI，不能凭空创建远程仓库。
+- GitHub Actions 已接入 `Atomyi1412/motuperf`，三段版本标签触发双平台构建；只有两种安装包都通过构建后才发布清单。
 - macOS 暂不做静默安装；公共分发前仍应补充 Developer ID 签名和公证。
+
+## 更新日志发布合同（v0.22.0 起）
+
+- 每次发布先将真实改动写入根目录 `CHANGELOG.md`，最新版本排在顶部，并标注日期。
+- 主工具栏“帮助”后固定提供“更新日志”按钮；`ChangelogWindow` 离线展示最新三个版本。帮助窗口不再承担更新日志入口。
+- 同步修改 `ChangelogWindow.axaml` 中的版本、日期和逐条内容。`BundledChangelogMatchesLatestThreeReleaseNotes` 对比 CHANGELOG，遗漏同步会阻止 CI/Release 测试通过。
+- 飞书完整日志继续维护于 https://more2.feishu.cn/docx/EJ6Hdr6lbokuUsxr8FecLA7Qneg 。发布工作必须读取当前 block ID，在版本列表顶部局部插入，保留历史及标题自动编号，并回读核对版本顺序和内容。飞书凭据不进入客户端或仓库。
+- 日志窗口使用共享二级框主题；顶部关闭列为 46px，正文可纵向滚动，底部完整日志入口固定可见。
+- 发布验收分开记录：测试/构建通过、公开资产与清单哈希匹配、旧版发现更新、下载校验和安装器交接、安装后实际运行版本。构建成功不能替代后四项。

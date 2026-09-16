@@ -265,6 +265,7 @@ namespace MoTuPerf.Desktop.Tests
                 "DevicePickerWindow.axaml",
                 "ScreenshotViewerWindow.axaml",
                 "HelpWindow.axaml",
+                "ChangelogWindow.axaml",
                 "ConfirmDialogWindow.axaml",
                 "ExportCsvDialogWindow.axaml"
             };
@@ -288,7 +289,7 @@ namespace MoTuPerf.Desktop.Tests
             string version = project.Descendants("Version").Single().Value;
             string[] components = version.Split('.');
 
-            Assert.Equal("0.21.11", version);
+            Assert.Equal("0.22.0", version);
             Assert.Equal(3, components.Length);
             Assert.All(components, component => Assert.True(int.TryParse(component, out _)));
             Assert.DoesNotContain("-", version);
@@ -401,10 +402,31 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Contains("软件安装目录下", helpText);
             Assert.DoesNotContain("框选曲线可放大时间范围", helpText);
             Assert.Contains("点击或拖动任意曲线可移动时间游标", helpText);
-            XElement firstHelpSection = help.Descendants(Avalonia + "Border")
-                .First(element => Attribute(element, "Classes") == "helpSection");
-            Assert.Contains(firstHelpSection.Descendants(Avalonia + "Button"), button => Attribute(button, "Content") == "查看在线版本更新日志"
+            Assert.DoesNotContain(help.Descendants(Avalonia + "Button"), button => Attribute(button, "Content") == "查看在线版本更新日志");
+            Assert.DoesNotContain("OpenVersionLog", LoadText("src", "MoTuPerf.Desktop", "HelpWindow.axaml.cs"));
+
+            XDocument changelog = LoadXaml("src", "MoTuPerf.Desktop", "ChangelogWindow.axaml");
+            Assert.Equal("更新日志", Attribute(changelog.Root, "Title"));
+            Assert.Contains(changelog.Descendants(Avalonia + "Border"), border => Attribute(border, "Classes") == "secondaryWindowFrame");
+            string changelogText = string.Join(" ", changelog.Descendants(Avalonia + "TextBlock").Select(element => Attribute(element, "Text")));
+            Assert.Contains("v0.22.0", changelogText);
+            Assert.Contains("v0.21.11", changelogText);
+            Assert.Contains("v0.21.10", changelogText);
+            Assert.DoesNotContain("v0.21.9", changelogText);
+            Assert.Contains(changelog.Descendants(Avalonia + "Button"), button => Attribute(button, "Content") == "查看完整在线更新日志"
                 && Attribute(button, "Click") == "OpenVersionLog");
+
+            XDocument main = LoadXaml("src", "MoTuPerf.Desktop", "MainWindow.axaml");
+            XElement toolbar = main.Descendants(Avalonia + "Grid")
+                .Single(grid => Attribute(grid, "ColumnDefinitions") == "Auto,*,250");
+            XElement buttonPanel = toolbar.Elements(Avalonia + "StackPanel").First();
+            string[] toolbarLabels = buttonPanel.Descendants(Avalonia + "TextBlock")
+                .Select(element => Attribute(element, "Text"))
+                .Where(text => !string.IsNullOrWhiteSpace(text))
+                .ToArray();
+            Assert.True(Array.IndexOf(toolbarLabels, "帮助") >= 0);
+            Assert.True(Array.IndexOf(toolbarLabels, "更新日志") > Array.IndexOf(toolbarLabels, "帮助"));
+            Assert.Contains("ShowChangelog", LoadText("src", "MoTuPerf.Desktop", "MainWindow.axaml.cs"));
         }
 
         [Fact]
@@ -560,14 +582,40 @@ namespace MoTuPerf.Desktop.Tests
         }
 
         [Fact]
-        public void HelpWindowLinksToTheOnlineVersionLog()
+        public void ChangelogWindowLinksToTheCompleteOnlineVersionLog()
         {
-            XDocument help = LoadXaml("src", "MoTuPerf.Desktop", "HelpWindow.axaml");
-            XElement link = help.Descendants(Avalonia + "Button").Single(button => Attribute(button, "Content") == "查看在线版本更新日志");
+            XDocument changelog = LoadXaml("src", "MoTuPerf.Desktop", "ChangelogWindow.axaml");
+            XElement link = changelog.Descendants(Avalonia + "Button").Single(button => Attribute(button, "Content") == "查看完整在线更新日志");
             Assert.Equal("OpenVersionLog", Attribute(link, "Click"));
-            string helpCode = LoadText("src", "MoTuPerf.Desktop", "HelpWindow.axaml.cs");
-            Assert.Contains("OpenVersionLog", helpCode);
-            Assert.Contains("EJ6Hdr6lbokuUsxr8FecLA7Qneg", helpCode);
+            string changelogCode = LoadText("src", "MoTuPerf.Desktop", "ChangelogWindow.axaml.cs");
+            Assert.Contains("OpenVersionLog", changelogCode);
+            Assert.Contains("EJ6Hdr6lbokuUsxr8FecLA7Qneg", changelogCode);
+        }
+
+        [Fact]
+        public void BundledChangelogMatchesLatestThreeReleaseNotes()
+        {
+            string root = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(ResolvePath("src", "MoTuPerf.Desktop", "MoTuPerf.Desktop.csproj"))))!;
+            string markdown = File.ReadAllText(Path.Combine(root, "..", "CHANGELOG.md"));
+            var sections = System.Text.RegularExpressions.Regex.Matches(markdown,
+                @"(?ms)^## v(?<version>\d+\.\d+\.\d+)(?: - (?<date>[^\r\n]+))?\r?\n(?<body>.*?)(?=^## |\z)").Cast<System.Text.RegularExpressions.Match>().Take(3).ToArray();
+            XDocument changelog = LoadXaml("src", "MoTuPerf.Desktop", "ChangelogWindow.axaml");
+            XElement[] cards = changelog.Descendants(Avalonia + "Border").Where(border => Attribute(border, "Classes") == "helpSection").ToArray();
+            Assert.Equal(3, sections.Length);
+            Assert.Equal(3, cards.Length);
+            string version = XDocument.Load(ResolvePath("src", "MoTuPerf.Desktop", "MoTuPerf.Desktop.csproj")).Descendants("Version").Single().Value;
+            Assert.Equal(version, sections[0].Groups["version"].Value);
+            for (int index = 0; index < sections.Length; index++)
+            {
+                XElement[] text = cards[index].Descendants(Avalonia + "TextBlock").ToArray();
+                Assert.Equal("v" + sections[index].Groups["version"].Value, Attribute(text[0], "Text"));
+                Assert.Equal(sections[index].Groups["date"].Value, Attribute(text[1], "Text"));
+                string[] expected = sections[index].Groups["body"].Value.Split('\n')
+                    .Select(line => line.Trim()).Where(line => line.StartsWith("- "))
+                    .Select(line => line.Substring(2).Replace("`", "")).ToArray();
+                string[] actual = Attribute(text[2], "Text").Split('\n').Select(line => line.TrimStart('\u2022', ' ')).ToArray();
+                Assert.Equal(expected, actual);
+            }
         }
 
         [Fact]
