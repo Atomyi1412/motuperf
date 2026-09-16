@@ -1,3 +1,5 @@
 py_ios_device==2.4.25
 pymobiledevice3==9.33.1
 tidevice==0.12.11
+pyopenssl==24.3.0
+cryptography==44.0.3

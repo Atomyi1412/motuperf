@@ -56,9 +56,10 @@ if (Test-Path -LiteralPath $payloadDir) { Remove-Item -LiteralPath $payloadDir -
 New-Item -ItemType Directory -Path $payloadDir -Force | Out-Null
 New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
 
-dotnet restore $projectRoot\MoTuPerf.CrossPlatform.sln --locked-mode
+dotnet restore $projectRoot\MoTuPerf.CrossPlatform.sln --locked-mode -p:Platform="Any CPU"
 if ($LASTEXITCODE -ne 0) { throw "NuGet locked restore failed." }
 dotnet publish $projectFile -c $Configuration -r win-x64 --self-contained true `
+  -p:Platform="Any CPU" `
   -p:UseAppHost=true -p:PublishSingleFile=false -p:DebugType=None -p:DebugSymbols=false `
   -o $publishDir --no-restore
 if ($LASTEXITCODE -ne 0) { throw "Windows self-contained publish failed." }

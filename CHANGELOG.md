@@ -1,5 +1,11 @@
 # 更新日志
 
+## v0.21.11 - 2026-09-16
+
+- 修复 GitHub Actions Windows 打包受 runner 平台变量影响而失败的问题。
+- 修复 macOS Apple Silicon 构建混入 Windows 可执行文件的问题，并锁定 macOS iOS 运行时依赖。
+- 统一客户端、崩溃日志和安装包说明中的版本号。
+
 ## v0.21.10 - 2026-09-16
 
 - 锁定 iOS 采集依赖版本，避免上游 `pyOpenSSL` API 变化导致 CI 和发布校验失败。

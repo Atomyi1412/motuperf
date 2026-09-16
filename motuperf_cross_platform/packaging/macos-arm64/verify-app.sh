@@ -22,8 +22,8 @@ done
 
 grep -q '"target": "osx-arm64"' "$APP_DIR/Contents/Resources/motuperf-package.json" || { echo "包目标不是 osx-arm64。" >&2; exit 5; }
 ! grep -q '__MOTUPERF_' "$APP_DIR/Contents/Info.plist" || { echo "Info.plist 仍包含未替换的版本占位符。" >&2; exit 5; }
-if find "$APP_DIR" -type f \( -name '*.exe' -o -name 'adb.exe' \) -print -quit | grep -q .; then
-  echo "M 系列包包含 Windows 可执行文件。" >&2
+if find "$APP_DIR" -type f -exec file {} + | grep -Eiq 'PE32|MS-DOS executable'; then
+  echo "M 系列包包含 Windows 格式的可执行文件。" >&2
   exit 5
 fi
 

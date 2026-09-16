@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REPO_DIR="$(cd "$ROOT_DIR/.." && pwd)"
-VERSION="${MOTUPERF_VERSION:-0.21.10}"
+VERSION="${MOTUPERF_VERSION:-0.21.11}"
 CONFIGURATION="${CONFIGURATION:-Release}"
 VERSION_SHORT="${VERSION%%-*}"
 BUILD_NUMBER="${MOTUPERF_BUILD_NUMBER:-1}"
@@ -31,11 +31,16 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR/tools" "$PYTHON_RUNTIME_DIR" "$ADB_RUNTIME
 dotnet restore "$ROOT_DIR/MoTuPerf.CrossPlatform.sln" --locked-mode
 dotnet publish "$ROOT_DIR/src/MoTuPerf.Desktop/MoTuPerf.Desktop.csproj" \
   -c "$CONFIGURATION" -r osx-arm64 --self-contained true \
+  -p:Platform="Any CPU" \
   -p:UseAppHost=true -p:PublishSingleFile=false \
   -o "$PUBLISH_DIR" --no-restore
 
 cp -R "$PUBLISH_DIR/." "$MACOS_DIR/"
 rm -rf "$MACOS_DIR/tools"
+# A macOS app must not carry Windows apphosts produced by a mixed-runtime
+# restore. Keep the extensionless arm64 apphost and reject anything else in
+# the verification step below.
+find "$MACOS_DIR" -type f -name '*.exe' -delete
 sed \
   -e "s/__MOTUPERF_SHORT_VERSION__/$VERSION_SHORT/g" \
   -e "s/__MOTUPERF_BUILD_VERSION__/$VERSION_BUILD/g" \
@@ -70,6 +75,12 @@ rm -f "$PYTHON_DOWNLOAD"
 "$PYTHON_RUNTIME_DIR/bin/python3" -m pip install -r "$SCRIPT_DIR/requirements-metrics-macos.txt"
 "$PYTHON_RUNTIME_DIR/bin/python3" -m pip check
 "$PYTHON_RUNTIME_DIR/bin/python3" -m pip freeze > "$RESOURCES_DIR/tools/requirements-metrics-macos-lock.txt"
+
+# Some Python distributions expose console entry points with a Windows
+# suffix even when the package itself is otherwise portable. They are not
+# usable in this app and must not make the macOS payload fail its platform
+# check.
+find "$RESOURCES_DIR" -type f \( -name '*.exe' -o -name 'adb.exe' \) -delete
 
 cp "$(command -v adb)" "$ADB_RUNTIME_DIR/adb"
 chmod +x "$MACOS_DIR/MoTuPerf.CrossPlatform" "$PYTHON_RUNTIME_DIR/bin/python3" "$ADB_RUNTIME_DIR/adb"
