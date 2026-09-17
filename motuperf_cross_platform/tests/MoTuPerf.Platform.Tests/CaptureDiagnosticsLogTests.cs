@@ -10,6 +10,35 @@ namespace MoTuPerf.Platform.Tests
     public sealed class CaptureDiagnosticsLogTests
     {
         [Fact]
+        public void StopReportsTrueMetricFreshnessOnlyOnceAndTaskExitRemainsLoggable()
+        {
+            string directory = Directory.CreateTempSubdirectory("motuperf-lifecycle-").FullName;
+            string path = Path.Combine(directory, "capture.log");
+            try
+            {
+                using (CaptureDiagnosticsLog log = new CaptureDiagnosticsLog(path, "first-session"))
+                {
+                    log.ObserveOutput();
+                    log.ObserveSample(new PerfSample { HasCpu = true, CpuUpdated = true, HasFps = true, FpsUpdated = false });
+                    log.WriteStop("runner_exit");
+                    log.WriteStop("collector_failed");
+                    log.WriteTask("samples", "cancelled", 123);
+                }
+                string[] lines = File.ReadAllLines(path);
+                Assert.Equal(2, lines.Length);
+                using JsonDocument stop = JsonDocument.Parse(lines[0]);
+                var fields = stop.RootElement.GetProperty("fields");
+                Assert.Equal("runner_exit", fields.GetProperty("reason").GetString());
+                Assert.Equal(1, fields.GetProperty("delivered_samples").GetInt32());
+                Assert.Equal(JsonValueKind.Null, fields.GetProperty("last_metric_age_sec").GetProperty("fps").ValueKind);
+                Assert.Equal(JsonValueKind.Number, fields.GetProperty("last_metric_age_sec").GetProperty("cpu").ValueKind);
+                Assert.Contains("first-session", lines[1]);
+                Assert.Contains("cancelled", lines[1]);
+            }
+            finally { Directory.Delete(directory, true); }
+        }
+
+        [Fact]
         public void WritesStructuredSessionEventsAndRedactsSensitiveValues()
         {
             string directory = Directory.CreateTempSubdirectory("motuperf-collector-log-").FullName;

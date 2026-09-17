@@ -62,6 +62,8 @@ namespace MoTuPerf.Desktop
         private IReadOnlyList<PerfSample> _orderedSource;
         private IReadOnlyList<PerfSample> _orderedSamples = Array.Empty<PerfSample>();
         private double _cachedMaxTime = 60;
+        private DrawingGroup _seriesDrawing;
+        internal int SeriesRenderCount { get; private set; }
 
         public PerformanceChartControl()
         {
@@ -78,7 +80,7 @@ namespace MoTuPerf.Desktop
             for (int i = Instances.Count - 1; i >= 0; i--)
             {
                 PerformanceChartControl chart;
-                if (Instances[i].TryGetTarget(out chart)) chart.InvalidateVisual();
+                if (Instances[i].TryGetTarget(out chart)) { chart._seriesDrawing = null; chart.InvalidateVisual(); }
                 else Instances.RemoveAt(i);
             }
         }
@@ -174,6 +176,7 @@ namespace MoTuPerf.Desktop
                 _hiddenSeries.Add(key);
                 visible = false;
             }
+            _seriesDrawing = null;
             InvalidateVisual();
             SeriesVisibilityChanged?.Invoke(key, visible);
             return visible;
@@ -191,7 +194,7 @@ namespace MoTuPerf.Desktop
             if (!ReferenceEquals(_orderedSource, samples))
             {
                 _orderedSource = samples;
-                _orderedSamples = Chronological(samples);
+                _orderedSamples = (samples as SampleSnapshot)?.Ordered ?? Chronological(samples);
                 _cachedMaxTime = _orderedSamples.Count == 0
                     ? 60
                     : Math.Max(1, _orderedSamples[_orderedSamples.Count - 1].ElapsedSec);
@@ -204,6 +207,31 @@ namespace MoTuPerf.Desktop
             if (_viewEndTime <= _viewStartTime) _viewStartTime = 0;
             string mode = (Mode ?? "fps").Trim().ToLowerInvariant();
 
+            if (_seriesDrawing == null)
+            {
+                DrawingGroup drawing = new DrawingGroup();
+                using (DrawingContext seriesContext = drawing.Open())
+                {
+                    DrawSeries(seriesContext, area, samples, maxTime, mode);
+                }
+                _seriesDrawing = drawing;
+                SeriesRenderCount++;
+            }
+            _seriesDrawing.Draw(context);
+
+            if (_isRangeSelecting) DrawRangeSelection(context, area);
+            DrawCursor(context, area, maxTime);
+        }
+
+        protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+        {
+            base.OnPropertyChanged(change);
+            if (change.Property != SelectedTimeProperty && change.Property != ZoomEnabledProperty)
+                _seriesDrawing = null;
+        }
+
+        private void DrawSeries(DrawingContext context, Rect area, IReadOnlyList<PerfSample> samples, double maxTime, string mode)
+        {
             if (mode == "fps") DrawFps(context, area, samples, maxTime);
             else if (mode == "frametime") DrawFrameTime(context, area, samples, maxTime);
             else if (mode == "memory") DrawMemory(context, area, samples, maxTime);
@@ -214,8 +242,6 @@ namespace MoTuPerf.Desktop
             else if (mode == "thermalstate") DrawThermalState(context, area, samples, maxTime);
             else DrawGrid(context, area, 0, 1, "", maxTime);
 
-            if (_isRangeSelecting) DrawRangeSelection(context, area);
-            DrawCursor(context, area, maxTime);
         }
 
         protected override void OnPointerPressed(PointerPressedEventArgs e)
@@ -401,26 +427,31 @@ namespace MoTuPerf.Desktop
             Pen pen = new Pen(brush, width);
             IReadOnlyList<IReadOnlyList<PerfSample>> segments = ChartSeriesProjection.BuildSegments(
                 samples, 2400, value, maxGap, breakFrameSeries, allowMeasuredFpsGap, true);
-            foreach (IReadOnlyList<PerfSample> segment in segments)
+            StreamGeometry geometry = new StreamGeometry();
+            using (StreamGeometryContext path = geometry.Open())
             {
-                Point? previousPoint = null;
-                foreach (PerfSample sample in segment)
+                foreach (IReadOnlyList<PerfSample> segment in segments)
                 {
-                    Point point = ToPoint(area, maxTime, range, sample.ElapsedSec, value(sample));
-                    if (previousPoint.HasValue)
+                    Point? previousPoint = null;
+                    foreach (PerfSample sample in segment)
                     {
-                        if (step)
+                        Point point = ToPoint(area, maxTime, range, sample.ElapsedSec, value(sample));
+                        if (previousPoint.HasValue)
                         {
-                            Point corner = new Point(point.X, previousPoint.Value.Y);
-                            context.DrawLine(pen, previousPoint.Value, corner);
-                            context.DrawLine(pen, corner, point);
+                            if (step) path.LineTo(new Point(point.X, previousPoint.Value.Y));
+                            path.LineTo(point);
                         }
-                        else context.DrawLine(pen, previousPoint.Value, point);
+                        else
+                        {
+                            path.BeginFigure(point, false);
+                            context.DrawEllipse(brush, null, point, 2.4, 2.4);
+                        }
+                        previousPoint = point;
                     }
-                    else context.DrawEllipse(brush, null, point, 2.4, 2.4);
-                    previousPoint = point;
+                    path.EndFigure(false);
                 }
             }
+            context.DrawGeometry(null, pen, geometry);
         }
 
         private IReadOnlyList<PerfSample> VisibleSamples(IReadOnlyList<PerfSample> samples)
@@ -636,15 +667,18 @@ namespace MoTuPerf.Desktop
             List<PerfSample> result = new List<PerfSample> { samples[0] };
             for (int start = 1; start < samples.Count - 1; start += bucketSize)
             {
-                List<PerfSample> bucket = samples.Skip(start).Take(Math.Min(bucketSize, samples.Count - 1 - start)).ToList();
-                if (bucket.Count == 0) continue;
-                PerfSample min = bucket.OrderBy(value).First();
-                PerfSample max = bucket.OrderByDescending(value).First();
-                result.Add(min);
-                if (!ReferenceEquals(min, max)) result.Add(max);
+                int end = Math.Min(start + bucketSize, samples.Count - 1);
+                int min = start, max = start;
+                for (int i = start + 1; i < end; i++)
+                {
+                    if (value(samples[i]) < value(samples[min])) min = i;
+                    if (value(samples[i]) > value(samples[max])) max = i;
+                }
+                result.Add(samples[Math.Min(min, max)]);
+                if (min != max) result.Add(samples[Math.Max(min, max)]);
             }
             result.Add(samples[samples.Count - 1]);
-            return result.Distinct().OrderBy(delegate(PerfSample sample) { return sample.ElapsedSec; }).ToList();
+            return result;
         }
     }
 }

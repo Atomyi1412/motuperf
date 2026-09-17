@@ -80,7 +80,7 @@
         </Grid>
       </Border>
 
-      <Grid Grid.Row="1" Margin="32,32,38,0" RowDefinitions="46,20,48,42,*" ColumnDefinitions="112,*">
+      <Grid Grid.Row="1" Margin="32,32,38,0" RowDefinitions="46,Auto,48,42,*" ColumnDefinitions="112,*">
         <TextBlock Text="选择设备" Classes="dialogLabel" Grid.Row="0" />
         <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,48">
           <ComboBox x:Name="DeviceList" Classes="dialogCombo" Height="38" VerticalAlignment="Top" HorizontalAlignment="Stretch"
@@ -89,11 +89,16 @@
           <Button Grid.Column="1" Classes="iconDialogButton" Content="↻" Click="RefreshDevices"
                   ToolTip.Tip="刷新设备" HorizontalAlignment="Right" />
         </Grid>
-        <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Spacing="10">
-          <TextBlock x:Name="DeviceCountText" Text="正在检测设备..." Classes="dialogHint"
-                     TextTrimming="CharacterEllipsis" />
-          <Button x:Name="AppleDriverButton" Classes="driverDownloadButton" Content="下载苹果设备驱动"
-                  Click="DownloadAppleDriver" IsVisible="False" />
+        <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,0,0,6" Spacing="4">
+          <Grid ColumnDefinitions="*,Auto" Margin="112,0,0,0">
+            <TextBlock x:Name="DeviceCountText" Text="正在检测设备..." Classes="dialogHint"
+                       TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,10,0" />
+            <Button Grid.Column="1" x:Name="AppleDriverButton" Classes="driverDownloadButton" Content="下载苹果设备驱动"
+                    Click="DownloadAppleDriver" IsVisible="False" />
+          </Grid>
+          <ScrollViewer x:Name="DeviceDiagnosticRegion" MaxHeight="92" IsVisible="False" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <TextBlock x:Name="DeviceDiagnosticText" Classes="dialogHint" TextWrapping="Wrap" Margin="0,4,8,4" />
+          </ScrollViewer>
         </StackPanel>
 
         <TextBlock Text="选择应用" Classes="dialogLabel" Grid.Row="2" />

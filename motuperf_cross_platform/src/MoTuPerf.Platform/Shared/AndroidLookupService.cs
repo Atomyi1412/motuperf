@@ -13,45 +13,99 @@ namespace CSharpIosPerfMonitor
     {
         public async Task<List<DeviceInfo>> ListDevicesAsync(CancellationToken token)
         {
-            ProcessResult result = await ProcessRunner.RunAsync(RuntimeTools.AdbExecutable, "devices -l", 12000, token);
-            if (result.ExitCode != 0) return new List<DeviceInfo>();
-            List<DeviceInfo> devices = new List<DeviceInfo>();
+            return (await DiscoverDevicesAsync(token)).Devices;
+        }
+
+        public async Task<PlatformDeviceDiscovery> DiscoverDevicesAsync(CancellationToken token)
+        {
+            PlatformDeviceDiscovery report;
+            try
+            {
+                ProcessResult result = await ProcessRunner.RunAsync(RuntimeTools.AdbExecutable, "devices -l", 12000, token);
+                report = ParseDiscovery(result);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                return new PlatformDeviceDiscovery { Diagnostic = DescribeDiscoveryException(ex) };
+            }
+            List<string> issues = new List<string>();
+            if (!string.IsNullOrWhiteSpace(report.Diagnostic)) issues.Add(report.Diagnostic);
+            foreach (DeviceInfo device in report.Devices)
+            {
+                try
+                {
+                    string manufacturer = await GetPropAsync(device.Udid, "ro.product.manufacturer", token);
+                    string brand = await GetPropAsync(device.Udid, "ro.product.brand", token);
+                    device.Brand = FirstNonEmpty(Clean(manufacturer), Clean(brand));
+                    device.Name = device.MarketName = DisplayModelName(device.Name, "", manufacturer, brand);
+                    device.ProductVersion = await GetPropAsync(device.Udid, "ro.build.version.release", token);
+                    device.CpuInfo = await CpuInfoAsync(device.Udid, token);
+                    device.GpuInfo = await GpuInfoAsync(device.Udid, token);
+                    device.Resolution = await ResolutionAsync(device.Udid, token);
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    issues.Add(device.PickerLabel + " 已连接，部分设备信息读取失败。" + DescribeDiscoveryException(ex));
+                }
+            }
+            report.Diagnostic = string.Join("\n", issues.Distinct());
+            return report;
+        }
+
+        internal static string DescribeDiscoveryException(Exception ex)
+        {
+            if (ex is TimeoutException) return "ADB 响应超时，请检查 USB 数据线、关闭占用设备的其他工具后刷新。";
+            if (ex is FileNotFoundException || ex is System.ComponentModel.Win32Exception)
+                return "ADB 运行组件缺失或无法启动，请重新安装 MoTuPerf，并检查安全软件是否拦截。";
+            return "设备检测失败：" + CaptureDiagnosticsLog.Sanitize(ex.Message, 240);
+        }
+
+        internal static PlatformDeviceDiscovery ParseDiscovery(ProcessResult result)
+        {
+            PlatformDeviceDiscovery report = new PlatformDeviceDiscovery();
+            if (result.ExitCode != 0)
+            {
+                report.Diagnostic = "ADB 检测失败（退出码 " + result.ExitCode + "），请重新插拔设备后刷新。" + CaptureDiagnosticsLog.Sanitize(result.Stderr, 240);
+                return report;
+            }
+            HashSet<string> issues = new HashSet<string>();
             string[] lines = (result.Stdout ?? "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
             foreach (string raw in lines)
             {
                 string line = raw.Trim();
-                if (line.Length == 0 || line.StartsWith("List of devices", StringComparison.OrdinalIgnoreCase)) continue;
+                if (line.Length == 0 || line.StartsWith("List of devices", StringComparison.OrdinalIgnoreCase) || line.StartsWith("*")) continue;
                 Match match = Regex.Match(line, @"^(\S+)\s+(\S+)(.*)$");
                 if (!match.Success) continue;
                 string serial = match.Groups[1].Value;
                 string state = match.Groups[2].Value;
                 string rest = match.Groups[3].Value;
-                if (state != "device") continue;
+                if (state != "device")
+                {
+                    if (state == "unauthorized") issues.Add("设备未授权：请解锁手机，开启 USB 调试并允许此电脑调试，再点击刷新。");
+                    else if (state == "offline") issues.Add("设备离线：请重新插拔 USB、检查数据线及 USB 调试状态，再点击刷新。");
+                    else if (state == "no" && rest.Contains("permissions")) issues.Add("ADB 无访问权限，请检查 USB 驱动及设备访问权限。");
+                    else issues.Add("设备当前不可采集（" + CaptureDiagnosticsLog.Sanitize(state, 40) + "），请启动到 Android 系统后刷新。");
+                    continue;
+                }
                 string model = Meta(rest, "model");
                 string product = Meta(rest, "product");
-                string manufacturer = await GetPropAsync(serial, "ro.product.manufacturer", token);
-                string brand = await GetPropAsync(serial, "ro.product.brand", token);
-                string version = await GetPropAsync(serial, "ro.build.version.release", token);
-                string cpuInfo = await CpuInfoAsync(serial, token);
-                string gpuInfo = await GpuInfoAsync(serial, token);
-                string resolution = await ResolutionAsync(serial, token);
-                string displayName = DisplayModelName(model, product, manufacturer, brand);
-                devices.Add(new DeviceInfo
+                string displayName = DisplayModelName(model, product, "", "");
+                report.Devices.Add(new DeviceInfo
                 {
                     Udid = serial,
                     Name = displayName,
                     MarketName = displayName,
-                    Brand = FirstNonEmpty(Clean(manufacturer), Clean(brand)),
-                    ProductVersion = version,
                     ConnType = "ADB",
-                    CpuInfo = cpuInfo,
-                    GpuInfo = gpuInfo,
-                    Resolution = resolution,
                     Platform = "android",
-                    Recommended = devices.Count == 0
+                    Recommended = report.Devices.Count == 0
                 });
             }
-            return devices;
+            if (report.Devices.Count == 0 && issues.Count == 0)
+                issues.Add("未发现 Android 设备，请连接支持数据传输的 USB 线，开启 USB 调试并确认手机上的授权。");
+            report.Diagnostic = string.Join("\n", issues);
+            return report;
         }
 
         public async Task<bool?> ProbeOnlineAsync(string serial, CancellationToken token)

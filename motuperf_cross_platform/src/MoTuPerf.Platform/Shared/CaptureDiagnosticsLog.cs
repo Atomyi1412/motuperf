@@ -14,6 +14,12 @@ namespace CSharpIosPerfMonitor
         private readonly string _path;
         private bool _disposed;
         private int _stderrEventCount;
+        private readonly System.Diagnostics.Stopwatch _duration = System.Diagnostics.Stopwatch.StartNew();
+        private readonly Dictionary<string, DateTime> _lastMetricUtc = new Dictionary<string, DateTime>();
+        private DateTime? _lastOutputUtc;
+        private long _sampleCount;
+        private long _nextHeartbeatMs = 30000;
+        private bool _stopped;
 
         internal CaptureDiagnosticsLog(string path, string sessionId)
         {
@@ -117,10 +123,61 @@ namespace CSharpIosPerfMonitor
 
         internal void WriteStop(string reason, string message = "")
         {
-            Write("capture_stopped", new Dictionary<string, object>
+            lock (_lock)
             {
-                { "reason", reason ?? "" },
-                { "message", Sanitize(message, 4000) }
+                if (_stopped) return;
+                _stopped = true;
+                Dictionary<string, object> fields = HealthFields();
+                fields["reason"] = reason ?? "";
+                fields["message"] = Sanitize(message, 4000);
+                Write("capture_stopped", fields);
+            }
+        }
+
+        internal void ObserveOutput()
+        {
+            lock (_lock) _lastOutputUtc = DateTime.UtcNow;
+        }
+
+        internal void ObserveSample(PerfSample sample)
+        {
+            lock (_lock)
+            {
+                if (_stopped || sample == null) return;
+                _sampleCount++;
+                DateTime now = DateTime.UtcNow;
+                if (sample.HasFps && sample.FpsUpdated) _lastMetricUtc["fps"] = now;
+                if (sample.HasCpu && sample.CpuUpdated) _lastMetricUtc["cpu"] = now;
+                if (sample.HasMemory && sample.MemoryUpdated) _lastMetricUtc["memory"] = now;
+                if (sample.HasTemperature && sample.TemperatureUpdated) _lastMetricUtc["temperature"] = now;
+                if (sample.HasThermalState && sample.ThermalStateUpdated) _lastMetricUtc["thermal_state"] = now;
+                if (_duration.ElapsedMilliseconds < _nextHeartbeatMs) return;
+                _nextHeartbeatMs = _duration.ElapsedMilliseconds + 30000;
+                Write("capture_health", HealthFields());
+            }
+        }
+
+        private Dictionary<string, object> HealthFields()
+        {
+            DateTime now = DateTime.UtcNow;
+            Dictionary<string, object> ages = new Dictionary<string, object>();
+            foreach (string metric in new[] { "fps", "cpu", "memory", "temperature", "thermal_state" })
+                ages[metric] = _lastMetricUtc.TryGetValue(metric, out DateTime at) ? Math.Max(0, (now - at).TotalSeconds) : null;
+            return new Dictionary<string, object>
+            {
+                { "duration_ms", _duration.ElapsedMilliseconds },
+                { "delivered_samples", _sampleCount },
+                { "last_output_age_sec", _lastOutputUtc.HasValue ? Math.Max(0, (now - _lastOutputUtc.Value).TotalSeconds) : null },
+                { "last_metric_age_sec", ages }
+            };
+        }
+
+        internal void WriteTask(string task, string state, long durationMs, string detail = "")
+        {
+            Write("capture_task", new Dictionary<string, object>
+            {
+                { "task", task }, { "state", state }, { "duration_ms", durationMs },
+                { "detail", Sanitize(detail, 2000) }
             });
         }
 

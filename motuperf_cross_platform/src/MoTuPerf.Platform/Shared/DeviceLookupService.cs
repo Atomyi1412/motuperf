@@ -20,7 +20,7 @@ namespace CSharpIosPerfMonitor
         public async Task<DeviceDiscoveryReport> DiscoverDevicesAsync(CancellationToken token)
         {
             Task<PlatformDeviceDiscovery> iosTask = _ios.DiscoverDevicesAsync(token);
-            Task<PlatformDeviceDiscovery> androidTask = DiscoverAndroidDevicesAsync(token);
+            Task<PlatformDeviceDiscovery> androidTask = _android.DiscoverDevicesAsync(token);
             await Task.WhenAll(iosTask, androidTask);
             DeviceDiscoveryReport report = new DeviceDiscoveryReport
             {
@@ -102,29 +102,5 @@ namespace CSharpIosPerfMonitor
             return string.Equals(platform ?? "", "android", StringComparison.OrdinalIgnoreCase);
         }
 
-        private async Task<PlatformDeviceDiscovery> DiscoverAndroidDevicesAsync(CancellationToken token)
-        {
-            PlatformDeviceDiscovery discovery = new PlatformDeviceDiscovery();
-            try
-            {
-                discovery.Devices = await _android.ListDevicesAsync(token);
-                if (discovery.Devices.Count == 0)
-                {
-                    discovery.Diagnostic = "未检测到设备，请开启 USB 调试、确认授权并重新插拔 USB。";
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                string message = ex.Message ?? "";
-                discovery.Diagnostic = message.IndexOf("adb", StringComparison.OrdinalIgnoreCase) >= 0 || ex is System.ComponentModel.Win32Exception
-                    ? "ADB 运行组件不可用，请重新安装 MoTuPerf。"
-                    : "设备检测失败：" + message;
-            }
-            return discovery;
-        }
     }
 }

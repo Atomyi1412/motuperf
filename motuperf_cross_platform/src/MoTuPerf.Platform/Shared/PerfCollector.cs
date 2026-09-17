@@ -206,13 +206,9 @@ namespace CSharpIosPerfMonitor
             }
             catch (Exception ex)
             {
-                if (diagnostics != null)
-                {
-                    diagnostics.WriteEvent("capture_start_failed", ex.Message, "runner_path");
-                    diagnostics.WriteStop("start_failed", ex.Message);
-                    diagnostics.Dispose();
-                }
-                lock (_lock) _diagnosticsLog = null;
+                diagnostics?.WriteEvent("capture_start_failed", ex.Message, "runner_path");
+                Stop("start_failed");
+                captureCts.Dispose();
                 throw;
             }
             string runnerPath = runner;
@@ -247,28 +243,52 @@ namespace CSharpIosPerfMonitor
             {
                 captureProcess = RuntimeTools.StartPythonStreaming(args);
             }
-            catch
+            catch (Exception ex)
             {
-                try { captureCts.Cancel(); } catch { }
-                try { captureCts.Dispose(); } catch { }
-                lock (_lock)
-                {
-                    if (ReferenceEquals(_cts, captureCts)) _cts = null;
-                }
+                diagnostics?.WriteEvent("capture_start_failed", ex.Message, "runner_launch");
+                Stop("start_failed");
+                captureCts.Dispose();
                 throw;
             }
             _metricsProcess = captureProcess;
             string label = isAndroid ? "adb metrics runner" : "pyidevice metrics runner";
             WriteDiagnosticsEvent("runner_started", "采集子进程已启动，pid=" + captureProcess.Id.ToString(CultureInfo.InvariantCulture), "runner_started");
-            Task stderrTask = Task.Run(delegate { return ReadStderrLoop(captureProcess, label, generation, captureCts.Token); });
-            Task stdoutTask = Task.Run(delegate { return ReadStdoutLoop(captureProcess, label, generation, stderrTask, captureCts.Token, isAndroid); });
-            Task sampleTask = Task.Run(delegate { return SampleLoop(config, generation, captureCts.Token, isAndroid); });
+            CancellationToken captureToken = captureCts.Token;
+            Task stderrTask = Task.Run(() => RunCaptureTaskAsync("stderr", () => ReadStderrLoop(captureProcess, label, generation, captureToken), diagnostics, generation, captureToken));
+            Task stdoutTask = Task.Run(() => RunCaptureTaskAsync("stdout", () => ReadStdoutLoop(captureProcess, label, generation, stderrTask, captureToken, isAndroid), diagnostics, generation, captureToken));
+            Task sampleTask = Task.Run(() => RunCaptureTaskAsync("samples", () => SampleLoop(config, generation, captureToken, isAndroid), diagnostics, generation, captureToken));
             Task.WhenAll(stderrTask, stdoutTask, sampleTask).ContinueWith(delegate
             {
                 try { captureProcess.Dispose(); } catch { }
                 try { captureCts.Dispose(); } catch { }
+                diagnostics?.Dispose();
             }, TaskScheduler.Default);
             Raise(Message, CollectionStartMessage(config));
+        }
+
+        private async Task RunCaptureTaskAsync(string name, Func<Task> run, CaptureDiagnosticsLog diagnostics, int generation, CancellationToken token)
+        {
+            Stopwatch duration = Stopwatch.StartNew();
+            diagnostics?.WriteTask(name, "started", 0);
+            string state = "completed";
+            try { await run().ConfigureAwait(false); }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { state = "cancelled"; }
+            catch (Exception ex)
+            {
+                state = "faulted";
+                diagnostics?.WriteEvent("capture_task_failed", ex.Message, name + "_task_error");
+                if (!token.IsCancellationRequested && IsGenerationCurrent(generation))
+                    FailAndStop("采集任务异常（" + name + "）：" + ex.Message, name + "_task_error");
+            }
+            finally
+            {
+                diagnostics?.WriteTask(name, state == "completed" && token.IsCancellationRequested ? "cancelled" : state, duration.ElapsedMilliseconds);
+            }
+        }
+
+        public void RecordEvent(string eventName, string message, string code)
+        {
+            WriteDiagnosticsEvent(eventName, message, code);
         }
 
         public void Stop()
@@ -297,7 +317,7 @@ namespace CSharpIosPerfMonitor
             if (diagnostics != null)
             {
                 diagnostics.WriteStop(reason, "");
-                diagnostics.Dispose();
+                if (captureProcess == null) diagnostics.Dispose();
             }
             if (captureCts != null)
             {
@@ -317,6 +337,7 @@ namespace CSharpIosPerfMonitor
                 {
                     string line = await process.StandardOutput.ReadLineAsync();
                     if (line == null) break;
+                    lock (_lock) { if (generation == _captureGeneration) _diagnosticsLog?.ObserveOutput(); }
                     ParseLine(line, generation, isAndroid);
                 }
                 if (!token.IsCancellationRequested)
@@ -571,6 +592,7 @@ namespace CSharpIosPerfMonitor
                             : "; surface owner unverified";
                     }
                     if (!IsGenerationCurrent(generation)) break;
+                    lock (_lock) { if (generation == _captureGeneration) _diagnosticsLog?.ObserveSample(sample); }
                     Raise(SampleReady, sample);
                 }
                 try
@@ -1440,8 +1462,8 @@ namespace CSharpIosPerfMonitor
         {
             string diagnosticMessage = WithDiagnosticsLogPath(message);
             WriteDiagnosticsEvent("capture_failure", diagnosticMessage, reason);
-            Raise(Failed, diagnosticMessage);
             Stop(reason);
+            Raise(Failed, diagnosticMessage);
         }
 
         private string WithDiagnosticsLogPath(string message)

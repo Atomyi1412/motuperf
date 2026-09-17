@@ -50,8 +50,10 @@ namespace CSharpIosPerfMonitor
                         Platform = "ios",
                         Recommended = i == 0
                     };
-                    await EnrichDeviceDetailsAsync(device, token);
                     discovery.Devices.Add(device);
+                    string detailIssue = await EnrichDeviceDetailsAsync(device, token);
+                    if (!string.IsNullOrWhiteSpace(detailIssue))
+                        discovery.Diagnostic += (discovery.Diagnostic.Length == 0 ? "" : "\n") + device.PickerLabel + " 已连接，部分设备信息不可用。" + detailIssue;
                 }
                 if (discovery.Devices.Count == 0)
                 {
@@ -71,24 +73,28 @@ namespace CSharpIosPerfMonitor
             return discovery;
         }
 
-        private static async Task EnrichDeviceDetailsAsync(DeviceInfo device, CancellationToken token)
+        private static async Task<string> EnrichDeviceDetailsAsync(DeviceInfo device, CancellationToken token)
         {
-            if (device == null || string.IsNullOrWhiteSpace(device.Udid)) return;
+            if (device == null || string.IsNullOrWhiteSpace(device.Udid)) return "";
             try
             {
                 ProcessResult result = await RuntimeTools.RunPythonAsync(
                     new[] { DeviceInfoToolPath(), "--udid", device.Udid },
                     15000,
                     token);
-                if (result.ExitCode == 0) ApplyDeviceDetails(device, result.Stdout);
+                if (result.ExitCode != 0) return RuntimeTools.DescribeIosFailure(result);
+                if (!(SimpleJson.Parse(result.Stdout ?? "") is Dictionary<string, object>))
+                    return "设备详情返回格式异常，请解锁设备后刷新。";
+                ApplyDeviceDetails(device, result.Stdout);
+                return "";
             }
             catch (OperationCanceledException)
             {
                 throw;
             }
-            catch
+            catch (Exception ex)
             {
-                // Basic list discovery remains usable when optional details are unavailable.
+                return RuntimeTools.DescribeIosException(ex);
             }
         }
 

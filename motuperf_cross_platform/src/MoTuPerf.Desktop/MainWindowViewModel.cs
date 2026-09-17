@@ -25,15 +25,18 @@ namespace MoTuPerf.Desktop
         private const double AndroidFrameMetricDisplayFreshSeconds = 4.0;
         private const double IosThermalStateDisplayFreshSeconds = 2.5;
         private const double AndroidThermalStateDisplayFreshSeconds = 7.5;
-        private readonly PerfCollector _collector = new PerfCollector();
-        private readonly ScreenshotService _screenshots;
+        private PerfCollector _collector = new PerfCollector();
+        private ScreenshotService _screenshots;
+        private readonly CaptureUiBuffer _captureUi = new CaptureUiBuffer();
+        private readonly DispatcherTimer _sampleRefreshTimer;
+        private long _uiGeneration;
         private readonly DeviceLookupService _deviceLookup = new DeviceLookupService();
         private readonly ReleaseUpdateService _releaseUpdates = new ReleaseUpdateService();
         private readonly UpdateSettingsStore _updateSettings = new UpdateSettingsStore();
         private bool _capturing;
         private string _status = "未连接设备";
         private DeviceSelection _selection;
-        private readonly List<PerfSample> _sampleBuffer = new List<PerfSample>();
+        private List<PerfSample> _sampleBuffer = new List<PerfSample>();
         private readonly List<ScreenshotItemViewModel> _screenshotItems = new List<ScreenshotItemViewModel>();
         private IReadOnlyList<PerfSample> _samples = Array.Empty<PerfSample>();
         private double? _selectedTime;
@@ -76,27 +79,44 @@ namespace MoTuPerf.Desktop
             }
             ToggleCaptureCommand = new RelayCommand(ToggleCapture);
 
-            _collector.SampleReady += HandleSample;
-            _collector.Message += delegate(string message) { PostStatus(message); };
-            _collector.Failed += delegate(string message)
+            _sampleRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+            _sampleRefreshTimer.Tick += delegate { ApplySamples(_captureUi.Drain(_uiGeneration)); };
+        }
+
+        private void BindCaptureCallbacks(long generation, PerfCollector collector, ScreenshotService screenshots)
+        {
+            collector.SampleReady += sample =>
             {
-                string diagnosticMessage = AddDiagnosticsLogHint(message);
+                if (_captureUi.Enqueue(generation, sample))
+                    screenshots.CaptureDue(sample.ElapsedSec, (int)(sample.ElapsedSec * 1000), CancellationToken.None);
+            };
+            collector.Message += message => PostCaptureStatus(generation, message);
+            collector.Failed += message =>
+            {
                 Dispatcher.UIThread.Post(delegate
                 {
-                    _screenshots.Stop();
-                    CancelCaptureToken();
-                    IsCapturing = false;
-                    Status = diagnosticMessage;
-                    CaptureStoppedUnexpectedly?.Invoke(diagnosticMessage);
+                    if (!_captureUi.IsCurrent(generation)) return;
+                    StopCapture(message, "collector_failed");
+                    CaptureStoppedUnexpectedly?.Invoke(message);
                 });
             };
-            _screenshots.ScreenshotReady += HandleScreenshot;
-            _screenshots.Failed += delegate(string message) { PostStatus(message); };
+            screenshots.ScreenshotReady += screenshot => HandleScreenshot(screenshot, generation);
+            screenshots.Failed += message =>
+            {
+                if (!_captureUi.IsCurrent(generation)) return;
+                collector.RecordEvent("screenshot_failed", message, "screenshot_error");
+                PostCaptureStatus(generation, message);
+            };
+        }
+
+        private void PostCaptureStatus(long generation, string message)
+        {
+            Dispatcher.UIThread.Post(delegate { if (_captureUi.IsCurrent(generation)) Status = message; });
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
         public event Action<string> CaptureStoppedUnexpectedly;
-        public string Version { get { return "v0.24.1"; } }
+        public string Version { get { return "v0.24.2"; } }
         public IReadOnlyList<AppThemeDefinition> ThemeOptions { get { return AppThemeManager.Themes; } }
         public string CurrentThemeName { get { return AppThemeManager.Current.DisplayName; } }
         public string CurrentThemePreviewColor { get { return AppThemeManager.Current.PreviewColor; } }
@@ -612,7 +632,7 @@ namespace MoTuPerf.Desktop
 
             ResetMetricValues();
             ClearScreenshots();
-            _sampleBuffer.Clear();
+            _sampleBuffer = new List<PerfSample>();
             Samples = Array.Empty<PerfSample>();
             SelectedTime = null;
             ViewStartTime = 0;
@@ -644,7 +664,15 @@ namespace MoTuPerf.Desktop
             };
             try
             {
+                _collector.Dispose();
+                _screenshots.Stop();
+                _collector = new PerfCollector();
+                _screenshots = new ScreenshotService(Path.Combine(RuntimeTools.DataDirectory, "screenshots"));
+                _uiGeneration = _captureUi.Begin();
+                long generation = _uiGeneration;
+                BindCaptureCallbacks(generation, _collector, _screenshots);
                 _captureCancellation = new CancellationTokenSource();
+                CancellationToken captureToken = _captureCancellation.Token;
                 _screenshots.Udid = config.Udid;
                 _screenshots.Platform = config.Platform;
                 _screenshots.ProductVersion = config.ProductVersion;
@@ -653,21 +681,20 @@ namespace MoTuPerf.Desktop
                 _screenshots.Reset(_captureCancellation.Token);
                 _collector.Start(config);
                 IsCapturing = true;
+                _sampleRefreshTimer.Start();
                 OnPropertyChanged(nameof(TargetSummary));
-                Task.Run(delegate { return MonitorDeviceConnectionAsync(config, _captureCancellation.Token); });
+                _ = MonitorDeviceConnectionAsync(config, captureToken, generation, _collector);
             }
             catch (Exception ex)
             {
-                _collector.Stop("start_failed");
-                _screenshots.Stop();
-                CancelCaptureToken();
-                IsCapturing = false;
-                Status = "采集启动失败：" + ex.Message + AddDiagnosticsLogHint("");
+                StopCapture("采集启动失败：" + ex.Message + AddDiagnosticsLogHint(""), "start_failed");
             }
         }
         public void StopCapture(string status, string reason = "stop_requested")
         {
             _collector.Stop(reason);
+            _sampleRefreshTimer.Stop();
+            ApplySamples(_captureUi.Drain(_uiGeneration, int.MaxValue, close: true));
             _screenshots.Stop();
             CancelCaptureToken();
             IsCapturing = false;
@@ -675,31 +702,33 @@ namespace MoTuPerf.Desktop
             OnPropertyChanged(nameof(TargetSummary));
         }
 
-        private void HandleSample(PerfSample sample)
-        {
-            if (sample == null) return;
-            Dispatcher.UIThread.Post(delegate { ApplySample(sample); });
-        }
-
         internal void ApplySample(PerfSample sample)
         {
-            if (sample == null) return;
-            _sampleBuffer.Add(sample);
-            Samples = _sampleBuffer.ToArray();
-            OnPropertyChanged(nameof(HasSessionData));
-            _screenshots.CaptureDue(sample.ElapsedSec, _sampleBuffer.Count - 1, _captureCancellation == null ? CancellationToken.None : _captureCancellation.Token);
-            if (sample.HasFps) SetMetric("FPS", sample.Fps, "0.##");
-            if (sample.HasFrameTimeMax) SetMetric("Display FrameTime", sample.FrameTimeMaxMs, "0.##");
-            if (sample.HasJank)
+            if (sample != null) ApplySamples(new[] { sample });
+        }
+
+        internal void ApplySamples(IReadOnlyList<PerfSample> batch)
+        {
+            if (batch.Count == 0) return;
+            foreach (PerfSample sample in batch)
             {
-                SetMetric("Jank", sample.Jank, "0.##");
-                SetMetric("BigJank", sample.BigJank, "0.##");
+                if (sample == null) continue;
+                _sampleBuffer.Add(sample);
+                if (sample.HasFps) SetMetric("FPS", sample.Fps, "0.##");
+                if (sample.HasFrameTimeMax) SetMetric("Display FrameTime", sample.FrameTimeMaxMs, "0.##");
+                if (sample.HasJank)
+                {
+                    SetMetric("Jank", sample.Jank, "0.##");
+                    SetMetric("BigJank", sample.BigJank, "0.##");
+                }
+                if (sample.HasMemory) SetMetric("Process Memory", sample.MemoryMb, "0.##");
+                if (sample.HasCpu) SetMetric("Process CPU Raw", sample.CpuPercent, "0.##");
+                if (sample.HasCpuNormalized) SetMetric("Process CPU Normalized", sample.CpuNormalizedPercent, "0.##");
+                if (sample.HasTemperature && sample.TemperatureCelsius.Count > 0) SetMetric("Device Temperature", sample.TemperatureCelsius.Values.Max(), "0.##");
+                if (sample.HasThermalState) SetMetric("Thermal State", sample.ThermalStateLevel, "0");
             }
-            if (sample.HasMemory) SetMetric("Process Memory", sample.MemoryMb, "0.##");
-            if (sample.HasCpu) SetMetric("Process CPU Raw", sample.CpuPercent, "0.##");
-            if (sample.HasCpuNormalized) SetMetric("Process CPU Normalized", sample.CpuNormalizedPercent, "0.##");
-            if (sample.HasTemperature && sample.TemperatureCelsius.Count > 0) SetMetric("Device Temperature", sample.TemperatureCelsius.Values.Max(), "0.##");
-            if (sample.HasThermalState) SetMetric("Thermal State", sample.ThermalStateLevel, "0");
+            Samples = new SampleSnapshot(_sampleBuffer, Samples as SampleSnapshot);
+            OnPropertyChanged(nameof(HasSessionData));
             TrimStaleLatestMetricValues();
             UpdateDataPanels();
         }
@@ -808,7 +837,7 @@ namespace MoTuPerf.Desktop
             PerfSample selected = selectedSample;
             if (!useProvidedSample && _selectedTime.HasValue && _sampleBuffer.Count > 0)
             {
-                selected = FindNearestSample(_sampleBuffer, _selectedTime);
+                selected = FindNearestSample(Samples, _selectedTime);
             }
             foreach (MetricRowViewModel metric in Metrics) metric.SelectedValue = "--";
             if (selected != null)
@@ -865,7 +894,7 @@ namespace MoTuPerf.Desktop
             PerfSample selected = null;
             if (_selectedTime.HasValue && _sampleBuffer.Count > 0)
             {
-                selected = _sampleBuffer.OrderBy(delegate(PerfSample sample) { return Math.Abs(sample.ElapsedSec - _selectedTime.Value); }).FirstOrDefault();
+                selected = FindNearestSample(Samples, _selectedTime);
             }
             UpdateDataPanel(_liveDataTiles, latest);
             UpdateDataPanel(_selectedDataTiles, selected);
@@ -898,11 +927,9 @@ namespace MoTuPerf.Desktop
 
         private PerfSample NearestMetricSample(PerfSample reference, Func<PerfSample, bool> predicate, double maximumDistanceSeconds)
         {
-            IEnumerable<PerfSample> available = _sampleBuffer.Where(predicate);
-            if (reference == null) return available.LastOrDefault();
-            PerfSample nearest = available.OrderBy(delegate(PerfSample item) { return Math.Abs(item.ElapsedSec - reference.ElapsedSec); }).FirstOrDefault();
-            if (nearest == null || Math.Abs(nearest.ElapsedSec - reference.ElapsedSec) > maximumDistanceSeconds) return null;
-            return nearest;
+            if (reference == null) return _sampleBuffer.LastOrDefault(predicate);
+            IReadOnlyList<PerfSample> ordered = (Samples as SampleSnapshot)?.Ordered ?? Samples;
+            return SampleSnapshot.Nearest(ordered, reference.ElapsedSec, predicate, maximumDistanceSeconds);
         }
 
         private double ThermalStateDisplayFreshSeconds()
@@ -969,11 +996,12 @@ namespace MoTuPerf.Desktop
             if (metric != null) metric.SelectedValue = value.ToString(format, CultureInfo.InvariantCulture);
         }
         private void PostStatus(string message) { Dispatcher.UIThread.Post(delegate { Status = message; }); }
-        private void HandleScreenshot(ScreenshotInfo screenshot)
+        private void HandleScreenshot(ScreenshotInfo screenshot, long generation)
         {
             if (screenshot == null || string.IsNullOrWhiteSpace(screenshot.Path)) return;
             Dispatcher.UIThread.Post(delegate
             {
+                if (!_captureUi.IsCurrent(generation)) return;
                 try
                 {
                     ScreenshotItemViewModel item = new ScreenshotItemViewModel(screenshot, false);
@@ -1019,9 +1047,11 @@ namespace MoTuPerf.Desktop
             token.Cancel();
             token.Dispose();
         }
-        private async Task MonitorDeviceConnectionAsync(CaptureConfig config, CancellationToken token)
+        private async Task MonitorDeviceConnectionAsync(CaptureConfig config, CancellationToken token, long generation, PerfCollector collector)
         {
             int offlineCount = 0;
+            bool? previousOnline = true;
+            collector.RecordEvent("device_monitor_started", "设备连接监测已启动", "started");
             while (!token.IsCancellationRequested)
             {
                 try { await Task.Delay(2000, token); }
@@ -1030,12 +1060,15 @@ namespace MoTuPerf.Desktop
                 try { online = await _deviceLookup.IsDeviceOnlineAsync(config.Udid, config.Platform, token); }
                 catch (OperationCanceledException) { return; }
                 catch { online = null; }
+                if (online != previousOnline)
+                    collector.RecordEvent("device_connection_changed", online.HasValue ? (online.Value ? "设备在线" : "设备离线") : "设备探测失败，连接状态未知", online.HasValue ? (online.Value ? "online" : "offline") : "unknown");
+                previousOnline = online;
                 if (!online.HasValue) { offlineCount = 0; continue; }
                 offlineCount = online.Value ? 0 : offlineCount + 1;
                 if (offlineCount < 2) continue;
                 Dispatcher.UIThread.Post(delegate
                 {
-                    if (!IsCapturing) return;
+                    if (!IsCapturing || !_captureUi.IsCurrent(generation)) return;
                     string message = AddDiagnosticsLogHint("检测到设备已断开，采集已停止");
                     StopCapture(message, "device_disconnected");
                     CaptureStoppedUnexpectedly?.Invoke(message);
@@ -1143,9 +1176,8 @@ namespace MoTuPerf.Desktop
         private void ApplySessionDocumentCore(SessionDocument document, PreparedSessionData prepared, bool loadImages, bool addScreenshots)
         {
             if (IsCapturing) ToggleCapture();
-            _sampleBuffer.Clear();
-            _sampleBuffer.AddRange(prepared.Samples);
-            Samples = _sampleBuffer.ToArray();
+            _sampleBuffer = new List<PerfSample>(prepared.Samples);
+            Samples = new SampleSnapshot(_sampleBuffer);
             ClearScreenshots();
             if (addScreenshots)
             {
@@ -1292,6 +1324,8 @@ namespace MoTuPerf.Desktop
         private static PerfSample FindNearestSample(IReadOnlyList<PerfSample> samples, double? elapsed)
         {
             if (!elapsed.HasValue) return null;
+            if (samples is SampleSnapshot snapshot)
+                return SampleSnapshot.Nearest(snapshot.Ordered, elapsed.Value, _ => true, double.PositiveInfinity);
             return samples.OrderBy(delegate(PerfSample sample) { return Math.Abs(sample.ElapsedSec - elapsed.Value); }).FirstOrDefault();
         }
         private sealed class PreparedSessionData
@@ -1321,7 +1355,8 @@ namespace MoTuPerf.Desktop
 
         private void TrimStaleLatestMetricValues()
         {
-            PerfSample latest = _sampleBuffer.OrderByDescending(delegate(PerfSample sample) { return sample == null ? 0 : sample.ElapsedSec; }).FirstOrDefault();
+            IReadOnlyList<PerfSample> ordered = (Samples as SampleSnapshot)?.Ordered ?? Samples;
+            PerfSample latest = ordered.Count == 0 ? null : ordered[ordered.Count - 1];
             if (latest == null) return;
             double frameFreshness = IsAndroidSelection ? AndroidFrameMetricDisplayFreshSeconds : IosFrameMetricDisplayFreshSeconds;
             ClearMetricIfStale("FPS", delegate(PerfSample sample) { return sample.HasFps; }, frameFreshness, latest);
@@ -1337,11 +1372,16 @@ namespace MoTuPerf.Desktop
 
         private void ClearMetricIfStale(string name, Func<PerfSample, bool> predicate, double maximumDistanceSeconds, PerfSample latest)
         {
-            if (LatestMetricSample(_sampleBuffer, latest, predicate, maximumDistanceSeconds) != null) return;
+            IReadOnlyList<PerfSample> ordered = (Samples as SampleSnapshot)?.Ordered ?? Samples;
+            for (int i = ordered.Count - 1; i >= 0; i--)
+            {
+                if (latest.ElapsedSec - ordered[i].ElapsedSec > maximumDistanceSeconds) break;
+                if (predicate(ordered[i])) return;
+            }
             MetricRowViewModel metric = Metrics.FirstOrDefault(delegate(MetricRowViewModel item) { return item.Name == name; });
             if (metric != null) metric.Value = "--";
         }
-        public void Dispose() { _screenshots.Stop(); CancelCaptureToken(); ClearScreenshots(); _collector.Dispose(); }
+        public void Dispose() { StopCapture(Status, "window_closed"); ClearScreenshots(); _collector.Dispose(); }
         private void OnPropertyChanged([CallerMemberName] string propertyName = null) { PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName)); }
     }
 

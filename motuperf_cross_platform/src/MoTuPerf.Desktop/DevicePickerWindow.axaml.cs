@@ -107,18 +107,22 @@ namespace MoTuPerf.Desktop
             _deviceCountStatus = "正在检测设备...";
             StatusText.Text = _deviceCountStatus;
             AppleDriverButton.IsVisible = false;
+            this.FindControl<ScrollViewer>("DeviceDiagnosticRegion").IsVisible = false;
             try
             {
                 DeviceDiscoveryReport report = await _lookup.DiscoverDevicesAsync(token);
                 if (!IsCurrentLoad(generation)) return;
                 DeviceList.ItemsSource = report.Devices;
-                _deviceCountStatus = report.Devices.Count == 0
-                    ? (report.AppleDriverActionAvailable && !string.IsNullOrWhiteSpace(report.IosDiagnostic)
-                        ? report.IosDiagnostic
-                        : report.StatusMessage)
-                    : "已检测到 " + report.Devices.Count + " 台设备。";
+                _deviceCountStatus = report.StatusMessage;
                 StatusText.Text = _deviceCountStatus;
-                AppleDriverButton.IsVisible = report.Devices.Count == 0 && report.AppleDriverActionAvailable;
+                string diagnostic = string.Join("\n", new[]
+                {
+                    string.IsNullOrWhiteSpace(report.AndroidDiagnostic) ? "" : "Android：" + report.AndroidDiagnostic,
+                    string.IsNullOrWhiteSpace(report.IosDiagnostic) ? "" : "iOS：" + report.IosDiagnostic
+                }.Where(value => !string.IsNullOrWhiteSpace(value)));
+                this.FindControl<TextBlock>("DeviceDiagnosticText").Text = diagnostic;
+                this.FindControl<ScrollViewer>("DeviceDiagnosticRegion").IsVisible = diagnostic.Length > 0;
+                AppleDriverButton.IsVisible = report.AppleDriverActionAvailable;
                 _appleDriverButtonIdleText = report.AppleDriverMissing ? "下载苹果设备驱动" : "修复苹果设备驱动";
                 AppleDriverButton.Content = _appleDriverButtonIdleText;
                 DeviceInfo preferred = report.Devices.FirstOrDefault(delegate(DeviceInfo device)

@@ -169,12 +169,13 @@ namespace CSharpIosPerfMonitor
 
         public static string DescribeIosException(Exception exception)
         {
+            if (exception is TimeoutException) return "iOS 设备响应超时，请解锁设备、确认信任此电脑，并检查 USB 连接后刷新。";
             if (exception is FileNotFoundException && IsPackagedBuild)
             {
                 return "iOS 运行环境缺失或损坏，请重新安装 MoTuPerf。";
             }
             if (!HasAppleMobileDeviceSupport()) return NoIosDeviceMessage();
-            string detail = FirstLine(exception == null ? "" : exception.Message);
+            string detail = CaptureDiagnosticsLog.Sanitize(FirstLine(exception == null ? "" : exception.Message), 240);
             return string.IsNullOrWhiteSpace(detail)
                 ? "iOS 设备检测失败，请重新安装 MoTuPerf 后重试。"
                 : "iOS 设备检测失败：" + detail;
@@ -184,6 +185,8 @@ namespace CSharpIosPerfMonitor
         {
             string output = ((result == null ? "" : result.Stdout) + "\n" + (result == null ? "" : result.Stderr)).Trim();
             string lower = output.ToLowerInvariant();
+            if (lower.Contains("timed out") || lower.Contains("timeout")) return "iOS 设备响应超时，请解锁设备并检查 USB 连接后刷新。";
+            if (IosLookupService.IsDeveloperModeDisabled(result)) return "设备未开启开发者模式，请在设备的“设置 > 隐私与安全性 > 开发者模式”中开启并重启，再刷新。";
             if (lower.Contains("no module named") || lower.Contains("modulenotfounderror")) return "iOS 运行组件不完整，请重新安装 MoTuPerf。";
             if (lower.Contains("not paired") || lower.Contains("invalidhostid") || lower.Contains("trust") || lower.Contains("password protected") || lower.Contains("locked"))
             {
@@ -193,7 +196,7 @@ namespace CSharpIosPerfMonitor
             {
                 return NoIosDeviceMessage();
             }
-            string detail = FirstLine(output);
+            string detail = CaptureDiagnosticsLog.Sanitize(FirstLine(output), 240);
             return string.IsNullOrWhiteSpace(detail)
                 ? "iOS 设备检测失败，请检查 USB 连接、设备信任状态和开发者模式。"
                 : "iOS 设备检测失败：" + detail;
