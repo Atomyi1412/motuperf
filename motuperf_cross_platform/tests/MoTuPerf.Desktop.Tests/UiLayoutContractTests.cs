@@ -159,8 +159,11 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Contains(dialog.Descendants(Avalonia + "Grid"), grid => Attribute(grid, "Margin") == "32,32,38,0"
                 && Attribute(grid, "ColumnDefinitions") == "112,*"
                 && Attribute(grid, "RowDefinitions") == "46,Auto,48,42,*");
-            Assert.Equal("Wrap", Attribute(Named(dialog, "DeviceDiagnosticText"), "TextWrapping"));
-            Assert.Equal("92", Attribute(Named(dialog, "DeviceDiagnosticRegion"), "MaxHeight"));
+            Assert.Equal("False", Attribute(Named(dialog, "DeviceDiagnosticsButton"), "IsEnabled"));
+            Assert.Equal("ShowDeviceDiagnostics", Attribute(Named(dialog, "DeviceDiagnosticsButton"), "Click"));
+            Assert.Equal("Android", Attribute(dialog.Descendants(Avalonia + "TextBlock").Single(text => Attribute(text, "Text") == "Android"), "Text"));
+            Assert.Equal("iOS", Attribute(dialog.Descendants(Avalonia + "TextBlock").Single(text => Attribute(text, "Text") == "iOS"), "Text"));
+            Assert.DoesNotContain(dialog.Descendants(Avalonia + "ScrollViewer"), scroll => (string)scroll.Attribute(Xaml + "Name") == "DeviceDiagnosticRegion");
             Assert.True(dialog.Descendants(Avalonia + "Grid").Count(grid => Attribute(grid, "ColumnDefinitions") == "*,48") >= 2);
             Assert.Contains(dialog.Descendants(Avalonia + "Grid"), grid => Attribute(grid, "ColumnDefinitions") == "*,88");
             Assert.Contains(dialog.Descendants(Avalonia + "Grid"), grid => Attribute(grid, "ColumnDefinitions") == "*,112,112");
@@ -198,6 +201,8 @@ namespace MoTuPerf.Desktop.Tests
             AssertStyle(app, "ListBox.processList > ListBoxItem:selected Border.processRow", "Background", "{DynamicResource Theme.Accent}");
             AssertStyle(app, "TextBox.dialogSearch /template/ Border#PART_BorderElement", "Background", "{DynamicResource Theme.DialogInputBackground}");
             AssertStyle(app, "TextBox.dialogSearch /template/ Button#PART_ClearButton", "IsVisible", "False");
+            AssertStyle(app, "TextBlock.devicePlatformStatus", "TextTrimming", "CharacterEllipsis");
+            AssertStyle(app, "Border.diagnosticSection", "Background", "{DynamicResource Theme.DialogSurface}");
             Assert.All(new[] { Named(dialog, "ProcessSearch"), Named(dialog, "AppSearch") }, search =>
             {
                 Assert.Equal(string.Empty, Attribute(search, "PlaceholderText"));
@@ -217,6 +222,15 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Contains("修复苹果设备驱动", dialogCode);
             Assert.Contains("AppleDriverDownloadService", dialogCode);
             Assert.Contains("已下载完成，是否现在启动安装", dialogCode);
+
+            XDocument diagnostics = LoadXaml("src", "MoTuPerf.Desktop", "DeviceDiagnosticsWindow.axaml");
+            Assert.Equal("设备检测详情", Attribute(diagnostics.Root, "Title"));
+            Assert.Contains(diagnostics.Descendants(Avalonia + "ScrollViewer"), scroll => Attribute(scroll, "Grid.Row") == "1");
+            Assert.Contains(diagnostics.Descendants(Avalonia + "Border"), border => Attribute(border, "Classes") == "diagnosticSection");
+            string formatterCode = LoadText("src", "MoTuPerf.Desktop", "DeviceDiagnosticsPresentation.cs");
+            Assert.Contains("已连接 \" + devices.Count + \" 台设备", formatterCode);
+            Assert.Contains("缺少 Apple 设备驱动", formatterCode);
+            Assert.Contains("本轮没有返回额外诊断", formatterCode);
         }
 
         [Fact]
@@ -275,6 +289,7 @@ namespace MoTuPerf.Desktop.Tests
                 "MainWindow.axaml",
                 "DevicePickerWindow.axaml",
                 "ScreenshotViewerWindow.axaml",
+                "DeviceDiagnosticsWindow.axaml",
                 "HelpWindow.axaml",
                 "ChangelogWindow.axaml",
                 "ConfirmDialogWindow.axaml",
@@ -300,7 +315,7 @@ namespace MoTuPerf.Desktop.Tests
             string version = project.Descendants("Version").Single().Value;
             string[] components = version.Split('.');
 
-            Assert.Equal("0.24.2", version);
+            Assert.Equal("0.24.3", version);
             Assert.Equal(3, components.Length);
             Assert.All(components, component => Assert.True(int.TryParse(component, out _)));
             Assert.DoesNotContain("-", version);
@@ -382,7 +397,8 @@ namespace MoTuPerf.Desktop.Tests
                 "ChangelogWindow.axaml",
                 "UpdatePromptWindow.axaml",
                 "UpdateDownloadWindow.axaml",
-                "ScreenshotViewerWindow.axaml"
+                "ScreenshotViewerWindow.axaml",
+                "DeviceDiagnosticsWindow.axaml"
             };
             foreach (string viewFile in secondaryWindows)
             {
@@ -433,10 +449,11 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Equal("更新日志", Attribute(changelog.Root, "Title"));
             Assert.Contains(changelog.Descendants(Avalonia + "Border"), border => Attribute(border, "Classes") == "secondaryWindowFrame");
             string changelogText = string.Join(" ", changelog.Descendants(Avalonia + "TextBlock").Select(element => Attribute(element, "Text")));
-            Assert.Contains("v0.24.0", changelogText);
+            Assert.Contains("v0.24.3", changelogText);
             Assert.Contains("v0.24.2", changelogText);
             Assert.Contains("v0.24.1", changelogText);
             Assert.DoesNotContain("v0.23.0", changelogText);
+            Assert.DoesNotContain("v0.24.0", changelogText);
             Assert.Contains(changelog.Descendants(Avalonia + "Button"), button => Attribute(button, "Content") == "查看完整在线更新日志"
                 && Attribute(button, "Click") == "OpenVersionLog");
 

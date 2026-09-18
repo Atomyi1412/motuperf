@@ -523,6 +523,41 @@
       <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
       <Setter Property="FontSize" Value="12" />
     </Style>
+    <Style Selector="TextBlock.devicePlatformLabel">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextMuted}" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.devicePlatformStatus">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.diagnosticSummarySurface">
+      <Setter Property="Background" Value="{DynamicResource Theme.DialogSurface}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.DialogSeparator}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="Padding" Value="14,10" />
+    </Style>
+    <Style Selector="Border.diagnosticSection">
+      <Setter Property="Background" Value="{DynamicResource Theme.DialogSurface}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.DialogSeparator}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="Padding" Value="14,11" />
+    </Style>
+    <Style Selector="TextBlock.diagnosticTitle">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.diagnosticBody">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="LineHeight" Value="19" />
+    </Style>
     <Style Selector="Button.driverDownloadButton">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />

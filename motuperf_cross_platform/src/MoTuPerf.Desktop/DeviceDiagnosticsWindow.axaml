@@ -1,0 +1,64 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MoTuPerf.Desktop.DeviceDiagnosticsWindow"
+        Title="设备检测详情"
+        Width="620"
+        Height="500"
+        MinWidth="540"
+        MinHeight="400"
+        WindowDecorations="BorderOnly"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="0"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner">
+  <Border Classes="secondaryWindowFrame">
+    <Grid RowDefinitions="48,*,58" Background="{DynamicResource Theme.DialogBackground}">
+      <Border Grid.Row="0" Classes="dialogTitleBar" PointerPressed="DialogTitlePointerPressed">
+        <Grid ColumnDefinitions="*,46">
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="24,0,0,0">
+            <TextBlock Text="&#xE946;" Classes="symbol" Foreground="{DynamicResource Theme.Accent}" FontSize="17" Margin="0,0,10,0" />
+            <TextBlock Text="设备检测详情" Classes="sectionTitle" />
+          </StackPanel>
+          <Button Grid.Column="1" Classes="windowButton closeButton" Content="&#x00D7;" Click="CloseWindow" ToolTip.Tip="关闭" />
+        </Grid>
+      </Border>
+      <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="22,16,18,14" Spacing="10">
+          <Border Classes="diagnosticSummarySurface">
+            <StackPanel Spacing="3">
+              <TextBlock Text="检测结果" Classes="diagnosticTitle" />
+              <TextBlock x:Name="OverallStatusText" Classes="dialogHint" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+          <Border Classes="diagnosticSection">
+            <StackPanel Spacing="5">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="Android" Classes="diagnosticTitle" />
+                <TextBlock x:Name="AndroidSummaryText" Grid.Column="1" Classes="devicePlatformStatus" />
+              </Grid>
+              <TextBlock x:Name="AndroidDiagnosticText" Classes="diagnosticBody" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+          <Border Classes="diagnosticSection">
+            <StackPanel Spacing="5">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="iOS" Classes="diagnosticTitle" />
+                <TextBlock x:Name="IosSummaryText" Grid.Column="1" Classes="devicePlatformStatus" />
+              </Grid>
+              <TextBlock x:Name="IosDiagnosticText" Classes="diagnosticBody" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+          <Border x:Name="AppleDriverDetail" Classes="diagnosticSection" IsVisible="False">
+            <StackPanel Spacing="4">
+              <TextBlock Text="Apple 设备驱动" Classes="diagnosticTitle" />
+              <TextBlock x:Name="AppleDriverDetailText" Classes="diagnosticBody" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+      <Border Grid.Row="2" Classes="dialogFooter">
+        <Button Classes="primaryToolbarButton" Content="知道了" Click="CloseWindow" Width="104" HorizontalAlignment="Right" Margin="0,0,18,0" />
+      </Border>
+    </Grid>
+  </Border>
+</Window>

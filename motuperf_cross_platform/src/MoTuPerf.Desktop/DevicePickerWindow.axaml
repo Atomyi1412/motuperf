@@ -89,16 +89,23 @@
           <Button Grid.Column="1" Classes="iconDialogButton" Content="↻" Click="RefreshDevices"
                   ToolTip.Tip="刷新设备" HorizontalAlignment="Right" />
         </Grid>
-        <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,0,0,6" Spacing="4">
-          <Grid ColumnDefinitions="*,Auto" Margin="112,0,0,0">
+        <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,0,0,6" Spacing="3">
+          <Grid ColumnDefinitions="*,Auto,Auto" Margin="112,0,0,0">
             <TextBlock x:Name="DeviceCountText" Text="正在检测设备..." Classes="dialogHint"
                        TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,10,0" />
-            <Button Grid.Column="1" x:Name="AppleDriverButton" Classes="driverDownloadButton" Content="下载苹果设备驱动"
+            <Button Grid.Column="1" x:Name="DeviceDiagnosticsButton" Classes="smallDialogButton" Content="查看检测详情"
+                    Click="ShowDeviceDiagnostics" IsEnabled="False" Margin="0,0,6,0" />
+            <Button Grid.Column="2" x:Name="AppleDriverButton" Classes="driverDownloadButton" Content="下载苹果设备驱动"
                     Click="DownloadAppleDriver" IsVisible="False" />
           </Grid>
-          <ScrollViewer x:Name="DeviceDiagnosticRegion" MaxHeight="92" IsVisible="False" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-            <TextBlock x:Name="DeviceDiagnosticText" Classes="dialogHint" TextWrapping="Wrap" Margin="0,4,8,4" />
-          </ScrollViewer>
+          <Grid ColumnDefinitions="72,*" Margin="112,0,0,0">
+            <TextBlock Text="Android" Classes="devicePlatformLabel" />
+            <TextBlock Grid.Column="1" x:Name="AndroidStatusText" Classes="devicePlatformStatus" Text="检测中..." />
+          </Grid>
+          <Grid ColumnDefinitions="72,*" Margin="112,0,0,0">
+            <TextBlock Text="iOS" Classes="devicePlatformLabel" />
+            <TextBlock Grid.Column="1" x:Name="IosStatusText" Classes="devicePlatformStatus" Text="检测中..." />
+          </Grid>
         </StackPanel>
 
         <TextBlock Text="选择应用" Classes="dialogLabel" Grid.Row="2" />

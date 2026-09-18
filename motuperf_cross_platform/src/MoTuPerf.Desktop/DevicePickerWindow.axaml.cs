@@ -17,6 +17,9 @@ namespace MoTuPerf.Desktop
     {
         private TextBlock DeviceCountText;
         private Button AppleDriverButton;
+        private Button DeviceDiagnosticsButton;
+        private TextBlock AndroidStatusText;
+        private TextBlock IosStatusText;
         private TextBlock StatusText;
         private ComboBox DeviceList;
         private ListBox AppList;
@@ -48,6 +51,7 @@ namespace MoTuPerf.Desktop
         private IconPathConverter _iconConverter;
         private string _appleDriverButtonIdleText = "下载苹果设备驱动";
         private string _deviceCountStatus = "正在检测设备...";
+        private DeviceDiagnosticsSnapshot _deviceDiagnostics = DeviceDiagnosticsFormatter.Loading();
 
         public DevicePickerWindow()
             : this(null)
@@ -74,6 +78,9 @@ namespace MoTuPerf.Desktop
             Avalonia.Markup.Xaml.AvaloniaXamlLoader.Load(this);
             DeviceCountText = this.FindControl<TextBlock>("DeviceCountText");
             AppleDriverButton = this.FindControl<Button>("AppleDriverButton");
+            DeviceDiagnosticsButton = this.FindControl<Button>("DeviceDiagnosticsButton");
+            AndroidStatusText = this.FindControl<TextBlock>("AndroidStatusText");
+            IosStatusText = this.FindControl<TextBlock>("IosStatusText");
             StatusText = DeviceCountText;
             DeviceList = this.FindControl<ComboBox>("DeviceList");
             AppList = this.FindControl<ListBox>("AppList");
@@ -104,24 +111,14 @@ namespace MoTuPerf.Desktop
             if (_closed) return;
             long generation;
             CancellationToken token = NewLoadToken(out generation);
-            _deviceCountStatus = "正在检测设备...";
-            StatusText.Text = _deviceCountStatus;
+            ApplyDeviceDiagnostics(DeviceDiagnosticsFormatter.Loading());
             AppleDriverButton.IsVisible = false;
-            this.FindControl<ScrollViewer>("DeviceDiagnosticRegion").IsVisible = false;
             try
             {
                 DeviceDiscoveryReport report = await _lookup.DiscoverDevicesAsync(token);
                 if (!IsCurrentLoad(generation)) return;
                 DeviceList.ItemsSource = report.Devices;
-                _deviceCountStatus = report.StatusMessage;
-                StatusText.Text = _deviceCountStatus;
-                string diagnostic = string.Join("\n", new[]
-                {
-                    string.IsNullOrWhiteSpace(report.AndroidDiagnostic) ? "" : "Android：" + report.AndroidDiagnostic,
-                    string.IsNullOrWhiteSpace(report.IosDiagnostic) ? "" : "iOS：" + report.IosDiagnostic
-                }.Where(value => !string.IsNullOrWhiteSpace(value)));
-                this.FindControl<TextBlock>("DeviceDiagnosticText").Text = diagnostic;
-                this.FindControl<ScrollViewer>("DeviceDiagnosticRegion").IsVisible = diagnostic.Length > 0;
+                ApplyDeviceDiagnostics(DeviceDiagnosticsFormatter.FromReport(report));
                 AppleDriverButton.IsVisible = report.AppleDriverActionAvailable;
                 _appleDriverButtonIdleText = report.AppleDriverMissing ? "下载苹果设备驱动" : "修复苹果设备驱动";
                 AppleDriverButton.Content = _appleDriverButtonIdleText;
@@ -134,10 +131,26 @@ namespace MoTuPerf.Desktop
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
-                _deviceCountStatus = "设备检测失败：" + ex.Message;
-                StatusText.Text = _deviceCountStatus;
+                ApplyDeviceDiagnostics(DeviceDiagnosticsFormatter.Error("设备检测失败：" + ex.Message, ex.Message, ex.Message));
                 AppleDriverButton.IsVisible = false;
             }
+        }
+
+        private void ApplyDeviceDiagnostics(DeviceDiagnosticsSnapshot snapshot)
+        {
+            _deviceDiagnostics = snapshot ?? DeviceDiagnosticsFormatter.Loading();
+            _deviceCountStatus = _deviceDiagnostics.OverallStatus;
+            DeviceCountText.Text = _deviceDiagnostics.OverallStatus;
+            AndroidStatusText.Text = _deviceDiagnostics.AndroidSummary;
+            IosStatusText.Text = _deviceDiagnostics.IosSummary;
+            DeviceDiagnosticsButton.IsEnabled = _deviceDiagnostics.IsReady;
+        }
+
+        private async void ShowDeviceDiagnostics(object sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (!_deviceDiagnostics.IsReady) return;
+            DeviceDiagnosticsSnapshot snapshot = _deviceDiagnostics;
+            await new DeviceDiagnosticsWindow(snapshot).ShowDialog(this);
         }
 
         private async void DownloadAppleDriver(object sender, Avalonia.Interactivity.RoutedEventArgs e)
