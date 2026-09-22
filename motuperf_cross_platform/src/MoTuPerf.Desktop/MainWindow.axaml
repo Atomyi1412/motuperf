@@ -107,7 +107,6 @@
               <TextBlock Text="{Binding CaptureLabel}" Classes="captureButtonText" />
             </StackPanel>
           </Button>
-          <TextBlock Text="时间轴跟随" Classes="followText" VerticalAlignment="Center" />
         </StackPanel>
         <Button Grid.Column="2" Classes="primaryToolbarButton" Content="选择设备及应用"
                 Click="OpenDevicePicker" IsEnabled="{Binding CanChangeDevice}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,18,0" />

@@ -133,7 +133,6 @@ namespace CSharpIosPerfMonitor
         private ChartCanvas _thermalStateChart;
         private Button _startButton;
         private Button _selectTargetButton;
-        private TextBlock _followText;
         private readonly Dictionary<string, TextBlock> _liveMetricValues = new Dictionary<string, TextBlock>();
         private readonly Dictionary<string, TextBlock> _selectedMetricValues = new Dictionary<string, TextBlock>();
         private Button _liveDataTabButton;
@@ -368,9 +367,6 @@ namespace CSharpIosPerfMonitor
             };
             UpdateCaptureButton();
             center.Children.Add(_startButton);
-            _followText = ToolbarStatusText("时间轴跟随");
-            center.Children.Add(_followText);
-            UpdateFollowButton();
             Border centerZone = ToolbarZone(center, HorizontalAlignment.Center);
             Grid.SetColumn(centerZone, 1);
             bar.Children.Add(centerZone);
@@ -603,7 +599,6 @@ namespace CSharpIosPerfMonitor
                 if (_shotScrollViewer == null) return;
                 _followLatest = false;
                 _shotScrollViewer.ScrollToHorizontalOffset(_shotScrollViewer.HorizontalOffset - e.Delta);
-                UpdateFollowButton();
                 e.Handled = true;
             };
             _shotScrollViewer.PreviewMouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e)
@@ -637,7 +632,6 @@ namespace CSharpIosPerfMonitor
                 _shotDragMoved = true;
                 _followLatest = false;
                 _shotScrollViewer.ScrollToHorizontalOffset(_shotDragStartOffset + delta);
-                UpdateFollowButton();
                 e.Handled = true;
             };
             _shotScrollViewer.PreviewMouseLeftButtonUp += delegate
@@ -3050,7 +3044,6 @@ namespace CSharpIosPerfMonitor
                 chart.SelectedTime = _selectedTime;
                 chart.InvalidateVisual();
             }
-            UpdateFollowButton();
         }
 
         private void UpdateCpuCoreLegend()
@@ -5060,20 +5053,6 @@ namespace CSharpIosPerfMonitor
             };
         }
 
-        private static TextBlock ToolbarStatusText(string text)
-        {
-            return new TextBlock
-            {
-                Text = text,
-                Foreground = Brush(126, 128, 145),
-                FontSize = 16,
-                FontWeight = FontWeights.SemiBold,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(20, 0, 6, 0),
-                Opacity = 0.55
-            };
-        }
-
         private static object ToolbarButtonContent(string text)
         {
             string icon = null;
@@ -5242,14 +5221,6 @@ namespace CSharpIosPerfMonitor
             if (_cpuMetricCheck != null) _cpuMetricCheck.IsEnabled = metricSelectionEnabled;
             if (_temperatureMetricCheck != null) _temperatureMetricCheck.IsEnabled = metricSelectionEnabled;
             if (_thermalStateMetricCheck != null) _thermalStateMetricCheck.IsEnabled = metricSelectionEnabled && !DeviceLookupService.IsAndroid(_selectedDevice);
-        }
-
-        private void UpdateFollowButton()
-        {
-            if (_followText == null) return;
-            _followText.Text = "时间轴跟随";
-            _followText.Foreground = Brush(126, 128, 145);
-            _followText.Opacity = 0.55;
         }
 
         private static void SetButtonEnabled(Button button, bool enabled)

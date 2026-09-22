@@ -638,12 +638,12 @@ class CSharpPerfContractTests(unittest.TestCase):
         self.assertNotIn("ToolbarIconButtonStyle", main_window)
         self.assertNotIn("ToolbarIconButtonTemplate", main_window)
 
-    def test_top_toolbar_regions_and_follow_text_are_gears_like(self) -> None:
+    def test_top_toolbar_regions_have_no_redundant_follow_text(self) -> None:
         main_window = source_text("MainWindow.cs")
 
         self.assertIn("private static Border ToolbarZone", main_window)
         self.assertIn("private static Border ToolbarSeparator", main_window)
-        self.assertIn("private static TextBlock ToolbarStatusText(string text)", main_window)
+        self.assertNotIn("ToolbarStatusText", main_window)
         self.assertIn("ToolbarZone(left, HorizontalAlignment.Left)", main_window)
         self.assertIn("ToolbarZone(center, HorizontalAlignment.Center)", main_window)
         self.assertIn("ToolbarZone(_selectTargetButton, HorizontalAlignment.Right)", main_window)
@@ -652,8 +652,8 @@ class CSharpPerfContractTests(unittest.TestCase):
         self.assertNotIn("ToolbarZone(left, new Thickness(0, 0, 1, 0)", main_window)
         self.assertNotIn("ToolbarZone(center, new Thickness(1, 0, 1, 0)", main_window)
         self.assertNotIn("ToolbarZone(_selectTargetButton, new Thickness(1, 0, 0, 0)", main_window)
-        self.assertIn('_followText = ToolbarStatusText("时间轴跟随")', main_window)
-        self.assertIn('_followText.Opacity = 0.55', main_window)
+        self.assertNotIn("时间轴跟随", main_window)
+        self.assertNotIn("_followText", main_window)
         self.assertNotIn("_followButton", main_window)
         self.assertNotIn("Brush(34, 101, 255)", main_window)
         self.assertIn("Border titleSeparator = ToolbarSeparator(0, 0, 0, 1)", main_window)
