@@ -26,6 +26,13 @@
         <StackPanel Margin="22,10,18,12" Spacing="9">
           <Border Classes="helpSection">
             <StackPanel>
+              <TextBlock Text="v0.25.0" Classes="helpTitle" />
+              <TextBlock Text="2026-09-21" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 新增“分析数据”页签，未选中具体数据点时按当前完整查看区间展示各指标的最大值、最小值和平均值；曲线缩放后按缩放区间统计。&#x0A;• 修复分析面板高度塌缩问题，空采集数据也保留指标列表，缺测值显示为 --，不把真实 0 当成缺测。&#x0A;• 同步升级客户端版本号和构建说明。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel>
               <TextBlock Text="v0.24.3" Classes="helpTitle" />
               <TextBlock Text="2026-09-18" Classes="dialogHint" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 精简设备选择页的检测状态，只保留跨平台总状态和 Android/iOS 简短提示，减少重复诊断文字对设备、应用和进程区域的挤压。&#x0A;• 新增“查看检测详情”二级弹框，完整保留本轮 Android/iOS 检测原因；苹果驱动下载/修复入口继续按实际检测结果显示。" />
@@ -36,13 +43,6 @@
               <TextBlock Text="v0.24.2" Classes="helpTitle" />
               <TextBlock Text="2026-09-17" Classes="dialogHint" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 加强每轮采集的隔离与停止收尾，避免旧轮次的延迟回调影响当前数据；补充采集任务状态、中断原因、持续时长和指标最后更新时间的诊断记录。&#x0A;• 优化长时间采集的界面刷新、历史数据查找和曲线绘制，保留原始样本、峰谷、真实零值及缺测，不改变指标计算口径。&#x0A;• 完善 Android/iOS 设备检测提示，区分未授权、离线、组件异常、信任/锁屏、开发者模式和超时；部分信息读取失败时仍保留已发现设备。" />
-            </StackPanel>
-          </Border>
-          <Border Classes="helpSection">
-            <StackPanel>
-              <TextBlock Text="v0.24.1" Classes="helpTitle" />
-              <TextBlock Text="2026-09-16" Classes="dialogHint" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 收紧更新下载弹框，按内容适配高度，显示下载百分比并完整展示错误提示。&#x0A;• 设备选择框的确认按钮统一为主题主按钮样式。&#x0A;• 参数面板固定标题和实时/选中数据，仅指标列表滚动，底部保留与上方一致的空白。" />
             </StackPanel>
           </Border>
         </StackPanel>

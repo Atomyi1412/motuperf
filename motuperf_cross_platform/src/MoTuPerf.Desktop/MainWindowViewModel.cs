@@ -46,7 +46,7 @@ namespace MoTuPerf.Desktop
         private bool _chartZoomEnabled;
         private bool _followLatest = true;
         private bool _parametersCollapsed;
-        private bool _showSelectedData;
+        private DataPanelTab _dataPanelTab = DataPanelTab.Analysis;
         private bool _deviceInfoVisible;
         private bool _checkForUpdates;
         private string _skippedUpdateVersion;
@@ -63,6 +63,7 @@ namespace MoTuPerf.Desktop
             _skippedUpdateVersion = _updateSettings.LoadSkippedVersion();
             LiveDataTiles = CreateDataTiles(_liveDataTiles);
             SelectedDataTiles = CreateDataTiles(_selectedDataTiles);
+            AnalysisDataRows = new ObservableCollection<AnalysisMetricRowViewModel>();
             Metrics = new ObservableCollection<MetricRowViewModel>
             {
                 new MetricRowViewModel("Screenshot", "设备截屏", "--", "", "#4DB5E0"),
@@ -77,6 +78,7 @@ namespace MoTuPerf.Desktop
             {
                 metric.PropertyChanged += MetricChanged;
             }
+            UpdateAnalysisData();
             ToggleCaptureCommand = new RelayCommand(ToggleCapture);
 
             _sampleRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
@@ -116,7 +118,7 @@ namespace MoTuPerf.Desktop
 
         public event PropertyChangedEventHandler PropertyChanged;
         public event Action<string> CaptureStoppedUnexpectedly;
-        public string Version { get { return "v0.24.3"; } }
+        public string Version { get { return "v0.25.0"; } }
         public IReadOnlyList<AppThemeDefinition> ThemeOptions { get { return AppThemeManager.Themes; } }
         public string CurrentThemeName { get { return AppThemeManager.Current.DisplayName; } }
         public string CurrentThemePreviewColor { get { return AppThemeManager.Current.PreviewColor; } }
@@ -165,20 +167,12 @@ namespace MoTuPerf.Desktop
             }
         }
         public double ParametersWidth { get { return IsParametersCollapsed ? 42 : 398; } }
-        public bool ShowSelectedData
-        {
-            get { return _showSelectedData; }
-            private set
-            {
-                if (_showSelectedData == value) return;
-                _showSelectedData = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(ShowLiveData));
-            }
-        }
-        public bool ShowLiveData { get { return !ShowSelectedData; } }
+        public bool ShowLiveData { get { return _dataPanelTab == DataPanelTab.Live; } }
+        public bool ShowSelectedData { get { return _dataPanelTab == DataPanelTab.Selected; } }
+        public bool ShowAnalysisData { get { return _dataPanelTab == DataPanelTab.Analysis; } }
         public ObservableCollection<DataMetricTileViewModel> LiveDataTiles { get; private set; }
         public ObservableCollection<DataMetricTileViewModel> SelectedDataTiles { get; private set; }
+        public ObservableCollection<AnalysisMetricRowViewModel> AnalysisDataRows { get; private set; }
         public string TimelineLabel
         {
             get { return "时间轴  " + (!_selectedTime.HasValue ? "0s" : _selectedTime.Value.ToString("0.0", CultureInfo.InvariantCulture) + "s"); }
@@ -489,6 +483,7 @@ namespace MoTuPerf.Desktop
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(IsChartZoomed));
                 OnPropertyChanged(nameof(ShowChartZoomReset));
+                UpdateAnalysisData();
             }
         }
         public double ViewEndTime
@@ -501,6 +496,7 @@ namespace MoTuPerf.Desktop
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(IsChartZoomed));
                 OnPropertyChanged(nameof(ShowChartZoomReset));
+                UpdateAnalysisData();
             }
         }
         public bool IsChartZoomEnabled
@@ -638,6 +634,7 @@ namespace MoTuPerf.Desktop
             ViewStartTime = 0;
             ViewEndTime = 0;
             FollowLatest = true;
+            ShowLiveDataTab();
             _sessionStartedAt = DateTime.Now;
             AppInfo app = _selection.App;
             DeviceInfo device = _selection.Device;
@@ -698,6 +695,7 @@ namespace MoTuPerf.Desktop
             _screenshots.Stop();
             CancelCaptureToken();
             IsCapturing = false;
+            ShowAnalysisDataTab();
             Status = status;
             OnPropertyChanged(nameof(TargetSummary));
         }
@@ -731,6 +729,7 @@ namespace MoTuPerf.Desktop
             OnPropertyChanged(nameof(HasSessionData));
             TrimStaleLatestMetricValues();
             UpdateDataPanels();
+            UpdateAnalysisData();
         }
 
         private void SetMetric(string name, double value, string format)
@@ -812,11 +811,23 @@ namespace MoTuPerf.Desktop
         }
         public void ShowLiveDataTab()
         {
-            ShowSelectedData = false;
+            SetDataPanelTab(DataPanelTab.Live);
         }
         public void ShowSelectedDataTab()
         {
-            ShowSelectedData = true;
+            SetDataPanelTab(DataPanelTab.Selected);
+        }
+        public void ShowAnalysisDataTab()
+        {
+            SetDataPanelTab(DataPanelTab.Analysis);
+        }
+        private void SetDataPanelTab(DataPanelTab tab)
+        {
+            if (_dataPanelTab == tab) return;
+            _dataPanelTab = tab;
+            OnPropertyChanged(nameof(ShowLiveData));
+            OnPropertyChanged(nameof(ShowSelectedData));
+            OnPropertyChanged(nameof(ShowAnalysisData));
         }
         private void ResetMetricValues()
         {
@@ -827,6 +838,7 @@ namespace MoTuPerf.Desktop
             }
             ResetDataTiles(_liveDataTiles);
             ResetDataTiles(_selectedDataTiles);
+            UpdateAnalysisData();
         }
         private void UpdateSelectedMetricValues()
         {
@@ -898,6 +910,76 @@ namespace MoTuPerf.Desktop
             }
             UpdateDataPanel(_liveDataTiles, latest);
             UpdateDataPanel(_selectedDataTiles, selected);
+        }
+
+        private void UpdateAnalysisData()
+        {
+            IReadOnlyList<PerfSample> ordered = (Samples as SampleSnapshot)?.Ordered ?? Samples;
+            double maxTime = ordered.Count == 0 ? 0 : ordered.Max(delegate(PerfSample sample) { return sample == null ? 0 : sample.ElapsedSec; });
+            double start = ViewEndTime > ViewStartTime + 0.01 ? ViewStartTime : 0;
+            double end = ViewEndTime > ViewStartTime + 0.01 ? ViewEndTime : maxTime;
+            IReadOnlyList<PerfSample> visible = ordered
+                .Where(delegate(PerfSample sample) { return sample != null && sample.ElapsedSec >= start && sample.ElapsedSec <= end; })
+                .ToList();
+
+            List<AnalysisMetricRowViewModel> rows = new List<AnalysisMetricRowViewModel>();
+            AddAnalysisRow(rows, "FPS", "帧/s", visible.Where(delegate(PerfSample sample) { return sample.HasFps; }).Select(delegate(PerfSample sample) { return sample.Fps; }));
+            AddAnalysisRow(rows, "FrameTime", "ms", visible.Where(FrameTimeChartProjection.IsChartSample).Select(delegate(PerfSample sample) { return sample.FrameTimeMaxMs; }));
+            AddAnalysisRow(rows, "Jank", "次", visible.Where(delegate(PerfSample sample) { return sample.HasJank; }).Select(delegate(PerfSample sample) { return sample.Jank; }));
+            AddAnalysisRow(rows, "BigJank", "次", visible.Where(delegate(PerfSample sample) { return sample.HasJank; }).Select(delegate(PerfSample sample) { return sample.BigJank; }));
+
+            string preferredMemory = MetricStatistics.PreferredMemoryMetric(visible);
+            AddAnalysisRow(rows, "Process Memory", "MB", visible.Where(delegate(PerfSample sample)
+            {
+                return sample.HasMemory && sample.MemoryMb > 0 && MemoryMetricMatches(sample.MemoryMetric, preferredMemory);
+            }).Select(delegate(PerfSample sample) { return sample.MemoryMb; }));
+            AddAnalysisRow(rows, "CPU Raw", "%", visible.Where(delegate(PerfSample sample) { return sample.HasCpu; }).Select(delegate(PerfSample sample) { return sample.CpuPercent; }));
+            AddAnalysisRow(rows, "CPU Normalized", "%", visible.Where(delegate(PerfSample sample) { return sample.HasCpuNormalized; }).Select(delegate(PerfSample sample) { return sample.CpuNormalizedPercent; }));
+
+            int coreCount = ordered.Where(delegate(PerfSample sample) { return sample.HasCpuCoreUsage; }).Select(delegate(PerfSample sample) { return sample.CpuCoreCount; }).DefaultIfEmpty(0).Max();
+            for (int core = 0; core < coreCount; core++)
+            {
+                int index = core;
+                AddAnalysisRow(rows, "CPU " + core.ToString(CultureInfo.InvariantCulture), "%", visible.Where(delegate(PerfSample sample)
+                {
+                    return sample.HasCpuCoreUsage && sample.CpuCorePercents != null && sample.CpuCorePercents.Count > index;
+                }).Select(delegate(PerfSample sample) { return sample.CpuCorePercents[index]; }));
+            }
+
+            foreach (string sensor in PerformanceChartControl.TemperatureSensorNames(ordered))
+            {
+                string currentSensor = sensor;
+                AddAnalysisRow(rows, "Temperature / " + sensor, "°C", visible.Where(delegate(PerfSample sample)
+                {
+                    double value;
+                    return sample.HasTemperature && sample.TemperatureCelsius != null && sample.TemperatureCelsius.TryGetValue(currentSensor, out value)
+                        && IsFinite(value) && value >= -20 && value <= 120;
+                }).Select(delegate(PerfSample sample) { return sample.TemperatureCelsius[currentSensor]; }));
+            }
+            AddAnalysisRow(rows, ThermalMetricTitle, "级别", visible.Where(HasThermalStateValue).Select(delegate(PerfSample sample) { return (double)sample.ThermalStateLevel; }));
+
+            AnalysisDataRows.Clear();
+            foreach (AnalysisMetricRowViewModel row in rows) AnalysisDataRows.Add(row);
+        }
+
+        private static void AddAnalysisRow(List<AnalysisMetricRowViewModel> rows, string label, string unit, IEnumerable<double> values)
+        {
+            double[] valid = (values ?? Enumerable.Empty<double>()).Where(IsFinite).ToArray();
+            rows.Add(new AnalysisMetricRowViewModel(label, unit, valid));
+        }
+
+        private static bool MemoryMetricMatches(string sampleMetric, string preferredMetric)
+        {
+            string sample = (sampleMetric ?? "").Trim().ToLowerInvariant();
+            string preferred = (preferredMetric ?? "").Trim().ToLowerInvariant();
+            if (sample == "footprint") sample = "physical_footprint";
+            if (preferred == "footprint") preferred = "physical_footprint";
+            return sample == preferred;
+        }
+
+        private static bool IsFinite(double value)
+        {
+            return !double.IsNaN(value) && !double.IsInfinity(value);
         }
 
         private void UpdateDataPanel(Dictionary<string, DataMetricTileViewModel> tiles, PerfSample sample)
@@ -1208,6 +1290,7 @@ namespace MoTuPerf.Desktop
             OnPropertyChanged(nameof(TimelineLabel));
             OnPropertyChanged(nameof(HasScreenshots));
             OnPropertyChanged(nameof(HasSessionData));
+            ShowAnalysisDataTab();
             if (addScreenshots) CompleteScreenshotProjection();
             ApplyLatestMetricValues(prepared.LatestMetricValues, prepared.SelectedSample);
             OnPropertyChanged(nameof(TargetSummary));
@@ -1383,6 +1466,43 @@ namespace MoTuPerf.Desktop
         }
         public void Dispose() { StopCapture(Status, "window_closed"); ClearScreenshots(); _collector.Dispose(); }
         private void OnPropertyChanged([CallerMemberName] string propertyName = null) { PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName)); }
+    }
+
+    internal enum DataPanelTab
+    {
+        Live,
+        Selected,
+        Analysis
+    }
+
+    public sealed class AnalysisMetricRowViewModel
+    {
+        public AnalysisMetricRowViewModel(string label, string unit, IEnumerable<double> values)
+        {
+            Label = label;
+            Unit = unit ?? "";
+            double[] valid = (values ?? Enumerable.Empty<double>()).Where(delegate(double value)
+            {
+                return !double.IsNaN(value) && !double.IsInfinity(value);
+            }).ToArray();
+            HasData = valid.Length > 0;
+            Maximum = HasData ? Format(valid.Max()) : "--";
+            Minimum = HasData ? Format(valid.Min()) : "--";
+            Average = HasData ? Format(valid.Average()) : "--";
+        }
+
+        public string Label { get; private set; }
+        public string DisplayLabel { get { return string.IsNullOrWhiteSpace(Unit) ? Label : Label + " (" + Unit + ")"; } }
+        public string Unit { get; private set; }
+        public string Maximum { get; private set; }
+        public string Minimum { get; private set; }
+        public string Average { get; private set; }
+        public bool HasData { get; private set; }
+
+        private static string Format(double value)
+        {
+            return Math.Abs(value) >= 100 ? value.ToString("0.0", CultureInfo.InvariantCulture) : value.ToString("0.##", CultureInfo.InvariantCulture);
+        }
     }
 
     public sealed class DataMetricTileViewModel : INotifyPropertyChanged

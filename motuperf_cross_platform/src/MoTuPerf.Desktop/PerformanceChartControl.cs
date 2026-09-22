@@ -305,10 +305,11 @@ namespace MoTuPerf.Desktop
             bool showFps = ShowFps && IsSeriesVisible("FPS");
             bool showJank = ShowJank && IsSeriesVisible("Jank");
             bool showBigJank = ShowBigJank && IsSeriesVisible("BigJank");
+            IReadOnlyList<PerfSample> all = OrderedFor(samples);
             IReadOnlyList<PerfSample> visible = VisibleSamples(samples);
-            List<double> values = showFps ? visible.Where(delegate(PerfSample sample) { return sample.HasFps; }).Select(delegate(PerfSample sample) { return sample.Fps; }).ToList() : new List<double>();
-            if (showJank) values.AddRange(visible.Where(delegate(PerfSample sample) { return sample.HasJank; }).Select(delegate(PerfSample sample) { return sample.Jank; }));
-            if (showBigJank) values.AddRange(visible.Where(delegate(PerfSample sample) { return sample.HasJank; }).Select(delegate(PerfSample sample) { return sample.BigJank; }));
+            List<double> values = showFps ? all.Where(delegate(PerfSample sample) { return sample.HasFps; }).Select(delegate(PerfSample sample) { return sample.Fps; }).ToList() : new List<double>();
+            if (showJank) values.AddRange(all.Where(delegate(PerfSample sample) { return sample.HasJank; }).Select(delegate(PerfSample sample) { return sample.Jank; }));
+            if (showBigJank) values.AddRange(all.Where(delegate(PerfSample sample) { return sample.HasJank; }).Select(delegate(PerfSample sample) { return sample.BigJank; }));
             AxisRange range = AxisRange.FromValues(values, 0, 60, 5);
             DrawGrid(context, area, range.Min, range.Max, "帧/s", maxTime);
             if (showFps) DrawLine(context, area, samples, maxTime, range, Brush.Parse("#FF6B9A"), 2, 3, delegate(PerfSample sample) { return sample.Fps; }, delegate(PerfSample sample) { return sample.HasFps; }, false, true);
@@ -321,8 +322,9 @@ namespace MoTuPerf.Desktop
         private void DrawFrameTime(DrawingContext context, Rect area, IReadOnlyList<PerfSample> samples, double maxTime)
         {
             Func<PerfSample, bool> has = delegate(PerfSample sample) { return FrameTimeChartProjection.IsChartSample(sample); };
+            IReadOnlyList<PerfSample> all = OrderedFor(samples);
             IReadOnlyList<PerfSample> visible = VisibleSamples(samples);
-            AxisRange range = AxisRange.FromValues(visible.Where(has).Select(delegate(PerfSample sample) { return sample.FrameTimeMaxMs; }), 0, 35, 3);
+            AxisRange range = AxisRange.FromValues(all.Where(has).Select(delegate(PerfSample sample) { return sample.FrameTimeMaxMs; }), 0, 35, 3);
             DrawGrid(context, area, range.Min, range.Max, "ms", maxTime);
             DrawLine(context, area, samples, maxTime, range, Brush.Parse("#FF6B9A"), 2, 3, delegate(PerfSample sample) { return sample.FrameTimeMaxMs; }, has, true, false);
             DrawText(context, "Display FrameTime (Max)", area.Left, 6, 13, TextBrush);
@@ -336,8 +338,9 @@ namespace MoTuPerf.Desktop
             {
                 return sample != null && sample.HasMemory && sample.MemoryMb > 0 && MemoryMetricMatches(sample.MemoryMetric, preferred);
             };
+            IReadOnlyList<PerfSample> all = OrderedFor(samples);
             IReadOnlyList<PerfSample> visible = VisibleSamples(samples);
-            AxisRange range = AxisRange.FromValues(visible.Where(has).Select(delegate(PerfSample sample) { return sample.MemoryMb; }), 0, 100, 50);
+            AxisRange range = AxisRange.FromValues(all.Where(has).Select(delegate(PerfSample sample) { return sample.MemoryMb; }), 0, 100, 50);
             DrawGrid(context, area, range.Min, range.Max, "MB", maxTime);
             DrawLine(context, area, samples, maxTime, range, Brush.Parse("#F3C44F"), 2, 7, delegate(PerfSample sample) { return sample.MemoryMb; }, has, false, false);
             DrawText(context, "Process Memory" + (string.IsNullOrWhiteSpace(preferred) ? "" : " · " + preferred), area.Left, 6, 13, TextBrush);
@@ -346,8 +349,9 @@ namespace MoTuPerf.Desktop
 
         private void DrawSingle(DrawingContext context, Rect area, IReadOnlyList<PerfSample> samples, double maxTime, string title, string unit, string color, double floor, double defaultMax, double padding, Func<PerfSample, double> value, Func<PerfSample, bool> has, double maxGap)
         {
+            IReadOnlyList<PerfSample> all = OrderedFor(samples);
             IReadOnlyList<PerfSample> visible = VisibleSamples(samples);
-            AxisRange range = AxisRange.FromValues(visible.Where(has).Select(value), floor, defaultMax, padding);
+            AxisRange range = AxisRange.FromValues(all.Where(has).Select(value), floor, defaultMax, padding);
             DrawGrid(context, area, range.Min, range.Max, unit, maxTime);
             DrawLine(context, area, samples, maxTime, range, Brush.Parse(color), 2, maxGap, value, has, false, false);
             DrawText(context, title, area.Left, 6, 13, TextBrush);
@@ -356,14 +360,15 @@ namespace MoTuPerf.Desktop
 
         private void DrawCoreCpu(DrawingContext context, Rect area, IReadOnlyList<PerfSample> samples, double maxTime)
         {
-            int count = samples.Where(delegate(PerfSample sample) { return sample.HasCpuCoreUsage; }).Select(delegate(PerfSample sample) { return sample.CpuCoreCount; }).DefaultIfEmpty(0).Max();
+            IReadOnlyList<PerfSample> all = OrderedFor(samples);
+            int count = all.Where(delegate(PerfSample sample) { return sample.HasCpuCoreUsage; }).Select(delegate(PerfSample sample) { return sample.CpuCoreCount; }).DefaultIfEmpty(0).Max();
             IReadOnlyList<PerfSample> visible = VisibleSamples(samples);
             List<double> values = new List<double>();
             for (int index = 0; index < count; index++)
             {
                 if (!IsSeriesVisible(CoreSeriesName(index))) continue;
                 int core = index;
-                values.AddRange(visible.Where(delegate(PerfSample sample) { return sample.HasCpuCoreUsage && sample.CpuCorePercents != null && sample.CpuCorePercents.Count > core; }).Select(delegate(PerfSample sample) { return sample.CpuCorePercents[core]; }));
+                values.AddRange(all.Where(delegate(PerfSample sample) { return sample.HasCpuCoreUsage && sample.CpuCorePercents != null && sample.CpuCorePercents.Count > core; }).Select(delegate(PerfSample sample) { return sample.CpuCorePercents[core]; }));
             }
             AxisRange range = AxisRange.FromValues(values, 0, 100, 5);
             DrawGrid(context, area, range.Min, range.Max, "%", maxTime);
@@ -382,12 +387,13 @@ namespace MoTuPerf.Desktop
         private void DrawTemperature(DrawingContext context, Rect area, IReadOnlyList<PerfSample> samples, double maxTime)
         {
             List<string> sensors = TemperatureSensorNames(samples);
+            IReadOnlyList<PerfSample> all = OrderedFor(samples);
             IReadOnlyList<PerfSample> visible = VisibleSamples(samples);
             List<double> values = new List<double>();
             foreach (string sensor in sensors)
             {
                 if (!IsSeriesVisible(TemperatureSeriesName(sensor))) continue;
-                values.AddRange(visible.Where(delegate(PerfSample sample) { return HasTemperatureValue(sample, sensor); }).Select(delegate(PerfSample sample) { return sample.TemperatureCelsius[sensor]; }));
+                values.AddRange(all.Where(delegate(PerfSample sample) { return HasTemperatureValue(sample, sensor); }).Select(delegate(PerfSample sample) { return sample.TemperatureCelsius[sensor]; }));
             }
             AxisRange range = AxisRange.FromTemperatureValues(values);
             DrawGrid(context, area, range.Min, range.Max, "°C", maxTime);

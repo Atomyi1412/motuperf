@@ -486,6 +486,19 @@
     <Style Selector="TextBlock.dataTabText">
       <Setter Property="Foreground" Value="{DynamicResource Theme.TextMuted}" />
     </Style>
+    <Style Selector="TextBlock.analysisHeaderText">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.analysisValueText">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="FontSize" Value="11" />
+    </Style>
+    <Style Selector="Border.analysisRow">
+      <Setter Property="Background" Value="{DynamicResource Theme.SelectedBackground}" />
+      <Setter Property="CornerRadius" Value="3" />
+    </Style>
     <Style Selector="Button.dataTab:pointerover TextBlock.dataTabText">
       <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
     </Style>

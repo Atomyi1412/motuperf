@@ -8,7 +8,7 @@
     <AvaloniaNameGeneratorIsEnabled>false</AvaloniaNameGeneratorIsEnabled>
     <AssemblyName>MoTuPerf.CrossPlatform</AssemblyName>
     <RootNamespace>MoTuPerf.Desktop</RootNamespace>
-    <Version>0.24.3</Version>
+    <Version>0.25.0</Version>
     <ApplicationIcon Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(MSBuildProjectDirectory)\..\..\..\csharp_perf_monitor\assets\motu-icon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>

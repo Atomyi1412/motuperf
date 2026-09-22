@@ -133,12 +133,15 @@
 
             <Border Grid.Row="1" x:Name="ParameterDataPanel" Classes="dataPanel" CornerRadius="5" Padding="10" Margin="14,20,14,12">
               <StackPanel>
-              <Grid ColumnDefinitions="*,*" Margin="0,0,0,10">
-                <Button x:Name="LiveDataTabButton" Classes="dataTab activeTab" Click="ShowLiveDataTab">
+              <Grid ColumnDefinitions="*,*,*" Margin="0,0,0,10">
+                <Button x:Name="LiveDataTabButton" Classes="dataTab" Click="ShowLiveDataTab">
                   <TextBlock Text="实时数据" Classes="dataTabText" />
                 </Button>
                 <Button x:Name="SelectedDataTabButton" Grid.Column="1" Classes="dataTab" Click="ShowSelectedDataTab">
                   <TextBlock Text="选中数据" Classes="dataTabText" />
+                </Button>
+                <Button x:Name="AnalysisDataTabButton" Grid.Column="2" Classes="dataTab activeTab" Click="ShowAnalysisDataTab">
+                  <TextBlock Text="分析数据" Classes="dataTabText" />
                 </Button>
               </Grid>
                 <Grid>
@@ -172,6 +175,30 @@
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
+                  <Grid IsVisible="{Binding ShowAnalysisData}" RowDefinitions="Auto,*" Height="278" MinHeight="278" MaxHeight="278">
+                    <Grid Grid.Row="0" ColumnDefinitions="1.6*,*,*,*" Margin="0,0,16,5">
+                      <TextBlock Text="指标" Classes="analysisHeaderText" />
+                      <TextBlock Grid.Column="1" Text="最大值" Classes="analysisHeaderText" HorizontalAlignment="Right" />
+                      <TextBlock Grid.Column="2" Text="最小值" Classes="analysisHeaderText" HorizontalAlignment="Right" />
+                      <TextBlock Grid.Column="3" Text="平均值" Classes="analysisHeaderText" HorizontalAlignment="Right" />
+                    </Grid>
+                    <ScrollViewer Grid.Row="1" Padding="0,0,16,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                      <ItemsControl ItemsSource="{Binding AnalysisDataRows}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="vm:AnalysisMetricRowViewModel">
+                            <Border Classes="analysisRow" Padding="6,5" Margin="0,0,0,3">
+                              <Grid ColumnDefinitions="1.6*,*,*,*">
+                                <TextBlock Text="{Binding DisplayLabel}" Classes="analysisValueText" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="1" Text="{Binding Maximum}" Classes="analysisValueText" HorizontalAlignment="Right" />
+                                <TextBlock Grid.Column="2" Text="{Binding Minimum}" Classes="analysisValueText" HorizontalAlignment="Right" />
+                                <TextBlock Grid.Column="3" Text="{Binding Average}" Classes="analysisValueText" HorizontalAlignment="Right" />
+                              </Grid>
+                            </Border>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </ScrollViewer>
+                  </Grid>
                 </Grid>
               </StackPanel>
             </Border>

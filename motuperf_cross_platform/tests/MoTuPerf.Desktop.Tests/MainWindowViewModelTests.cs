@@ -45,6 +45,74 @@ namespace MoTuPerf.Desktop.Tests
                 Assert.All(viewModel.Metrics, delegate(MetricRowViewModel metric) { Assert.True(metric.IsEnabled); });
                 Assert.True(viewModel.ShowFrameMetrics);
                 Assert.True(viewModel.ShowCoreCpu);
+                Assert.False(viewModel.ShowLiveData);
+                Assert.False(viewModel.ShowSelectedData);
+                Assert.True(viewModel.ShowAnalysisData);
+                Assert.NotEmpty(viewModel.AnalysisDataRows);
+                Assert.All(viewModel.AnalysisDataRows, delegate(AnalysisMetricRowViewModel row)
+                {
+                    Assert.Equal("--", row.Maximum);
+                    Assert.Equal("--", row.Minimum);
+                    Assert.Equal("--", row.Average);
+                });
+            }
+        }
+
+        [Fact]
+        public void AnalysisDataUsesCurrentIntervalAndPreservesMissingAndZeroValues()
+        {
+            using (MainWindowViewModel viewModel = new MainWindowViewModel())
+            {
+                viewModel.ApplySample(new PerfSample { ElapsedSec = 1, HasFps = true, Fps = 0, HasCpu = true, CpuPercent = 20, HasMemory = true, MemoryMb = 100, MemoryMetric = "rss" });
+                viewModel.ApplySample(new PerfSample { ElapsedSec = 2, HasFps = true, Fps = 60, HasCpu = true, CpuPercent = 40, HasMemory = true, MemoryMb = 200, MemoryMetric = "rss" });
+                viewModel.ApplySample(new PerfSample { ElapsedSec = 90, HasFps = true, Fps = 30, HasCpu = true, CpuPercent = 80, HasMemory = true, MemoryMb = 300, MemoryMetric = "rss" });
+
+                AnalysisMetricRowViewModel fps = viewModel.AnalysisDataRows.First(delegate(AnalysisMetricRowViewModel row) { return row.Label == "FPS"; });
+                Assert.Equal("60", fps.Maximum);
+                Assert.Equal("0", fps.Minimum);
+                Assert.Equal("30", fps.Average);
+
+                viewModel.IsChartZoomEnabled = true;
+                viewModel.ApplyChartZoom(1, 2);
+                fps = viewModel.AnalysisDataRows.First(delegate(AnalysisMetricRowViewModel row) { return row.Label == "FPS"; });
+                Assert.Equal("60", fps.Maximum);
+                Assert.Equal("0", fps.Minimum);
+                Assert.Equal("30", fps.Average);
+
+                AnalysisMetricRowViewModel cpu = viewModel.AnalysisDataRows.First(delegate(AnalysisMetricRowViewModel row) { return row.Label == "CPU Raw"; });
+                Assert.Equal("40", cpu.Maximum);
+                Assert.Equal("20", cpu.Minimum);
+                Assert.Equal("30", cpu.Average);
+            }
+        }
+
+        [Fact]
+        public void SelectedTimeDoesNotRestrictAnalysisToSelectedSample()
+        {
+            using (MainWindowViewModel viewModel = new MainWindowViewModel())
+            {
+                viewModel.ApplySample(new PerfSample { ElapsedSec = 1, HasFps = true, Fps = 10 });
+                viewModel.ApplySample(new PerfSample { ElapsedSec = 2, HasFps = true, Fps = 30 });
+                viewModel.SelectTimeFromChart(1);
+
+                AnalysisMetricRowViewModel fps = viewModel.AnalysisDataRows.First(delegate(AnalysisMetricRowViewModel row) { return row.Label == "FPS"; });
+                Assert.Equal("30", fps.Maximum);
+                Assert.Equal("10", fps.Minimum);
+                Assert.Equal("20", fps.Average);
+            }
+        }
+
+        [Fact]
+        public void DataPanelDefaultsFollowCaptureLifecycle()
+        {
+            using (MainWindowViewModel viewModel = new MainWindowViewModel())
+            {
+                viewModel.ShowLiveDataTab();
+                Assert.True(viewModel.ShowLiveData);
+                Assert.False(viewModel.ShowAnalysisData);
+                viewModel.ShowAnalysisDataTab();
+                Assert.True(viewModel.ShowAnalysisData);
+                Assert.False(viewModel.ShowSelectedData);
             }
         }
 

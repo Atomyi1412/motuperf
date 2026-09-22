@@ -25,10 +25,24 @@ namespace MoTuPerf.Desktop.Tests
 
             XElement liveTab = Named(main, "LiveDataTabButton");
             XElement selectedTab = Named(main, "SelectedDataTabButton");
-            Assert.Contains("activeTab", Attribute(liveTab, "Classes"));
+            XElement analysisTab = Named(main, "AnalysisDataTabButton");
+            Assert.DoesNotContain("activeTab", Attribute(liveTab, "Classes"));
             Assert.DoesNotContain("activeTab", Attribute(selectedTab, "Classes"));
+            Assert.Contains("activeTab", Attribute(analysisTab, "Classes"));
             Assert.Equal("dataTabText", Attribute(liveTab.Elements().Single(), "Classes"));
             Assert.Equal("dataTabText", Attribute(selectedTab.Elements().Single(), "Classes"));
+            Assert.Equal("dataTabText", Attribute(analysisTab.Elements().Single(), "Classes"));
+            Assert.Equal("{Binding AnalysisDataRows}", Attribute(main.Descendants(Avalonia + "ItemsControl").Single(element => Attribute(element, "ItemsSource") == "{Binding AnalysisDataRows}"), "ItemsSource"));
+            XElement analysisGrid = main.Descendants(Avalonia + "Grid").Single(element => Attribute(element, "IsVisible") == "{Binding ShowAnalysisData}");
+            Assert.Equal("278", Attribute(analysisGrid, "Height"));
+            Assert.Equal("278", Attribute(analysisGrid, "MinHeight"));
+            XElement analysisHeader = analysisGrid.Elements(Avalonia + "Grid").First();
+            Assert.Equal("0,0,16,5", Attribute(analysisHeader, "Margin"));
+            XElement analysisScrollViewer = analysisGrid.Descendants(Avalonia + "ScrollViewer").Single();
+            Assert.Equal("0,0,16,0", Attribute(analysisScrollViewer, "Padding"));
+            Assert.Contains(main.Descendants(Avalonia + "TextBlock"), element => Attribute(element, "Text") == "最大值");
+            Assert.Contains(main.Descendants(Avalonia + "TextBlock"), element => Attribute(element, "Text") == "最小值");
+            Assert.Contains(main.Descendants(Avalonia + "TextBlock"), element => Attribute(element, "Text") == "平均值");
 
             Assert.Contains(main.Descendants(Avalonia + "Grid"), delegate(XElement grid)
             {
@@ -315,7 +329,7 @@ namespace MoTuPerf.Desktop.Tests
             string version = project.Descendants("Version").Single().Value;
             string[] components = version.Split('.');
 
-            Assert.Equal("0.24.3", version);
+            Assert.Equal("0.25.0", version);
             Assert.Equal(3, components.Length);
             Assert.All(components, component => Assert.True(int.TryParse(component, out _)));
             Assert.DoesNotContain("-", version);
@@ -449,9 +463,10 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Equal("更新日志", Attribute(changelog.Root, "Title"));
             Assert.Contains(changelog.Descendants(Avalonia + "Border"), border => Attribute(border, "Classes") == "secondaryWindowFrame");
             string changelogText = string.Join(" ", changelog.Descendants(Avalonia + "TextBlock").Select(element => Attribute(element, "Text")));
+            Assert.Contains("v0.25.0", changelogText);
             Assert.Contains("v0.24.3", changelogText);
             Assert.Contains("v0.24.2", changelogText);
-            Assert.Contains("v0.24.1", changelogText);
+            Assert.DoesNotContain("v0.24.1", changelogText);
             Assert.DoesNotContain("v0.23.0", changelogText);
             Assert.DoesNotContain("v0.24.0", changelogText);
             Assert.Contains(changelog.Descendants(Avalonia + "Button"), button => Attribute(button, "Content") == "查看完整在线更新日志"

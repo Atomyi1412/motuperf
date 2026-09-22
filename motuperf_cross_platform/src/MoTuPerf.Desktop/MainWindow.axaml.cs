@@ -74,11 +74,15 @@ namespace MoTuPerf.Desktop
                 UpdateSeriesLegends();
             }
             if (e.PropertyName == nameof(MainWindowViewModel.Samples)
+                || e.PropertyName == nameof(MainWindowViewModel.ShowLiveData)
+                || e.PropertyName == nameof(MainWindowViewModel.ShowSelectedData)
+                || e.PropertyName == nameof(MainWindowViewModel.ShowAnalysisData)
                 || e.PropertyName == nameof(MainWindowViewModel.ShowFps)
                 || e.PropertyName == nameof(MainWindowViewModel.ShowJank)
                 || e.PropertyName == nameof(MainWindowViewModel.ShowBigJank))
             {
                 UpdateSeriesLegends();
+                UpdateDataTabState();
             }
         }
 
@@ -423,14 +427,24 @@ namespace MoTuPerf.Desktop
             UpdateDataTabState();
         }
 
+        private void ShowAnalysisDataTab(object sender, RoutedEventArgs e)
+        {
+            MainWindowViewModel viewModel = DataContext as MainWindowViewModel;
+            if (viewModel == null) return;
+            viewModel.ShowAnalysisDataTab();
+            UpdateDataTabState();
+        }
+
         private void UpdateDataTabState()
         {
             MainWindowViewModel viewModel = DataContext as MainWindowViewModel;
             Button live = this.FindControl<Button>("LiveDataTabButton");
             Button selected = this.FindControl<Button>("SelectedDataTabButton");
-            if (viewModel == null || live == null || selected == null) return;
+            Button analysis = this.FindControl<Button>("AnalysisDataTabButton");
+            if (viewModel == null || live == null || selected == null || analysis == null) return;
             live.Classes.Set("activeTab", viewModel.ShowLiveData);
             selected.Classes.Set("activeTab", viewModel.ShowSelectedData);
+            analysis.Classes.Set("activeTab", viewModel.ShowAnalysisData);
         }
 
         private void ChartTimeSelected(double elapsedSeconds)
