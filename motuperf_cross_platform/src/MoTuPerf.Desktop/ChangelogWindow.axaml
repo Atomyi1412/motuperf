@@ -26,6 +26,13 @@
         <StackPanel Margin="22,10,18,12" Spacing="9">
           <Border Classes="helpSection">
             <StackPanel>
+              <TextBlock Text="v0.25.2" Classes="helpTitle" />
+              <TextBlock Text="2026-09-22" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 移除数据显示区域重复展示的设备与进程状态，保留标题栏状态信息，释放内容区空间。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel>
               <TextBlock Text="v0.25.1" Classes="helpTitle" />
               <TextBlock Text="2026-09-22" Classes="dialogHint" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 移除顶部无实际操作作用的“时间轴跟随”文字，减少界面干扰。" />
@@ -36,13 +43,6 @@
               <TextBlock Text="v0.25.0" Classes="helpTitle" />
               <TextBlock Text="2026-09-21" Classes="dialogHint" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 新增“分析数据”页签，未选中具体数据点时按当前完整查看区间展示各指标的最大值、最小值和平均值；曲线缩放后按缩放区间统计。&#xA;• 修复分析面板高度塌缩问题，空采集数据也保留指标列表，缺测值显示为 --，不把真实 0 当成缺测。&#xA;• 同步升级客户端版本号和构建说明。" />
-            </StackPanel>
-          </Border>
-          <Border Classes="helpSection">
-            <StackPanel>
-              <TextBlock Text="v0.24.3" Classes="helpTitle" />
-              <TextBlock Text="2026-09-18" Classes="dialogHint" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 精简设备选择页的检测状态，只保留跨平台总状态和 Android/iOS 简短提示，减少重复诊断文字对设备、应用和进程区域的挤压。&#xA;• 新增“查看检测详情”二级弹框，完整保留本轮 Android/iOS 检测原因；苹果驱动下载/修复入口继续按实际检测结果显示。" />
             </StackPanel>
           </Border>
         </StackPanel>

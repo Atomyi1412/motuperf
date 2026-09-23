@@ -239,8 +239,6 @@
               <TextBlock Text="&#xE9D9;" Classes="symbol" Margin="0,0,10,0" />
               <TextBlock Text="数据显示" Classes="sectionTitle" />
             </StackPanel>
-            <TextBlock Text="{Binding Status}" Classes="muted" HorizontalAlignment="Right" VerticalAlignment="Center"
-                       Margin="0,0,16,0" TextTrimming="CharacterEllipsis" />
           </Grid>
         </Border>
 
