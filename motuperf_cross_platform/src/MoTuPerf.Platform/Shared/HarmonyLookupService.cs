@@ -434,6 +434,10 @@ namespace CSharpIosPerfMonitor
             string[][] commands = new[]
             {
                 new[] { "ps", "-A", "-o", "PID,ARGS" },
+                new[] { "ps", "-A", "-o", "UID,PID,PPID,ARGS" },
+                new[] { "ps", "-A", "-o", "USER,PID,PPID,ARGS" },
+                new[] { "ps", "-A", "-o", "PID,UID,PPID,ARGS" },
+                new[] { "ps", "-A", "-o", "PID,USER,PPID,ARGS" },
                 new[] { "ps", "-ef" },
                 new[] { "ps", "-A" },
                 new[] { "ps" }
@@ -1054,16 +1058,51 @@ namespace CSharpIosPerfMonitor
                     byPid[process.Pid] = process;
                     continue;
                 }
-                bool replace = string.IsNullOrWhiteSpace(existing.BundleId) && !string.IsNullOrWhiteSpace(process.BundleId);
-                if (!replace && existing.HarmonyStartTimeTicks <= 0 && process.HarmonyStartTimeTicks > 0) replace = true;
-                if (!replace && existing.HarmonyUserId < 0 && process.HarmonyUserId >= 0) replace = true;
-                if (replace) byPid[process.Pid] = process;
+                MergeProcessFields(existing, process);
             }
             return byPid.Values
                 .OrderByDescending(delegate(ProcessInfo process) { return process.Recommended; })
                 .ThenBy(delegate(ProcessInfo process) { return process.Name; })
                 .ThenBy(delegate(ProcessInfo process) { return process.Pid; })
                 .ToList();
+        }
+
+        private static void MergeProcessFields(ProcessInfo target, ProcessInfo source)
+        {
+            if (target == null || source == null) return;
+
+            // Different Harmony ps implementations expose different columns.
+            // Merge each field independently so a later, sparse view cannot
+            // erase an application identity found by an earlier view.
+            target.Name = FirstNonEmpty(target.Name, source.Name);
+            target.BundleId = FirstNonEmpty(target.BundleId, source.BundleId);
+            target.DisplayName = FirstNonEmpty(target.DisplayName, source.DisplayName);
+            target.DeviceUdid = FirstNonEmpty(target.DeviceUdid, source.DeviceUdid);
+            target.StartedAt = FirstNonEmpty(target.StartedAt, source.StartedAt);
+            target.OwnerName = FirstNonEmpty(target.OwnerName, source.OwnerName);
+            target.OwnerBundleId = FirstNonEmpty(target.OwnerBundleId, source.OwnerBundleId);
+            target.OwnerDisplayName = FirstNonEmpty(target.OwnerDisplayName, source.OwnerDisplayName);
+            target.OwnershipSource = FirstNonEmpty(target.OwnershipSource, source.OwnershipSource);
+            target.ApplicationState = FirstNonEmpty(target.ApplicationState, source.ApplicationState);
+            target.ApplicationExecutablePath = FirstNonEmpty(target.ApplicationExecutablePath, source.ApplicationExecutablePath);
+            target.Platform = FirstNonEmpty(target.Platform, source.Platform);
+            target.Reason = FirstNonEmpty(target.Reason, source.Reason);
+            target.IconKey = FirstNonEmpty(target.IconKey, source.IconKey);
+            target.IconPath = FirstNonEmpty(target.IconPath, source.IconPath);
+
+            if (target.HarmonyUserId < 0 && source.HarmonyUserId >= 0) target.HarmonyUserId = source.HarmonyUserId;
+            if (target.ResponsiblePid <= 0 && source.ResponsiblePid > 0) target.ResponsiblePid = source.ResponsiblePid;
+            if (target.OwnerPid <= 0 && source.OwnerPid > 0) target.OwnerPid = source.OwnerPid;
+            if (target.CoalitionId <= 0 && source.CoalitionId > 0) target.CoalitionId = source.CoalitionId;
+            if (target.StartAbsTime <= 0 && source.StartAbsTime > 0) target.StartAbsTime = source.StartAbsTime;
+            if (target.AndroidStartTimeTicks <= 0 && source.AndroidStartTimeTicks > 0) target.AndroidStartTimeTicks = source.AndroidStartTimeTicks;
+            if (target.HarmonyStartTimeTicks <= 0 && source.HarmonyStartTimeTicks > 0) target.HarmonyStartTimeTicks = source.HarmonyStartTimeTicks;
+            if (target.ProcessUniqueId <= 0 && source.ProcessUniqueId > 0) target.ProcessUniqueId = source.ProcessUniqueId;
+
+            target.OwnershipVerified = target.OwnershipVerified || source.OwnershipVerified;
+            target.OwnershipAmbiguous = target.OwnershipAmbiguous || source.OwnershipAmbiguous;
+            target.ForegroundApplication = target.ForegroundApplication || source.ForegroundApplication;
+            target.Recommended = target.Recommended || source.Recommended;
         }
 
         internal static List<string> ParseAndroidPackages(string output)

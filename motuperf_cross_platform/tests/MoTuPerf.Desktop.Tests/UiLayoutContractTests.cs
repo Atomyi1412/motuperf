@@ -344,7 +344,7 @@ namespace MoTuPerf.Desktop.Tests
             string version = project.Descendants("Version").Single().Value;
             string[] components = version.Split('.');
 
-            Assert.Equal("0.38.12", version);
+            Assert.Equal("0.38.13", version);
             Assert.Equal(3, components.Length);
             Assert.All(components, component => Assert.True(int.TryParse(component, out _)));
             Assert.DoesNotContain("-", version);
@@ -478,9 +478,9 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Equal("更新日志", Attribute(changelog.Root, "Title"));
             Assert.Contains(changelog.Descendants(Avalonia + "Border"), border => Attribute(border, "Classes") == "secondaryWindowFrame");
             string changelogText = string.Join(" ", changelog.Descendants(Avalonia + "TextBlock").Select(element => Attribute(element, "Text")));
+            Assert.Contains("v0.38.13", changelogText);
             Assert.Contains("v0.38.12", changelogText);
             Assert.Contains("v0.38.11", changelogText);
-            Assert.Contains("v0.38.10", changelogText);
             Assert.DoesNotContain("v0.38.9", changelogText);
             Assert.DoesNotContain("v0.38.7", changelogText);
             Assert.DoesNotContain("v0.38.2", changelogText);

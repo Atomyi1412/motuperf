@@ -26,23 +26,23 @@
         <StackPanel Margin="22,10,18,12" Spacing="9">
            <Border Classes="helpSection">
              <StackPanel>
+               <TextBlock Text="v0.38.13" Classes="helpTitle" />
+               <TextBlock Text="2026-09-25" Classes="dialogHint" />
+               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 扩展鸿蒙进程读取，兼容 UID/USER + PID + PPID + ARGS 及 PID 在前的常见 ps 列组合，减少厂商输出差异造成的进程漏列。&#xA;• 修复同一 PID 合并多种 ps 视图时整条记录被覆盖的问题，Bundle、用户、启动时间、设备和进程归属等字段按值补全，保留最完整的真实身份。&#xA;• 增加用户字段列变体、字段级合并和命令回退回归测试。本版本只保留本地，等待鸿蒙真机逐类验收确认前不推送、不打标签、不创建 Release。" />
+           </StackPanel>
+          </Border>
+           <Border Classes="helpSection">
+             <StackPanel>
                <TextBlock Text="v0.38.12" Classes="helpTitle" />
                <TextBlock Text="2026-09-25" Classes="dialogHint" />
                <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复鸿蒙应用清单在合并运行进程时只按 Bundle ID 绑定的问题，同一应用在主用户、工作资料、访客或副用户下现在分别匹配真实 PID，避免跨用户误采集。&#xA;• 鸿蒙应用列表在合并进程前统一拆分用户实例；原生、系统/预装、Android 兼容和仅运行中的应用都保留真实应用或进程身份，缺少可靠入口时仍可手动选择进程采集。&#xA;• 增加同 Bundle 多用户进程绑定回归测试。本版本仅保留本地，等待鸿蒙真机逐类验收确认前不推送、不打标签、不创建 Release。" />
-           </StackPanel>
-          </Border>
+             </StackPanel>
+           </Border>
            <Border Classes="helpSection">
              <StackPanel>
                <TextBlock Text="v0.38.11" Classes="helpTitle" />
                <TextBlock Text="2026-09-25" Classes="dialogHint" />
                <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复鸿蒙同一 Bundle 在多个用户资料中被合并成一行的问题，用户 0、工作资料和副用户现在分别显示并按所选用户启动或绑定进程。&#xA;• 兼容 u100_a123 和数字 UID 等常见进程身份格式；合并多种 ps 输出时保留更完整的用户归属，避免把进程绑定到错误用户。&#xA;• 修复应用筛选和图标异步刷新后按 Bundle 错误回选的问题，当前应用会同时按 Bundle 和用户资料恢复。本版本仅保留本地，等待鸿蒙真机逐类验收确认前不推送、不打标签、不创建 Release。" />
-             </StackPanel>
-           </Border>
-           <Border Classes="helpSection">
-             <StackPanel>
-               <TextBlock Text="v0.38.10" Classes="helpTitle" />
-               <TextBlock Text="2026-09-25" Classes="dialogHint" />
-               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复部分 HDC 版本把 [Fail] 写入标准错误时仍被当作成功，避免无设备或断连状态继续解析成有效进程数据。&#xA;• 鸿蒙启动命令失败后会重新读取真实进程列表；如果应用已经启动且能唯一匹配目标进程，则自动绑定真实 PID，否则保留明确提示并要求手动选择，避免采集错误进程。&#xA;• 增加 HDC 错误流和启动后进程刷新回归测试。本版本仅保留本地，等待鸿蒙真机逐类验收确认前不推送、不打标签、不创建 Release。" />
              </StackPanel>
            </Border>
         </StackPanel>

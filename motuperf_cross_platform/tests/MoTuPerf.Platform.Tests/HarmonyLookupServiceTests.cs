@@ -750,6 +750,71 @@ namespace MoTuPerf.Platform.Tests
         }
 
         [Fact]
+        public void ParsesUidUserAndPidFirstPsColumnVariants()
+        {
+            var rows = HarmonyLookupService.ParseProcesses(
+                "UID PID PPID ARGS\n"
+                + "u100_a1 801 1 com.example.uid\n"
+                + "USER PID PPID ARGS\n"
+                + "u200_a2 802 1 com.example.user\n"
+                + "PID UID PPID ARGS\n"
+                + "803 300123 1 com.example.uidfirst\n"
+                + "PID USER PPID ARGS\n"
+                + "804 u400_a4 1 com.example.userfirst\n", "device");
+
+            Assert.Equal(4, rows.Count);
+            Assert.Equal(100, rows.Single(row => row.Pid == 801).HarmonyUserId);
+            Assert.Equal(200, rows.Single(row => row.Pid == 802).HarmonyUserId);
+            Assert.Equal(3, rows.Single(row => row.Pid == 803).HarmonyUserId);
+            Assert.Equal(400, rows.Single(row => row.Pid == 804).HarmonyUserId);
+        }
+
+        [Fact]
+        public void MergesProcessViewsFieldByFieldWithoutLosingIdentity()
+        {
+            var first = new ProcessInfo
+            {
+                Pid = 901,
+                Name = "com.example.rich",
+                BundleId = "com.example.rich",
+                DisplayName = "Rich App",
+                DeviceUdid = "device",
+                HarmonyUserId = 100,
+                HarmonyStartTimeTicks = 12345,
+                ForegroundApplication = true,
+                Recommended = true
+            };
+            var second = new ProcessInfo
+            {
+                Pid = 901,
+                Name = "com.example.rich",
+                OwnerName = "appspawn",
+                OwnerBundleId = "com.example.owner",
+                StartedAt = "10:12:13",
+                ApplicationState = "foreground",
+                ApplicationExecutablePath = "/system/bin/com.example.rich",
+                OwnershipVerified = true,
+                OwnerPid = 12
+            };
+
+            List<ProcessInfo> merged = HarmonyLookupService.MergeProcesses(new[] { first, second });
+
+            ProcessInfo result = Assert.Single(merged);
+            Assert.Equal("com.example.rich", result.BundleId);
+            Assert.Equal("Rich App", result.DisplayName);
+            Assert.Equal(100, result.HarmonyUserId);
+            Assert.Equal(12345, result.HarmonyStartTimeTicks);
+            Assert.Equal("com.example.owner", result.OwnerBundleId);
+            Assert.Equal("10:12:13", result.StartedAt);
+            Assert.Equal("foreground", result.ApplicationState);
+            Assert.Equal("/system/bin/com.example.rich", result.ApplicationExecutablePath);
+            Assert.Equal(12, result.OwnerPid);
+            Assert.True(result.OwnershipVerified);
+            Assert.True(result.ForegroundApplication);
+            Assert.True(result.Recommended);
+        }
+
+        [Fact]
         public void FindsBundleInProcessCommandArguments()
         {
             var rows = HarmonyLookupService.ParseProcesses(
@@ -1226,6 +1291,40 @@ namespace MoTuPerf.Platform.Tests
             List<ProcessInfo> processes = await service.ListProcessesAsync("HARMONY-1", CancellationToken.None);
 
             Assert.Contains(processes, process => process.Pid == 801 && process.BundleId == "com.example.partial.process");
+        }
+
+        [Fact]
+        public async Task FallsBackToUidPidPpidArgsProcessCommandVariant()
+        {
+            List<string> commands = new List<string>();
+
+            Task<ProcessResult> ExecuteFakeHdcAsync(
+                string serial,
+                string[] command,
+                int timeoutMs,
+                CancellationToken token)
+            {
+                string key = string.Join(" ", command ?? Array.Empty<string>());
+                commands.Add(key);
+                if (key == "ps -A -o UID,PID,PPID,ARGS")
+                    return Task.FromResult(new ProcessResult(0,
+                        "UID PID PPID ARGS\n"
+                        + "u100_a1 902 1 com.example.rich\n", ""));
+                if (key.StartsWith("ps", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(1, "", "unsupported ps columns"));
+                if (key.StartsWith("sh -c ", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(0, "", ""));
+                return Task.FromResult(new ProcessResult(1, "", "unsupported fake HDC command"));
+            }
+
+            var service = new HarmonyLookupService(ExecuteFakeHdcAsync);
+            List<ProcessInfo> processes = await service.ListProcessesAsync("HARMONY-1", CancellationToken.None);
+
+            ProcessInfo process = Assert.Single(processes);
+            Assert.Equal(902, process.Pid);
+            Assert.Equal("com.example.rich", process.BundleId);
+            Assert.Equal(100, process.HarmonyUserId);
+            Assert.Contains("ps -A -o UID,PID,PPID,ARGS", commands);
         }
 
         [Fact]
