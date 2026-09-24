@@ -64,6 +64,16 @@ namespace MoTuPerf.Platform
             }
         }
 
+        public string HdcExecutable
+        {
+            get
+            {
+                return OperatingSystem == "windows"
+                    ? Path.Combine(RuntimeDirectory, "harmony", "hdc.exe")
+                    : Path.Combine(RuntimeDirectory, "harmony", "hdc");
+            }
+        }
+
         public string UserDataDirectory
         {
             get

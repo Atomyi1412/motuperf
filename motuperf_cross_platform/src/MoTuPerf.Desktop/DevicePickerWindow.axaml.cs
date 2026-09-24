@@ -20,6 +20,7 @@ namespace MoTuPerf.Desktop
         private Button DeviceDiagnosticsButton;
         private TextBlock AndroidStatusText;
         private TextBlock IosStatusText;
+        private TextBlock HarmonyStatusText;
         private TextBlock StatusText;
         private ComboBox DeviceList;
         private ListBox AppList;
@@ -81,6 +82,7 @@ namespace MoTuPerf.Desktop
             DeviceDiagnosticsButton = this.FindControl<Button>("DeviceDiagnosticsButton");
             AndroidStatusText = this.FindControl<TextBlock>("AndroidStatusText");
             IosStatusText = this.FindControl<TextBlock>("IosStatusText");
+            HarmonyStatusText = this.FindControl<TextBlock>("HarmonyStatusText");
             StatusText = DeviceCountText;
             DeviceList = this.FindControl<ComboBox>("DeviceList");
             AppList = this.FindControl<ListBox>("AppList");
@@ -143,6 +145,7 @@ namespace MoTuPerf.Desktop
             DeviceCountText.Text = _deviceDiagnostics.OverallStatus;
             AndroidStatusText.Text = _deviceDiagnostics.AndroidSummary;
             IosStatusText.Text = _deviceDiagnostics.IosSummary;
+            HarmonyStatusText.Text = _deviceDiagnostics.HarmonySummary;
             DeviceDiagnosticsButton.IsEnabled = _deviceDiagnostics.IsReady;
         }
 
@@ -340,7 +343,7 @@ namespace MoTuPerf.Desktop
                 string selectedBundle = FirstNonEmpty(
                     selectedApp == null ? "" : selectedApp.BundleId,
                     _initialSelection == null || _initialSelection.App == null ? "" : _initialSelection.App.BundleId);
-                if (!DeviceLookupService.IsAndroid(device))
+                if (DeviceLookupService.IsIos(device))
                 {
                     source = source.Where(delegate(ProcessInfo process)
                     {

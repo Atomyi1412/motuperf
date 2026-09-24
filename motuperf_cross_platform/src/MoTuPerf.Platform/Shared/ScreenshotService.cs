@@ -103,7 +103,11 @@ namespace CSharpIosPerfMonitor
                     path = Path.Combine(root, DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + index.ToString("00000") + ".png");
                     ScreenshotOrientation orientation = ScreenshotOrientation.Unknown;
                     ProcessResult result;
-                    if (DeviceLookupService.IsAndroid(Platform))
+                    if (DeviceLookupService.IsHarmony(Platform))
+                    {
+                        result = await CaptureHarmonyAsync(path, sessionToken);
+                    }
+                    else if (DeviceLookupService.IsAndroid(Platform))
                     {
                         result = await CaptureAndroidAsync(path, sessionToken);
                     }
@@ -203,6 +207,30 @@ namespace CSharpIosPerfMonitor
             args.Add("screenshot");
             args.Add(path);
             return RuntimeTools.RunTideviceAsync(args, 15000, token);
+        }
+
+        private async Task<ProcessResult> CaptureHarmonyAsync(string path, CancellationToken token)
+        {
+            string remote = "/data/local/tmp/motuperf-" + Guid.NewGuid().ToString("N") + ".png";
+            try
+            {
+                ProcessResult captured = await ProcessRunner.RunAsync(RuntimeTools.HdcExecutable,
+                    HarmonyLookupService.TargetArgs(Udid, "snapshot_display", "-f", remote), 15000, token);
+                if (captured.ExitCode != 0 || (captured.Stdout ?? "").Contains("[Fail]")) return new ProcessResult(1, captured.Stdout, captured.Stderr);
+                ProcessResult received = await ProcessRunner.RunAsync(RuntimeTools.HdcExecutable,
+                    new[] { "-t", Udid, "file", "recv", remote, path }, 15000, token);
+                if (received.ExitCode != 0) return received;
+                return IsUsableAndroidPng(path) ? received : new ProcessResult(1, "", "鸿蒙截图为空、无法解码或为全黑图像。");
+            }
+            finally
+            {
+                try
+                {
+                    await ProcessRunner.RunAsync(RuntimeTools.HdcExecutable,
+                        HarmonyLookupService.TargetArgs(Udid, "rm", "-f", remote), 3000, CancellationToken.None);
+                }
+                catch { }
+            }
         }
 
         private async Task<ScreenshotOrientation> ReadIosOrientationAsync(CancellationToken token)

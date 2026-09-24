@@ -9,8 +9,10 @@ namespace MoTuPerf.Desktop
         private TextBlock _overallStatusText;
         private TextBlock _androidSummaryText;
         private TextBlock _iosSummaryText;
+        private TextBlock _harmonySummaryText;
         private TextBlock _androidDiagnosticText;
         private TextBlock _iosDiagnosticText;
+        private TextBlock _harmonyDiagnosticText;
         private TextBlock _appleDriverDetailText;
         private Border _appleDriverDetail;
 
@@ -25,8 +27,10 @@ namespace MoTuPerf.Desktop
             _overallStatusText.Text = snapshot.OverallStatus;
             _androidSummaryText.Text = snapshot.AndroidSummary;
             _iosSummaryText.Text = snapshot.IosSummary;
+            _harmonySummaryText.Text = snapshot.HarmonySummary;
             _androidDiagnosticText.Text = snapshot.AndroidDiagnostic;
             _iosDiagnosticText.Text = snapshot.IosDiagnostic;
+            _harmonyDiagnosticText.Text = snapshot.HarmonyDiagnostic;
             _appleDriverDetailText.Text = snapshot.AppleDriverMissing
                 ? "未检测到 Apple 移动设备支持，可在设备选择窗口使用驱动按钮下载或修复。"
                 : snapshot.AppleDriverActionAvailable
@@ -42,8 +46,10 @@ namespace MoTuPerf.Desktop
             _overallStatusText = this.FindControl<TextBlock>("OverallStatusText");
             _androidSummaryText = this.FindControl<TextBlock>("AndroidSummaryText");
             _iosSummaryText = this.FindControl<TextBlock>("IosSummaryText");
+            _harmonySummaryText = this.FindControl<TextBlock>("HarmonySummaryText");
             _androidDiagnosticText = this.FindControl<TextBlock>("AndroidDiagnosticText");
             _iosDiagnosticText = this.FindControl<TextBlock>("IosDiagnosticText");
+            _harmonyDiagnosticText = this.FindControl<TextBlock>("HarmonyDiagnosticText");
             _appleDriverDetailText = this.FindControl<TextBlock>("AppleDriverDetailText");
             _appleDriverDetail = this.FindControl<Border>("AppleDriverDetail");
         }

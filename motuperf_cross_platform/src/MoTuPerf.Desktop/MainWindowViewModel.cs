@@ -118,7 +118,7 @@ namespace MoTuPerf.Desktop
 
         public event PropertyChangedEventHandler PropertyChanged;
         public event Action<string> CaptureStoppedUnexpectedly;
-        public string Version { get { return "v0.25.2"; } }
+        public string Version { get { return "v0.26.0"; } }
         public IReadOnlyList<AppThemeDefinition> ThemeOptions { get { return AppThemeManager.Themes; } }
         public string CurrentThemeName { get { return AppThemeManager.Current.DisplayName; } }
         public string CurrentThemePreviewColor { get { return AppThemeManager.Current.PreviewColor; } }
@@ -143,18 +143,19 @@ namespace MoTuPerf.Desktop
             OnPropertyChanged(nameof(ThemeSelectorToolTip));
             foreach (MetricRowViewModel metric in Metrics) metric.RefreshThemeColors();
         }
-        public string ThermalMetricTitle { get { return IsAndroidSelection ? "Thermal Status" : "Thermal State"; } }
+        public string ThermalMetricTitle { get { return IsAndroidSelection || IsHarmonySelection ? "Thermal Status" : "Thermal State"; } }
         public string ThermalMetricLegend
         {
             get
             {
+                if (IsHarmonySelection) return "鸿蒙暂不提供系统热状态";
                 return IsAndroidSelection
                     ? "0正常 / 1轻微 / 2中度 / 3严重 / 4临界 / 5紧急 / 6关机"
                     : "0正常 / 1升温 / 2严重 / 3临界";
             }
         }
-        public int ThermalAxisMax { get { return IsAndroidSelection ? 6 : 3; } }
-        public string ThermalWaitingText { get { return "等待 " + ThermalMetricTitle + " 数据"; } }
+        public int ThermalAxisMax { get { return IsHarmonySelection ? 1 : IsAndroidSelection ? 6 : 3; } }
+        public string ThermalWaitingText { get { return IsHarmonySelection ? "鸿蒙暂不提供系统热状态" : "等待 " + ThermalMetricTitle + " 数据"; } }
         public bool IsParametersCollapsed
         {
             get { return _parametersCollapsed; }
@@ -585,9 +586,14 @@ namespace MoTuPerf.Desktop
             get { return _selection != null && _selection.Device != null && DeviceLookupService.IsAndroid(_selection.Device); }
         }
 
+        private bool IsHarmonySelection
+        {
+            get { return _selection != null && _selection.Device != null && DeviceLookupService.IsHarmony(_selection.Device); }
+        }
+
         private bool IsIosSelection
         {
-            get { return _selection != null && _selection.Device != null && !DeviceLookupService.IsAndroid(_selection.Device); }
+            get { return _selection != null && DeviceLookupService.IsIos(_selection.Device); }
         }
 
         private void UpdateThermalMetricPresentation()
@@ -596,7 +602,7 @@ namespace MoTuPerf.Desktop
             thermal.SetPresentation(
                 ThermalMetricTitle,
                 "系统热状态",
-                IsAndroidSelection ? "0-6" : "0-3");
+                IsHarmonySelection ? "--" : IsAndroidSelection ? "0-6" : "0-3");
             OnPropertyChanged(nameof(ThermalMetricTitle));
             OnPropertyChanged(nameof(ThermalMetricLegend));
             OnPropertyChanged(nameof(ThermalAxisMax));
@@ -648,6 +654,7 @@ namespace MoTuPerf.Desktop
                 TargetName = process.Name,
                 TargetStartAbsTime = process.StartAbsTime,
                 TargetAndroidStartTimeTicks = process.AndroidStartTimeTicks,
+                TargetHarmonyStartTimeTicks = process.HarmonyStartTimeTicks,
                 TargetCoalitionId = process.CoalitionId,
                 TargetOwnerPid = process.OwnerPid,
                 TargetOwnerName = process.OwnerName,
@@ -1174,7 +1181,7 @@ namespace MoTuPerf.Desktop
         private static string DevicePlatformName(DeviceInfo device)
         {
             if (device == null) return "-";
-            return DeviceLookupService.IsAndroid(device) ? "Android" : "iOS";
+            return DeviceLookupService.IsHarmony(device) ? "HarmonyOS" : DeviceLookupService.IsAndroid(device) ? "Android" : "iOS";
         }
         private static string DeviceOsText(DeviceInfo device)
         {

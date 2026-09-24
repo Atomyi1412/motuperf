@@ -50,6 +50,18 @@ namespace CSharpIosPerfMonitor
             }
         }
 
+        public static string HdcExecutable
+        {
+            get
+            {
+                string overridden = TestOverride("MOTUPERF_HDC");
+                if (!string.IsNullOrWhiteSpace(overridden)) return overridden;
+
+                string bundled = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "runtime", "harmony", "hdc.exe");
+                return HdcToolLocator.Resolve(bundled);
+            }
+        }
+
         public static bool IsPackagedBuild
         {
             get
@@ -103,12 +115,15 @@ namespace CSharpIosPerfMonitor
         {
             if (startInfo == null) return;
             string adbDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "runtime", "android");
-            if (!File.Exists(Path.Combine(adbDirectory, "adb.exe"))) return;
+            string hdcDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "runtime", "harmony");
 
             string currentPath = startInfo.Environment.ContainsKey("PATH") ? startInfo.Environment["PATH"] : Environment.GetEnvironmentVariable("PATH");
-            startInfo.Environment["PATH"] = string.IsNullOrWhiteSpace(currentPath)
-                ? adbDirectory
-                : adbDirectory + Path.PathSeparator + currentPath;
+            List<string> directories = new List<string>();
+            if (File.Exists(Path.Combine(adbDirectory, "adb.exe"))) directories.Add(adbDirectory);
+            if (File.Exists(Path.Combine(hdcDirectory, "hdc.exe"))) directories.Add(hdcDirectory);
+            if (directories.Count == 0) return;
+            string prefix = string.Join(Path.PathSeparator.ToString(), directories);
+            startInfo.Environment["PATH"] = string.IsNullOrWhiteSpace(currentPath) ? prefix : prefix + Path.PathSeparator + currentPath;
         }
 
         public static bool HasAppleMobileDeviceSupport()

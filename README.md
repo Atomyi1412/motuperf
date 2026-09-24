@@ -1,11 +1,12 @@
 # MoTuPerf
 
-MoTuPerf 是一款面向 Android 和 iOS 真机的性能采集工具，支持 FPS、FrameTime、Jank、BigJank、进程 CPU、内存、设备温度、Thermal Status/State、实时截图和现场文件保存。
+MoTuPerf 是一款面向 Android、iOS 和鸿蒙设备的性能采集工具，支持 FPS、FrameTime、Jank、BigJank、进程 CPU、内存、设备温度、Thermal Status/State、实时截图和现场文件保存。鸿蒙首版通过 HDC 提供设备、进程、CPU、内存、温度和截图能力，暂不提供帧指标与系统热状态。
 
 当前跨平台桌面版使用 .NET 8 + Avalonia：
 
 - Windows x64：提供自包含安装包，内置采集所需的 Python、ADB 和脚本依赖。
 - macOS Apple Silicon：提供 `osx-arm64` DMG，暂不支持 Intel Mac；打开 DMG 后将应用拖入 Applications。
+- 鸿蒙设备：原生应用和可被 HDC 枚举的进程统一通过官方 HDC 连接；安装包暂不捆绑 HDC，需要安装 HarmonyOS/OpenHarmony SDK 并配置 `PATH` 或 `MOTUPERF_HDC`。
 - 现场文件、日志和设备数据保存在用户配置的数据目录，不会上传到 GitHub。
 
 ## 获取与更新

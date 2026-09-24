@@ -5,6 +5,26 @@ namespace MoTuPerf.Desktop.Tests
 {
     public sealed class DeviceDiagnosticsPresentationTests
     {
+        [Theory]
+        [InlineData("未找到 HDC 运行组件，请安装官方鸿蒙 SDK。")]
+        [InlineData("未找到或无法启动 HDC。请配置 PATH 或 MOTUPERF_HDC。")]
+        public void MissingHdcHasActionableSummaryAndPreservesDetail(string reason)
+        {
+            var snapshot = DeviceDiagnosticsFormatter.FromReport(new DeviceDiscoveryReport { HarmonyDiagnostic = reason });
+            Assert.Equal("需要安装 HDC", snapshot.HarmonySummary);
+            Assert.Equal(reason, snapshot.HarmonyDiagnostic);
+        }
+
+        [Fact]
+        public void HarmonyDeviceDoesNotIncreaseIosCount()
+        {
+            var report = new DeviceDiscoveryReport();
+            report.Devices.Add(new DeviceInfo { Platform = "harmony" });
+            var snapshot = DeviceDiagnosticsFormatter.FromReport(report);
+            Assert.Equal("已连接 1 台设备", snapshot.HarmonySummary);
+            Assert.Equal("未发现设备", snapshot.IosSummary);
+        }
+
         [Fact]
         public void EmptyReportStaysCompactWhileKeepingFullPlatformReasons()
         {

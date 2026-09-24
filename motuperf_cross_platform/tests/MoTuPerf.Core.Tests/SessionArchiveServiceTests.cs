@@ -8,6 +8,50 @@ namespace MoTuPerf.Core.Tests
 {
     public sealed class SessionArchiveServiceTests
     {
+        [Fact]
+        public void HarmonySessionRoundTripPreservesIdentitySourcesAndMissingFrames()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "motuperf-harmony-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var document = new SessionDocument
+                {
+                    Format = "motuperf-session", Version = 5,
+                    Device = new DeviceInfo { Platform = "harmony", Name = "Harmony test", ProductVersion = "6" },
+                    Process = new ProcessInfo { Platform = "harmony", Pid = 42, Name = "com.example.game", HarmonyStartTimeTicks = 100 }
+                };
+                document.Samples.Add(new PerfSample
+                {
+                    ElapsedSec = 1, TargetPid = 42, HasFreshnessMetadata = true,
+                    HasCpu = true, CpuUpdated = true, CpuPercent = 150, CpuSource = "hdc-proc-stat",
+                    HasCpuNormalized = true, CpuNormalizedUpdated = true, CpuNormalizedPercent = 75,
+                    HasMemory = true, MemoryUpdated = true, MemoryMb = 8, MemoryMetric = "pss", MemorySource = "hdc-hidumper-mem"
+                });
+                string image = Path.Combine(root, "screen.png");
+                File.WriteAllBytes(image, new byte[] { 1, 2, 3, 4 });
+                document.Screenshots.Add(new SessionScreenshot { ElapsedSec = 1, OriginalPath = image, ArchivePath = "screenshots/screen.png" });
+                string archive = Path.Combine(root, "test.motuperf");
+                SessionArchiveService.Save(archive, document);
+                var loaded = SessionArchiveService.Load(archive, Path.Combine(root, "opened"));
+                Assert.Equal("harmony", loaded.Device.Platform);
+                Assert.Equal(100, loaded.Process.HarmonyStartTimeTicks);
+                Assert.Equal(150, loaded.Samples[0].CpuPercent);
+                Assert.Equal("hdc-hidumper-mem", loaded.Samples[0].MemorySource);
+                Assert.False(loaded.Samples[0].HasFps);
+                Assert.False(loaded.Samples[0].HasFrameTime);
+                Assert.False(loaded.Samples[0].HasJank);
+                Assert.False(loaded.Samples[0].HasThermalState);
+                Assert.True(File.Exists(loaded.Screenshots[0].OriginalPath));
+                string csv = CsvExportService.Build(loaded);
+                Assert.Contains("HarmonyOS 6", csv);
+                Assert.Contains("hdc-proc-stat", csv);
+                Assert.Contains("hdc-hidumper-mem", csv);
+                Assert.DoesNotContain("Footprint", csv);
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
         [Theory]
         [InlineData("")]
         [InlineData("screenshots/missing.png")]

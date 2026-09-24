@@ -19,6 +19,7 @@ namespace CSharpIosPerfMonitor
 
         public static string PythonExecutable { get { return ResolveExecutable(Resolver.PythonExecutable, Resolver.OperatingSystem == "macos" ? "python3" : "python"); } }
         public static string AdbExecutable { get { return ResolveExecutable(Resolver.AdbExecutable, "adb"); } }
+        public static string HdcExecutable { get { return HdcToolLocator.Resolve(Resolver.HdcExecutable); } }
         public static bool IsPackagedBuild { get { return File.Exists(Resolver.PackageManifestPath); } }
         public static string UserDataDirectory { get { return Resolver.UserDataDirectory; } }
         public static string DataDirectory { get { return Resolver.UserDataDirectory; } }
@@ -70,6 +71,7 @@ namespace CSharpIosPerfMonitor
         {
             if (startInfo == null) return;
             string adbDirectory = Path.GetDirectoryName(Resolver.AdbExecutable) ?? "";
+            string hdcDirectory = Path.GetDirectoryName(Resolver.HdcExecutable) ?? "";
             string currentPath = startInfo.Environment.ContainsKey("PATH")
                 ? startInfo.Environment["PATH"]
                 : Environment.GetEnvironmentVariable("PATH");
@@ -78,6 +80,13 @@ namespace CSharpIosPerfMonitor
                 startInfo.Environment["PATH"] = string.IsNullOrWhiteSpace(currentPath)
                     ? adbDirectory
                     : adbDirectory + Path.PathSeparator + currentPath;
+            }
+            if (!string.IsNullOrWhiteSpace(hdcDirectory) && Directory.Exists(hdcDirectory))
+            {
+                string path = startInfo.Environment.ContainsKey("PATH") ? startInfo.Environment["PATH"] : Environment.GetEnvironmentVariable("PATH");
+                startInfo.Environment["PATH"] = string.IsNullOrWhiteSpace(path)
+                    ? hdcDirectory
+                    : hdcDirectory + Path.PathSeparator + path;
             }
         }
 

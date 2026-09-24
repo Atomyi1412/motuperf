@@ -297,9 +297,10 @@ namespace CSharpIosPerfMonitor
 
         private static SessionScreenshot NearestScreenshot(IEnumerable<SessionScreenshot> screenshots, double elapsed) { return (screenshots ?? Enumerable.Empty<SessionScreenshot>()).Where(delegate(SessionScreenshot item) { return item != null; }).OrderBy(delegate(SessionScreenshot item) { return Math.Abs(item.ElapsedSec - elapsed); }).FirstOrDefault(); }
         private static string Temperature(PerfSample sample) { return sample.HasTemperature && sample.TemperatureUpdated && sample.TemperatureCelsius != null ? string.Join(";", sample.TemperatureCelsius.OrderBy(delegate(KeyValuePair<string, double> pair) { return pair.Key; }, StringComparer.OrdinalIgnoreCase).Select(delegate(KeyValuePair<string, double> pair) { return pair.Key + "=" + pair.Value.ToString("0.000000", CultureInfo.InvariantCulture); })) : "-"; }
-        private static string DeviceName(DeviceInfo device) { return device == null ? "-" : First(device.MarketName, device.Name, IsAndroid(device) ? "Android Device" : "iOS Device"); }
-        private static string DeviceOs(DeviceInfo device) { string platform = IsAndroid(device) ? "Android" : "iOS"; return device == null || string.IsNullOrWhiteSpace(device.ProductVersion) ? platform : platform + " " + device.ProductVersion; }
-        private static string MemoryMetricName(string metric, DeviceInfo device) { string label = MemoryMetricLabel(metric); return label == "-" ? (IsAndroid(device) ? "PSS" : "Footprint") : label; }
+        private static string DeviceName(DeviceInfo device) { return device == null ? "-" : First(device.MarketName, device.Name, DevicePlatform(device) + " Device"); }
+        private static string DevicePlatform(DeviceInfo device) { return string.Equals(device?.Platform, "harmony", StringComparison.OrdinalIgnoreCase) ? "HarmonyOS" : IsAndroid(device) ? "Android" : "iOS"; }
+        private static string DeviceOs(DeviceInfo device) { string platform = DevicePlatform(device); return device == null || string.IsNullOrWhiteSpace(device.ProductVersion) ? platform : platform + " " + device.ProductVersion; }
+        private static string MemoryMetricName(string metric, DeviceInfo device) { string label = MemoryMetricLabel(metric); return label == "-" ? (DevicePlatform(device) == "HarmonyOS" ? "Memory" : IsAndroid(device) ? "PSS" : "Footprint") : label; }
         private static bool IsAndroid(DeviceInfo device) { return device != null && string.Equals(device.Platform, "android", StringComparison.OrdinalIgnoreCase); }
         private static string MemoryMetricLabel(string metric) { string value = (metric ?? "").Trim().ToLowerInvariant(); if (value == "physical_footprint" || value == "footprint") return "Footprint"; if (value == "pss") return "PSS"; if (value == "rss") return "RSS"; return string.IsNullOrWhiteSpace(metric) ? "-" : metric; }
         private static string AppName(SessionDocument document) { return document.App == null ? Value(document.SelectedBundleId) : First(document.App.Name, document.App.BundleId) + " / " + document.App.BundleId; }
@@ -309,6 +310,7 @@ namespace CSharpIosPerfMonitor
         {
             if (!string.IsNullOrWhiteSpace(sample.ThermalStateName)) return sample.ThermalStateName;
             int level = sample.ThermalStateLevel;
+            if (DevicePlatform(device) == "HarmonyOS") return "-";
             if (IsAndroid(device))
             {
                 if (level == 0) return "none";

@@ -26,6 +26,13 @@
         <StackPanel Margin="22,10,18,12" Spacing="9">
           <Border Classes="helpSection">
             <StackPanel>
+              <TextBlock Text="v0.26.0" Classes="helpTitle" />
+              <TextBlock Text="2026-09-24" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 新增鸿蒙 HDC 基础接入：设备检测、原生应用启动、进程选择、CPU、内存、截图和可读温度；支持现场文件保存/重开及 CSV 导出。&#xA;• 增加 HDC 缺失、未授权、离线和目标进程失效诊断；采样前后校验 PID 身份，多核 CPU 保留真实值，缺测不填零。&#xA;• 鸿蒙原始 CPU 优先使用计数器差分，可读时提供归一化和逐核视图；内存记录 PSS/RSS 与实际来源。&#xA;• 首版需安装官方 SDK 的 HDC；支持范围以 HDC 可枚举且可读取身份的进程为准，Android 兼容容器内应用尚未验证。鸿蒙 FPS、FrameTime、Jank/BigJank、系统热状态和应用图标暂未接入。当前以夹具验证为主，鸿蒙真机与 macOS 兼容性待验收。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel>
               <TextBlock Text="v0.25.2" Classes="helpTitle" />
               <TextBlock Text="2026-09-22" Classes="dialogHint" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 移除数据显示区域重复展示的设备与进程状态，保留标题栏状态信息，释放内容区空间。" />
@@ -36,13 +43,6 @@
               <TextBlock Text="v0.25.1" Classes="helpTitle" />
               <TextBlock Text="2026-09-22" Classes="dialogHint" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 移除顶部无实际操作作用的“时间轴跟随”文字，减少界面干扰。" />
-            </StackPanel>
-          </Border>
-          <Border Classes="helpSection">
-            <StackPanel>
-              <TextBlock Text="v0.25.0" Classes="helpTitle" />
-              <TextBlock Text="2026-09-21" Classes="dialogHint" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 新增“分析数据”页签，未选中具体数据点时按当前完整查看区间展示各指标的最大值、最小值和平均值；曲线缩放后按缩放区间统计。&#xA;• 修复分析面板高度塌缩问题，空采集数据也保留指标列表，缺测值显示为 --，不把真实 0 当成缺测。&#xA;• 同步升级客户端版本号和构建说明。" />
             </StackPanel>
           </Border>
         </StackPanel>

@@ -27,7 +27,7 @@
           <Border Classes="helpSection">
             <StackPanel>
               <TextBlock Text="快速开始" Classes="helpTitle" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="MoTuPerf 支持 Windows x64 和 macOS Apple Silicon（M 系列），可连接 Android 与 iOS 真机。&#x0A;1. 连接并解锁设备，完成设备授权。&#x0A;2. 点击顶部“选择设备及应用”，选择设备、应用和目标进程。&#x0A;3. 在左侧勾选需要记录的指标，点击“开始采集”；再次点击同一按钮停止。&#x0A;采集过程中不能重新选择设备或应用。工具只记录真实采集结果，不用模拟值填充缺失数据。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="MoTuPerf 支持 Windows x64 和 macOS Apple Silicon（M 系列），可连接 Android、iOS，并提供鸿蒙 HDC 基础接入。&#x0A;1. 连接并解锁设备，完成设备授权。&#x0A;2. 点击顶部“选择设备及应用”，选择设备、应用和目标进程。&#x0A;3. 在左侧勾选需要记录的指标，点击“开始采集”；再次点击同一按钮停止。&#x0A;采集过程中不能重新选择设备或应用。工具只记录真实采集结果，不用模拟值填充缺失数据。" />
             </StackPanel>
           </Border>
           <Border Classes="helpSection">
@@ -40,6 +40,12 @@
             <StackPanel>
               <TextBlock Text="连接与权限" Classes="helpTitle" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="Android：解锁设备，开启“USB 调试”，在设备上允许此电脑调试，并保持 USB 连接稳定。&#x0A;iOS：解锁设备并点击“信任此电脑”；iOS 17 及以上还需要开启“开发者模式”。Windows 上如果检测不到 iOS 设备，请在选择设备窗口按提示安装或修复 Apple 设备驱动，安装完成后重新插拔并刷新；macOS 不使用 Windows 驱动。&#x0A;无设备时先检查数据线、USB 端口、授权状态和系统驱动，再点击刷新。设备拔出会停止采集，并询问是否保存已有数据。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel>
+              <TextBlock Text="鸿蒙连接与支持范围" Classes="helpTitle" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="安装官方 HarmonyOS/OpenHarmony SDK 的 toolchains，保留 HDC 所需配套文件；将工具目录加入 PATH，或将 MOTUPERF_HDC 设置为 HDC 可执行文件的完整路径，然后重启 MoTuPerf。Windows 使用 hdc.exe，macOS 使用对应芯片版本的 hdc。设备端开启开发者调试，USB 连接后解锁并允许调试。&#x0A;通过 HDC 检测设备、列出进程和启动原生应用；若设备未提供应用入口，请手动打开应用，再刷新选择进程。支持范围以 HDC 可枚举且可读取身份的进程为准，不保证能读取 Android 兼容容器内部应用。选择鸿蒙设备后统一使用 HDC 采集。&#x0A;当前提供进程 CPU、内存、截图及设备允许读取的温度。CPU 归一化和逐核数据依赖可读计数器；内存优先 PSS，否则标明 RSS。FPS、FrameTime、Jank/BigJank、系统热状态和应用图标暂未接入。若 /proc 进程身份不可读，会给出权限提示并停止；所有缺测保持 --。鸿蒙真机和 macOS 兼容性仍需验收。" />
             </StackPanel>
           </Border>
           <Border Classes="helpSection">

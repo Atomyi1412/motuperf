@@ -106,6 +106,10 @@
             <TextBlock Text="iOS" Classes="devicePlatformLabel" />
             <TextBlock Grid.Column="1" x:Name="IosStatusText" Classes="devicePlatformStatus" Text="检测中..." />
           </Grid>
+          <Grid ColumnDefinitions="72,*" Margin="112,0,0,0">
+            <TextBlock Text="鸿蒙" Classes="devicePlatformLabel" />
+            <TextBlock Grid.Column="1" x:Name="HarmonyStatusText" Classes="devicePlatformStatus" Text="检测中..." />
+          </Grid>
         </StackPanel>
 
         <TextBlock Text="选择应用" Classes="dialogLabel" Grid.Row="2" />

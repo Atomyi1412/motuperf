@@ -232,7 +232,7 @@ namespace MoTuPerf.Desktop.Tests
 
             string dialogCode = LoadText("src", "MoTuPerf.Desktop", "DevicePickerWindow.axaml.cs");
             Assert.Contains("ProcessTargetMatcher.IsIosDefaultPickerProcess(process, selectedBundle)", dialogCode);
-            Assert.Contains("if (!DeviceLookupService.IsAndroid(device))", dialogCode);
+            Assert.Contains("if (DeviceLookupService.IsIos(device))", dialogCode);
             Assert.DoesNotContain("ThenBy(delegate(ProcessInfo process) { return process.Pid; })", dialogCode);
             Assert.Contains("report.AppleDriverActionAvailable", dialogCode);
             Assert.Contains("修复苹果设备驱动", dialogCode);
@@ -331,7 +331,7 @@ namespace MoTuPerf.Desktop.Tests
             string version = project.Descendants("Version").Single().Value;
             string[] components = version.Split('.');
 
-            Assert.Equal("0.25.2", version);
+            Assert.Equal("0.26.0", version);
             Assert.Equal(3, components.Length);
             Assert.All(components, component => Assert.True(int.TryParse(component, out _)));
             Assert.DoesNotContain("-", version);
@@ -433,7 +433,7 @@ namespace MoTuPerf.Desktop.Tests
             XDocument help = LoadXaml("src", "MoTuPerf.Desktop", "HelpWindow.axaml");
             Assert.Equal("700", Attribute(help.Root, "Width"));
             Assert.Equal("640", Attribute(help.Root, "Height"));
-            Assert.Equal(7, help.Descendants(Avalonia + "Border")
+            Assert.Equal(8, help.Descendants(Avalonia + "Border")
                 .Count(element => Attribute(element, "Classes") == "helpSection"));
             XElement helpCloseButton = help.Descendants(Avalonia + "Button")
                 .Single(element => Attribute(element, "Click") == "CloseWindow"
@@ -467,7 +467,8 @@ namespace MoTuPerf.Desktop.Tests
             string changelogText = string.Join(" ", changelog.Descendants(Avalonia + "TextBlock").Select(element => Attribute(element, "Text")));
             Assert.Contains("v0.25.2", changelogText);
             Assert.Contains("v0.25.1", changelogText);
-            Assert.Contains("v0.25.0", changelogText);
+            Assert.Contains("v0.26.0", changelogText);
+            Assert.DoesNotContain("v0.25.0", changelogText);
             Assert.DoesNotContain("v0.24.3", changelogText);
             Assert.DoesNotContain("v0.24.2", changelogText);
             Assert.DoesNotContain("v0.24.1", changelogText);

@@ -194,15 +194,18 @@ namespace CSharpIosPerfMonitor
             }
             CancellationTokenSource captureCts = new CancellationTokenSource();
             _cts = captureCts;
+            bool isHarmony = DeviceLookupService.IsHarmony(config.Platform);
             bool isAndroid = DeviceLookupService.IsAndroid(config.Platform);
             _android = isAndroid;
             CaptureDiagnosticsLog diagnostics = CaptureDiagnosticsLog.TryCreate();
             lock (_lock) _diagnosticsLog = diagnostics;
             LastDiagnosticsLogPath = diagnostics == null ? "" : diagnostics.Path;
             string runner;
+            string transport = "";
             try
             {
-                runner = RunnerPath(isAndroid);
+                runner = isHarmony ? RuntimeTools.ResolveToolPath("harmony_perf_runner.py") : RunnerPath(isAndroid);
+                transport = isHarmony ? RuntimeTools.HdcExecutable : "";
             }
             catch (Exception ex)
             {
@@ -214,10 +217,12 @@ namespace CSharpIosPerfMonitor
             string runnerPath = runner;
             if (diagnostics != null)
             {
-                diagnostics.WriteStart(config, isAndroid ? "android metrics runner" : "pyidevice metrics runner", runnerPath);
+                diagnostics.WriteStart(config, isHarmony ? "harmony metrics runner" : isAndroid ? "android metrics runner" : "pyidevice metrics runner", runnerPath);
             }
             string androidFpsTarget = string.IsNullOrWhiteSpace(config.TargetName) ? config.BundleId : config.TargetName;
-            List<string> args = isAndroid
+            List<string> args = isHarmony
+                ? new List<string> { runner, "--hdc", transport, "--serial", config.Udid, "--pid", targetPid.ToString(CultureInfo.InvariantCulture), "--target-name", config.TargetName ?? "", "--target-start-time-ticks", config.TargetHarmonyStartTimeTicks.ToString(CultureInfo.InvariantCulture), "--interval", "1" }
+                : isAndroid
                 ? new List<string> { runner, "--adb", RuntimeTools.AdbExecutable, "--serial", config.Udid, "--pid", targetPid.ToString(CultureInfo.InvariantCulture), "--package", androidFpsTarget, "--target-name", config.TargetName ?? "", "--target-start-time-ticks", config.TargetAndroidStartTimeTicks.ToString(CultureInfo.InvariantCulture), "--interval", "1" }
                 : new List<string>
                 {
@@ -251,7 +256,7 @@ namespace CSharpIosPerfMonitor
                 throw;
             }
             _metricsProcess = captureProcess;
-            string label = isAndroid ? "adb metrics runner" : "pyidevice metrics runner";
+            string label = isHarmony ? "hdc metrics runner" : isAndroid ? "adb metrics runner" : "pyidevice metrics runner";
             WriteDiagnosticsEvent("runner_started", "采集子进程已启动，pid=" + captureProcess.Id.ToString(CultureInfo.InvariantCulture), "runner_started");
             CancellationToken captureToken = captureCts.Token;
             Task stderrTask = Task.Run(() => RunCaptureTaskAsync("stderr", () => ReadStderrLoop(captureProcess, label, generation, captureToken), diagnostics, generation, captureToken));
@@ -670,11 +675,13 @@ namespace CSharpIosPerfMonitor
 
         private static string FpsScope(CaptureConfig config)
         {
+            if (DeviceLookupService.IsHarmony(config.Platform)) return "unavailable";
             return DeviceLookupService.IsAndroid(config.Platform) ? "android app/surface" : "screen global";
         }
 
         private static string DefaultSampleSource(CaptureConfig config)
         {
+            if (DeviceLookupService.IsHarmony(config.Platform)) return "hdc-pid";
             return DeviceLookupService.IsAndroid(config.Platform) ? "adb-pid+app-fps" : "pyidevice-pid+screen-fps";
         }
 
@@ -687,7 +694,9 @@ namespace CSharpIosPerfMonitor
             string processStatus = processMetrics.Count > 0
                 ? "等待 pid " + config.TargetPid.Value + " 的 " + string.Join("/", processMetrics) + " 数据"
                 : "pid " + config.TargetPid.Value + " 身份校验已启动";
-            string frameStatus = !config.CollectFps
+            string frameStatus = DeviceLookupService.IsHarmony(config.Platform)
+                ? "鸿蒙帧指标等待可靠的目标显示帧源"
+                : !config.CollectFps
                 ? "FPS/FrameTime 采集未启用"
                 : (DeviceLookupService.IsAndroid(config.Platform)
                     ? "FPS 优先使用 SurfaceFlinger，必要时回退到 gfxinfo/显示层"
@@ -708,7 +717,7 @@ namespace CSharpIosPerfMonitor
             if (kind == "fatal")
             {
                 if (!IsGenerationCurrent(generation)) return;
-                string fatalMessage = Convert.ToString(Get(obj, "message") ?? "所选 iOS pid 已失效，请重新选择当前运行的进程。");
+                string fatalMessage = Convert.ToString(Get(obj, "message") ?? "所选 pid 已失效，请重新选择当前运行的进程。");
                 string fatalCode = Convert.ToString(Get(obj, "code") ?? "fatal");
                 WriteDiagnosticsEvent("runner_fatal", fatalMessage, fatalCode);
                 FailAndStop(fatalMessage, fatalCode);
@@ -721,6 +730,8 @@ namespace CSharpIosPerfMonitor
                 if (message != null)
                 {
                     string statusMessage = Convert.ToString(message);
+                    string statusCode = Convert.ToString(Get(obj, "code") ?? "");
+                    if (!string.IsNullOrWhiteSpace(statusCode)) WriteDiagnosticsEvent("runner_status", statusMessage, statusCode);
                     if (statusMessage.IndexOf("Thermal State", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
                         WriteDiagnosticsEvent("thermal_state_status", statusMessage, "thermal_state_unavailable");
@@ -737,6 +748,14 @@ namespace CSharpIosPerfMonitor
                 {
                     if (TryNonNegativeInt(Get(obj, "pid"), out targetPid) && targetPid > 0) _activeTargetPid = targetPid;
                     _targetConfirmed = AsBool(Get(obj, "confirmed"));
+                    if (!_targetConfirmed)
+                    {
+                        _latestCpu = null;
+                        _latestCpuNormalized = null;
+                        _latestCpuCorePercents = null;
+                        _latestMemory = null;
+                        _latestMemoryRss = null;
+                    }
                 }
                 Raise(TargetConfirmationChanged, _targetConfirmed);
                 return;

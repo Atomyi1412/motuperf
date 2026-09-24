@@ -27,6 +27,7 @@ namespace CSharpIosPerfMonitor
             Devices = new List<DeviceInfo>();
             IosDiagnostic = "";
             AndroidDiagnostic = "";
+            HarmonyDiagnostic = "";
             AppleDriverMissing = false;
             AppleDriverActionAvailable = false;
         }
@@ -34,6 +35,7 @@ namespace CSharpIosPerfMonitor
         public List<DeviceInfo> Devices { get; set; }
         public string IosDiagnostic { get; set; }
         public string AndroidDiagnostic { get; set; }
+        public string HarmonyDiagnostic { get; set; }
         public bool AppleDriverMissing { get; set; }
         public bool AppleDriverActionAvailable { get; set; }
 
@@ -79,14 +81,14 @@ namespace CSharpIosPerfMonitor
         {
             get
             {
-                return FirstNonEmpty(MarketName, Name, Platform == "android" ? "Android 设备" : "iOS 设备");
+                return FirstNonEmpty(MarketName, Name, PlatformTitle(Platform) + " 设备");
             }
         }
 
         public override string ToString()
         {
             string platform = string.IsNullOrWhiteSpace(Platform) ? "ios" : Platform.ToLowerInvariant();
-            string title = platform == "android" ? "Android" : "iOS";
+            string title = PlatformTitle(platform);
             string name = FirstNonEmpty(MarketName, Name, title + " 设备");
             string suffix = Udid.Length > 6 ? Udid.Substring(Udid.Length - 6) : Udid;
             string mark = Recommended ? "推荐 - " : "";
@@ -103,6 +105,14 @@ namespace CSharpIosPerfMonitor
                 }
             }
             return "";
+        }
+
+        private static string PlatformTitle(string platform)
+        {
+            if (string.Equals(platform, "android", StringComparison.OrdinalIgnoreCase)) return "Android";
+            if (string.Equals(platform, "harmony", StringComparison.OrdinalIgnoreCase)) return "鸿蒙";
+            if (string.Equals(platform, "ios", StringComparison.OrdinalIgnoreCase)) return "iOS";
+            return string.IsNullOrWhiteSpace(platform) ? "设备" : platform;
         }
     }
 
@@ -191,6 +201,7 @@ namespace CSharpIosPerfMonitor
         public long CoalitionId { get; set; }
         public long StartAbsTime { get; set; }
         public long AndroidStartTimeTicks { get; set; }
+        public long HarmonyStartTimeTicks { get; set; }
         public long ProcessUniqueId { get; set; }
         public int OwnerPid { get; set; }
         public string OwnerName { get; set; }
@@ -404,6 +415,7 @@ namespace CSharpIosPerfMonitor
         public string TargetName { get; set; }
         public long TargetStartAbsTime { get; set; }
         public long TargetAndroidStartTimeTicks { get; set; }
+        public long TargetHarmonyStartTimeTicks { get; set; }
         public long TargetCoalitionId { get; set; }
         public int TargetOwnerPid { get; set; }
         public string TargetOwnerName { get; set; }

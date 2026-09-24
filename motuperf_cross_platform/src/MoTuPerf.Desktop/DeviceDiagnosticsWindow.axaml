@@ -42,6 +42,15 @@
           <Border Classes="diagnosticSection">
             <StackPanel Spacing="5">
               <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="鸿蒙" Classes="diagnosticTitle" />
+                <TextBlock x:Name="HarmonySummaryText" Grid.Column="1" Classes="devicePlatformStatus" />
+              </Grid>
+              <TextBlock x:Name="HarmonyDiagnosticText" Classes="diagnosticBody" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+          <Border Classes="diagnosticSection">
+            <StackPanel Spacing="5">
+              <Grid ColumnDefinitions="*,Auto">
                 <TextBlock Text="iOS" Classes="diagnosticTitle" />
                 <TextBlock x:Name="IosSummaryText" Grid.Column="1" Classes="devicePlatformStatus" />
               </Grid>
