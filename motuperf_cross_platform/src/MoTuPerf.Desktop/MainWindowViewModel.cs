@@ -23,8 +23,10 @@ namespace MoTuPerf.Desktop
         private const double TemperatureDisplayFreshSeconds = 7.5;
         private const double IosFrameMetricDisplayFreshSeconds = 3.5;
         private const double AndroidFrameMetricDisplayFreshSeconds = 4.0;
+        private const double HarmonyFrameMetricDisplayFreshSeconds = 4.0;
         private const double IosThermalStateDisplayFreshSeconds = 2.5;
         private const double AndroidThermalStateDisplayFreshSeconds = 7.5;
+        private const double HarmonyThermalStateDisplayFreshSeconds = 7.5;
         private PerfCollector _collector = new PerfCollector();
         private ScreenshotService _screenshots;
         private readonly CaptureUiBuffer _captureUi = new CaptureUiBuffer();
@@ -118,7 +120,7 @@ namespace MoTuPerf.Desktop
 
         public event PropertyChangedEventHandler PropertyChanged;
         public event Action<string> CaptureStoppedUnexpectedly;
-        public string Version { get { return "v0.28.0"; } }
+        public string Version { get { return "v0.38.12"; } }
         public IReadOnlyList<AppThemeDefinition> ThemeOptions { get { return AppThemeManager.Themes; } }
         public string CurrentThemeName { get { return AppThemeManager.Current.DisplayName; } }
         public string CurrentThemePreviewColor { get { return AppThemeManager.Current.PreviewColor; } }
@@ -1023,6 +1025,7 @@ namespace MoTuPerf.Desktop
 
         private double ThermalStateDisplayFreshSeconds()
         {
+            if (IsHarmonySelection) return HarmonyThermalStateDisplayFreshSeconds;
             return IsAndroidSelection ? AndroidThermalStateDisplayFreshSeconds : IosThermalStateDisplayFreshSeconds;
         }
 
@@ -1258,7 +1261,7 @@ namespace MoTuPerf.Desktop
             {
                 Samples = samples,
                 Screenshots = screenshots,
-                LatestMetricValues = BuildLatestMetricValues(samples, DeviceLookupService.IsAndroid(document.Device)),
+                LatestMetricValues = BuildLatestMetricValues(samples, document.Device == null ? "" : document.Device.Platform),
                 SelectedSample = FindNearestSample(samples, document.SelectedTime)
             };
         }
@@ -1364,12 +1367,12 @@ namespace MoTuPerf.Desktop
             }
             UpdateSelectedMetricValues(selectedSample, true);
         }
-        private static Dictionary<string, string> BuildLatestMetricValues(IReadOnlyList<PerfSample> samples, bool isAndroid)
+        private static Dictionary<string, string> BuildLatestMetricValues(IReadOnlyList<PerfSample> samples, string platform)
         {
             Dictionary<string, string> values = new Dictionary<string, string>(StringComparer.Ordinal);
             PerfSample latest = samples == null ? null : samples.Where(delegate(PerfSample sample) { return sample != null; }).OrderByDescending(delegate(PerfSample sample) { return sample.ElapsedSec; }).FirstOrDefault();
             if (latest == null) return values;
-            double frameFreshness = isAndroid ? AndroidFrameMetricDisplayFreshSeconds : IosFrameMetricDisplayFreshSeconds;
+            double frameFreshness = FrameMetricDisplayFreshSeconds(platform);
             PerfSample fps = LatestMetricSample(samples, latest, delegate(PerfSample sample) { return sample.HasFps; }, frameFreshness);
             PerfSample frame = LatestMetricSample(samples, latest, delegate(PerfSample sample) { return sample.HasFrameTimeMax; }, frameFreshness);
             PerfSample jank = LatestMetricSample(samples, latest, delegate(PerfSample sample) { return sample.HasJank; }, frameFreshness);
@@ -1377,7 +1380,7 @@ namespace MoTuPerf.Desktop
             PerfSample cpu = LatestMetricSample(samples, latest, delegate(PerfSample sample) { return sample.HasCpu; }, ProcessMetricDisplayFreshSeconds);
             PerfSample normalizedCpu = LatestMetricSample(samples, latest, delegate(PerfSample sample) { return sample.HasCpuNormalized; }, ProcessMetricDisplayFreshSeconds);
             PerfSample temperature = LatestMetricSample(samples, latest, HasTemperatureValues, TemperatureDisplayFreshSeconds);
-            PerfSample thermal = LatestMetricSample(samples, latest, HasThermalStateValue, isAndroid ? AndroidThermalStateDisplayFreshSeconds : IosThermalStateDisplayFreshSeconds);
+            PerfSample thermal = LatestMetricSample(samples, latest, HasThermalStateValue, ThermalStateDisplayFreshSeconds(platform));
             if (fps != null) values["FPS"] = fps.Fps.ToString("0.##", CultureInfo.InvariantCulture);
             if (frame != null) values["Display FrameTime"] = frame.FrameTimeMaxMs.ToString("0.##", CultureInfo.InvariantCulture);
             if (jank != null)
@@ -1391,6 +1394,18 @@ namespace MoTuPerf.Desktop
             if (temperature != null) values["Device Temperature"] = temperature.TemperatureCelsius.Values.Max().ToString("0.##", CultureInfo.InvariantCulture);
             if (thermal != null) values["Thermal State"] = thermal.ThermalStateLevel.ToString("0", CultureInfo.InvariantCulture);
             return values;
+        }
+
+        private static double FrameMetricDisplayFreshSeconds(string platform)
+        {
+            if (DeviceLookupService.IsHarmony(platform)) return HarmonyFrameMetricDisplayFreshSeconds;
+            return DeviceLookupService.IsAndroid(platform) ? AndroidFrameMetricDisplayFreshSeconds : IosFrameMetricDisplayFreshSeconds;
+        }
+
+        private static double ThermalStateDisplayFreshSeconds(string platform)
+        {
+            if (DeviceLookupService.IsHarmony(platform)) return HarmonyThermalStateDisplayFreshSeconds;
+            return DeviceLookupService.IsAndroid(platform) ? AndroidThermalStateDisplayFreshSeconds : IosThermalStateDisplayFreshSeconds;
         }
 
         private static PerfSample LatestMetricSample(IReadOnlyList<PerfSample> samples, PerfSample latest, Func<PerfSample, bool> predicate, double maximumDistanceSeconds)
@@ -1448,7 +1463,7 @@ namespace MoTuPerf.Desktop
             IReadOnlyList<PerfSample> ordered = (Samples as SampleSnapshot)?.Ordered ?? Samples;
             PerfSample latest = ordered.Count == 0 ? null : ordered[ordered.Count - 1];
             if (latest == null) return;
-            double frameFreshness = IsAndroidSelection ? AndroidFrameMetricDisplayFreshSeconds : IosFrameMetricDisplayFreshSeconds;
+            double frameFreshness = FrameMetricDisplayFreshSeconds(_selection == null || _selection.Device == null ? "" : _selection.Device.Platform);
             ClearMetricIfStale("FPS", delegate(PerfSample sample) { return sample.HasFps; }, frameFreshness, latest);
             ClearMetricIfStale("Display FrameTime", delegate(PerfSample sample) { return sample.HasFrameTimeMax; }, frameFreshness, latest);
             ClearMetricIfStale("Jank", delegate(PerfSample sample) { return sample.HasJank; }, frameFreshness, latest);

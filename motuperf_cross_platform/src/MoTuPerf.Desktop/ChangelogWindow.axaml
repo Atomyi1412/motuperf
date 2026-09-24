@@ -24,27 +24,27 @@
       </Border>
       <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="22,10,18,12" Spacing="9">
-          <Border Classes="helpSection">
-            <StackPanel>
-              <TextBlock Text="v0.28.0" Classes="helpTitle" />
-              <TextBlock Text="2026-09-24" Classes="dialogHint" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 鸿蒙应用发现继续扩大覆盖范围：合并多种 Bundle Manager 输出、完整兼容包清单和多种进程清单，尽量保留所有能被 HDC 读取到的原生、系统、兼容容器及运行中应用。&#xA;• 启动 APP 时遍历设备真实返回的模块和 Ability 入口，失败后再使用包级启动及兼容容器回退，并汇总失败诊断；不硬编码应用包名或入口名称。&#xA;• 本版本只保留本地，等待鸿蒙真机验收确认后再决定是否发布。" />
-            </StackPanel>
+           <Border Classes="helpSection">
+             <StackPanel>
+               <TextBlock Text="v0.38.12" Classes="helpTitle" />
+               <TextBlock Text="2026-09-25" Classes="dialogHint" />
+               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复鸿蒙应用清单在合并运行进程时只按 Bundle ID 绑定的问题，同一应用在主用户、工作资料、访客或副用户下现在分别匹配真实 PID，避免跨用户误采集。&#xA;• 鸿蒙应用列表在合并进程前统一拆分用户实例；原生、系统/预装、Android 兼容和仅运行中的应用都保留真实应用或进程身份，缺少可靠入口时仍可手动选择进程采集。&#xA;• 增加同 Bundle 多用户进程绑定回归测试。本版本仅保留本地，等待鸿蒙真机逐类验收确认前不推送、不打标签、不创建 Release。" />
+           </StackPanel>
           </Border>
-          <Border Classes="helpSection">
-            <StackPanel>
-              <TextBlock Text="v0.27.1" Classes="helpTitle" />
-              <TextBlock Text="2026-09-24" Classes="dialogHint" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 鸿蒙应用列表改为合并完整 Bundle Manager 清单、全部可读的兼容包清单和运行中的真实进程，不再只读取第三方包；不同系统版本缺少任一接口时仍尽量保留其他来源的应用。&#xA;• 增强兼容包路径格式、进程命令行包名和 bm dump -n 入口模块解析，所有应用继续使用真实 Ability、包级启动或兼容容器启动回退。&#xA;• 本版本只保留本地，等待鸿蒙真机验收确认后再决定是否发布。" />
-          </StackPanel>
-          </Border>
-          <Border Classes="helpSection">
-            <StackPanel>
-              <TextBlock Text="v0.27.0" Classes="helpTitle" />
-              <TextBlock Text="2026-09-24" Classes="dialogHint" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 扩展鸿蒙应用支持：兼容 Bundle Manager 的 JSON、键值文本和旧版包名输出，覆盖原生鸿蒙应用与 Android 兼容容器应用。&#xA;• 应用清单解析不到时，从设备真实运行进程补出可测试应用；进程解析兼容多种 ps 表头、无表头输出和包名进程后缀。&#xA;• 启动 APP 支持 Ability 入口、包级启动及 Android 兼容启动回退；同一设备刷新列表时保留当前应用和进程选择。&#xA;• 本版本只保留本地，鸿蒙真机验收完成并确认前不推送、不打标签、不创建 Release。" />
-            </StackPanel>
-          </Border>
+           <Border Classes="helpSection">
+             <StackPanel>
+               <TextBlock Text="v0.38.11" Classes="helpTitle" />
+               <TextBlock Text="2026-09-25" Classes="dialogHint" />
+               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复鸿蒙同一 Bundle 在多个用户资料中被合并成一行的问题，用户 0、工作资料和副用户现在分别显示并按所选用户启动或绑定进程。&#xA;• 兼容 u100_a123 和数字 UID 等常见进程身份格式；合并多种 ps 输出时保留更完整的用户归属，避免把进程绑定到错误用户。&#xA;• 修复应用筛选和图标异步刷新后按 Bundle 错误回选的问题，当前应用会同时按 Bundle 和用户资料恢复。本版本仅保留本地，等待鸿蒙真机逐类验收确认前不推送、不打标签、不创建 Release。" />
+             </StackPanel>
+           </Border>
+           <Border Classes="helpSection">
+             <StackPanel>
+               <TextBlock Text="v0.38.10" Classes="helpTitle" />
+               <TextBlock Text="2026-09-25" Classes="dialogHint" />
+               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复部分 HDC 版本把 [Fail] 写入标准错误时仍被当作成功，避免无设备或断连状态继续解析成有效进程数据。&#xA;• 鸿蒙启动命令失败后会重新读取真实进程列表；如果应用已经启动且能唯一匹配目标进程，则自动绑定真实 PID，否则保留明确提示并要求手动选择，避免采集错误进程。&#xA;• 增加 HDC 错误流和启动后进程刷新回归测试。本版本仅保留本地，等待鸿蒙真机逐类验收确认前不推送、不打标签、不创建 Release。" />
+             </StackPanel>
+           </Border>
         </StackPanel>
       </ScrollViewer>
       <Border Grid.Row="2" Classes="dialogFooter">

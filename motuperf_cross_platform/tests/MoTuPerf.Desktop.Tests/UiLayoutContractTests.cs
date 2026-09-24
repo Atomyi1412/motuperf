@@ -274,6 +274,19 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Contains("_processes.ToArray()", dialogCode);
             Assert.Contains("IList<AppInfo> apps", dialogCode);
             Assert.Contains("IList<ProcessInfo> processes", dialogCode);
+            Assert.Contains("HarmonyAppsFromProcesses(loadedProcesses)", dialogCode);
+            Assert.Contains("应用清单暂不可用，已保留真实进程列表", dialogCode);
+            Assert.Contains("WaitForHarmonyProcessAsync", dialogCode);
+            Assert.Contains("FindHarmonyProcessForBundle(loadedProcesses, _preferredAppBundleId, _preferredHarmonyUserId)", dialogCode);
+            Assert.Contains("RefreshHarmonyProcessesAfterLaunchFailureAsync", dialogCode);
+            Assert.Contains("APP 已启动，但暂未检测到匹配进程", dialogCode);
+            Assert.Contains("应用列表已读取，进程列表暂不可用", dialogCode);
+            Assert.Contains("SameAppSelection", dialogCode);
+            Assert.Contains("return bundleMatches.Count == 1 ? bundleMatches[0] : null;", dialogCode);
+            Assert.Contains("SameAppSelection(app, selectedApp)", dialogCode);
+            Assert.Contains("app.ProcessPid", dialogCode);
+            Assert.Contains("TrySelectHarmonyRunningProcess", dialogCode);
+            Assert.Contains("启动入口不可用，已切换到唯一匹配进程 PID", dialogCode);
         }
 
         [Fact]
@@ -331,7 +344,7 @@ namespace MoTuPerf.Desktop.Tests
             string version = project.Descendants("Version").Single().Value;
             string[] components = version.Split('.');
 
-            Assert.Equal("0.28.0", version);
+            Assert.Equal("0.38.12", version);
             Assert.Equal(3, components.Length);
             Assert.All(components, component => Assert.True(int.TryParse(component, out _)));
             Assert.DoesNotContain("-", version);
@@ -465,9 +478,20 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Equal("更新日志", Attribute(changelog.Root, "Title"));
             Assert.Contains(changelog.Descendants(Avalonia + "Border"), border => Attribute(border, "Classes") == "secondaryWindowFrame");
             string changelogText = string.Join(" ", changelog.Descendants(Avalonia + "TextBlock").Select(element => Attribute(element, "Text")));
-            Assert.Contains("v0.28.0", changelogText);
-            Assert.Contains("v0.27.1", changelogText);
-            Assert.Contains("v0.27.0", changelogText);
+            Assert.Contains("v0.38.12", changelogText);
+            Assert.Contains("v0.38.11", changelogText);
+            Assert.Contains("v0.38.10", changelogText);
+            Assert.DoesNotContain("v0.38.9", changelogText);
+            Assert.DoesNotContain("v0.38.7", changelogText);
+            Assert.DoesNotContain("v0.38.2", changelogText);
+            Assert.DoesNotContain("v0.37.6", changelogText);
+            Assert.DoesNotContain("v0.37.3", changelogText);
+            Assert.DoesNotContain("v0.37.0", changelogText);
+            Assert.DoesNotContain("v0.34.1", changelogText);
+            Assert.DoesNotContain("v0.29.0", changelogText);
+            Assert.DoesNotContain("v0.28.0", changelogText);
+            Assert.DoesNotContain("v0.27.1", changelogText);
+            Assert.DoesNotContain("v0.27.0", changelogText);
             Assert.DoesNotContain("v0.25.1", changelogText);
             Assert.DoesNotContain("v0.25.0", changelogText);
             Assert.DoesNotContain("v0.24.3", changelogText);

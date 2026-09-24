@@ -184,6 +184,192 @@ namespace MoTuPerf.Desktop.Tests
         }
 
         [Fact]
+        public void HarmonyProcessInventoryCanProvideFallbackAppsWhenAppInventoryFails()
+        {
+            List<AppInfo> apps = DevicePickerWindow.HarmonyAppsFromProcesses(new[]
+            {
+                new ProcessInfo
+                {
+                    Pid = 701,
+                    Name = "com.example.game:render",
+                    DisplayName = "com.example.game:render",
+                    BundleId = "com.example.game",
+                    Platform = "harmony",
+                    Recommended = true,
+                    HarmonyUserId = 100
+                },
+                new ProcessInfo
+                {
+                    Pid = 702,
+                    Name = "com.example.game:worker",
+                    DisplayName = "com.example.game:worker",
+                    BundleId = "com.example.game",
+                    Platform = "harmony",
+                    HarmonyUserId = 100
+                }
+            });
+
+            Assert.Single(apps);
+            Assert.Equal("com.example.game", apps[0].BundleId);
+            Assert.Equal("仅运行中可采集", apps[0].LaunchAvailability);
+            Assert.Equal(new[] { 100 }, apps[0].HarmonyUserIds);
+            Assert.True(apps[0].Recommended);
+        }
+
+        [Fact]
+        public void HarmonyProcessFallbackKeepsSameBundlePerUserSelectable()
+        {
+            List<AppInfo> apps = DevicePickerWindow.HarmonyAppsFromProcesses(new[]
+            {
+                new ProcessInfo
+                {
+                    Pid = 711,
+                    Name = "com.example.game",
+                    DisplayName = "com.example.game",
+                    BundleId = "com.example.game",
+                    Platform = "harmony",
+                    HarmonyUserId = 0
+                },
+                new ProcessInfo
+                {
+                    Pid = 712,
+                    Name = "com.example.game",
+                    DisplayName = "com.example.game",
+                    BundleId = "com.example.game",
+                    Platform = "harmony",
+                    HarmonyUserId = 100
+                }
+            });
+
+            Assert.Equal(2, apps.Count);
+            Assert.Contains(apps, app => app.BundleId == "com.example.game" && app.HarmonyUserId == 0);
+            Assert.Contains(apps, app => app.BundleId == "com.example.game" && app.HarmonyUserId == 100);
+        }
+
+        [Fact]
+        public void HarmonyProcessFallbackKeepsUnbundledServicesSelectable()
+        {
+            List<AppInfo> apps = DevicePickerWindow.HarmonyAppsFromProcesses(new[]
+            {
+                new ProcessInfo
+                {
+                    Pid = 801,
+                    Name = "foundation",
+                    DisplayName = "foundation",
+                    Platform = "harmony",
+                    HarmonyUserId = 0
+                }
+            });
+
+            var app = Assert.Single(apps);
+            Assert.Empty(app.BundleId);
+            Assert.Equal(801, app.ProcessPid);
+            Assert.Equal("PID 801", app.TargetIdentifier);
+            Assert.Equal("仅运行中可采集", app.LaunchAvailability);
+        }
+
+        [Fact]
+        public void HarmonyAppDoesNotAutoBindAmbiguousWorkerProcesses()
+        {
+            ProcessInfo[] processes =
+            {
+                new ProcessInfo
+                {
+                    Pid = 901,
+                    Name = "com.example.game:render",
+                    BundleId = "com.example.game",
+                    Platform = "harmony"
+                },
+                new ProcessInfo
+                {
+                    Pid = 902,
+                    Name = "com.example.game:worker",
+                    BundleId = "com.example.game",
+                    Platform = "harmony"
+                }
+            };
+
+            Assert.Null(DevicePickerWindow.FindHarmonyProcessForBundle(processes, "com.example.game"));
+        }
+
+        [Fact]
+        public void HarmonyAppPrefersTheRealMainOrUniqueRecommendedProcess()
+        {
+            ProcessInfo[] withMain =
+            {
+                new ProcessInfo
+                {
+                    Pid = 903,
+                    Name = "com.example.game:render",
+                    BundleId = "com.example.game",
+                    Platform = "harmony",
+                    Recommended = true
+                },
+                new ProcessInfo
+                {
+                    Pid = 904,
+                    Name = "com.example.game",
+                    BundleId = "com.example.game",
+                    Platform = "harmony"
+                }
+            };
+            Assert.Equal(904, DevicePickerWindow.FindHarmonyProcessForBundle(withMain, "com.example.game").Pid);
+
+            ProcessInfo[] withRecommendation =
+            {
+                new ProcessInfo
+                {
+                    Pid = 905,
+                    Name = "com.example.game:render",
+                    BundleId = "com.example.game",
+                    Platform = "harmony",
+                    Recommended = true
+                },
+                new ProcessInfo
+                {
+                    Pid = 906,
+                    Name = "com.example.game:worker",
+                    BundleId = "com.example.game",
+                    Platform = "harmony"
+                }
+            };
+            Assert.Equal(905, DevicePickerWindow.FindHarmonyProcessForBundle(withRecommendation, "com.example.game").Pid);
+        }
+
+        [Fact]
+        public void HarmonyAppBindsProcessFromTheSelectedUserOnly()
+        {
+            ProcessInfo[] processes =
+            {
+                new ProcessInfo
+                {
+                    Pid = 1001,
+                    Name = "com.example.shared",
+                    BundleId = "com.example.shared",
+                    Platform = "harmony",
+                    HarmonyUserId = 0
+                },
+                new ProcessInfo
+                {
+                    Pid = 1101,
+                    Name = "com.example.shared",
+                    BundleId = "com.example.shared",
+                    Platform = "harmony",
+                    HarmonyUserId = 100
+                }
+            };
+            AppInfo workApp = new AppInfo
+            {
+                BundleId = "com.example.shared",
+                Platform = "harmony",
+                HarmonyUserId = 100
+            };
+
+            Assert.Equal(1101, DevicePickerWindow.FindHarmonyProcessForApp(processes, workApp).Pid);
+            Assert.Null(DevicePickerWindow.FindHarmonyProcessForBundle(processes, "com.example.shared", 200));
+        }
+
+        [Fact]
         public void RestoredSessionSelectionMustBeConfirmedBeforeCapture()
         {
             using (MainWindowViewModel viewModel = new MainWindowViewModel())
@@ -596,6 +782,30 @@ namespace MoTuPerf.Desktop.Tests
                 Assert.Equal("--", viewModel.Metrics.First(delegate(MetricRowViewModel metric) { return metric.Name == "Thermal State"; }).Value);
                 Assert.Equal("--", viewModel.LiveDataTiles.First(delegate(DataMetricTileViewModel tile) { return tile.Label == "内存"; }).Value);
                 Assert.Equal("--", viewModel.LiveDataTiles.First(delegate(DataMetricTileViewModel tile) { return tile.Label == "Temperature"; }).Value);
+            }
+        }
+
+        [Fact]
+        public void RestoredHarmonySessionUsesHarmonyFrameFreshness()
+        {
+            using (MainWindowViewModel viewModel = new MainWindowViewModel())
+            {
+                viewModel.ApplySessionDocument(new SessionDocument
+                {
+                    Format = "motuperf-session",
+                    Version = 5,
+                    Device = new DeviceInfo { Udid = "harmony-1", Name = "Harmony", Platform = "harmony" },
+                    App = new AppInfo { BundleId = "com.example.harmony", Name = "Game" },
+                    Process = new ProcessInfo { Pid = 42, Name = "Game", BundleId = "com.example.harmony", Platform = "harmony" },
+                    Samples = new List<PerfSample>
+                    {
+                        new PerfSample { ElapsedSec = 0, HasFps = true, Fps = 60, HasFrameTimeMax = true, FrameTimeMaxMs = 16.7 },
+                        new PerfSample { ElapsedSec = 3.8, TargetPid = 42 }
+                    }
+                });
+
+                Assert.Equal("60", viewModel.Metrics.First(delegate(MetricRowViewModel metric) { return metric.Name == "FPS"; }).Value);
+                Assert.Equal("16.7", viewModel.Metrics.First(delegate(MetricRowViewModel metric) { return metric.Name == "Display FrameTime"; }).Value);
             }
         }
 

@@ -89,7 +89,7 @@ namespace CSharpIosPerfMonitor
             }
             if (IsHarmony(device))
             {
-                return await _harmony.LaunchAppAsync(device.Udid, app.BundleId, token);
+                return await _harmony.LaunchAppAsync(device.Udid, app, token);
             }
             if (!IsAndroid(device))
             {

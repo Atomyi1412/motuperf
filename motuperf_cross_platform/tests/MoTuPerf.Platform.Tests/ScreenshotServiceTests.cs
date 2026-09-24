@@ -24,5 +24,14 @@ namespace MoTuPerf.Platform.Tests
         {
             Assert.Equal(ScreenshotOrientation.Unknown, ScreenshotService.ParseIosOrientation(output));
         }
+
+        [Fact]
+        public void HarmonyScreenshotTriesNativeAndPortableCommands()
+        {
+            var commands = ScreenshotService.HarmonyScreenshotCommands("/data/local/tmp/test.png");
+
+            Assert.Equal(new[] { "snapshot_display", "-f", "/data/local/tmp/test.png" }, commands[0]);
+            Assert.Equal(new[] { "screencap", "-p", "/data/local/tmp/test.png" }, commands[1]);
+        }
     }
 }

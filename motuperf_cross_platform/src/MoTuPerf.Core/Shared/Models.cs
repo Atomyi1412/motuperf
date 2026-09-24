@@ -4,6 +4,24 @@ using System.Globalization;
 
 namespace CSharpIosPerfMonitor
 {
+    public static class DevicePlatformNames
+    {
+        public static bool IsHarmony(string platform)
+        {
+            return string.Equals(platform, "harmony", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(platform, "openharmony", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(platform, "harmonyos", StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static string DisplayName(string platform)
+        {
+            if (IsHarmony(platform)) return "鸿蒙";
+            if (string.Equals(platform, "android", StringComparison.OrdinalIgnoreCase)) return "Android";
+            if (string.Equals(platform, "ios", StringComparison.OrdinalIgnoreCase)) return "iOS";
+            return string.IsNullOrWhiteSpace(platform) ? "设备" : platform;
+        }
+    }
+
     public sealed class PlatformDeviceDiscovery
     {
         public PlatformDeviceDiscovery()
@@ -109,11 +127,20 @@ namespace CSharpIosPerfMonitor
 
         private static string PlatformTitle(string platform)
         {
-            if (string.Equals(platform, "android", StringComparison.OrdinalIgnoreCase)) return "Android";
-            if (string.Equals(platform, "harmony", StringComparison.OrdinalIgnoreCase)) return "鸿蒙";
-            if (string.Equals(platform, "ios", StringComparison.OrdinalIgnoreCase)) return "iOS";
-            return string.IsNullOrWhiteSpace(platform) ? "设备" : platform;
+            return DevicePlatformNames.DisplayName(platform);
         }
+    }
+
+    public sealed class HarmonyLaunchEntryInfo
+    {
+        public HarmonyLaunchEntryInfo()
+        {
+            Module = "";
+            Ability = "";
+        }
+
+        public string Module { get; set; }
+        public string Ability { get; set; }
     }
 
     public sealed class AppInfo
@@ -128,6 +155,10 @@ namespace CSharpIosPerfMonitor
             IconKey = "";
             IconPath = "";
             ApkPath = "";
+            ProcessName = "";
+            HarmonyUserId = -1;
+            HarmonyUserIds = new List<int>();
+            HarmonyLaunchEntries = new List<HarmonyLaunchEntryInfo>();
         }
 
         public string BundleId { get; set; }
@@ -139,6 +170,65 @@ namespace CSharpIosPerfMonitor
         public string IconKey { get; set; }
         public string IconPath { get; set; }
         public string ApkPath { get; set; }
+        /// <summary>
+        /// PID-backed Harmony targets may be visible only through the process
+        /// list and therefore have no trustworthy Bundle ID. Keep the real
+        /// process identity so the picker can still select it without
+        /// inventing a package name.
+        /// </summary>
+        public int ProcessPid { get; set; }
+        public string ProcessName { get; set; }
+        /// <summary>
+        /// The concrete Harmony profile represented by this picker row. A
+        /// bundle can be installed in more than one profile, so the selected
+        /// profile must survive launch and session persistence separately
+        /// from the evidence list below.
+        /// </summary>
+        public int HarmonyUserId { get; set; }
+        /// <summary>
+        /// User profiles in which HDC reported this Harmony bundle. The list
+        /// is optional so old session files remain compatible.
+        /// </summary>
+        public List<int> HarmonyUserIds { get; set; }
+        /// <summary>
+        /// Real Harmony Ability entry points discovered with the application.
+        /// Keeping them with the app avoids requiring a second Bundle Manager
+        /// lookup on systems that only expose the aggregate inventory command.
+        /// </summary>
+        public List<HarmonyLaunchEntryInfo> HarmonyLaunchEntries { get; set; }
+        public bool IsRunning { get; set; }
+        public bool IsProcessOnly { get; set; }
+        public bool HasLaunchEntry { get; set; }
+
+        /// <summary>
+        /// Harmony inventory can contain packages that are visible through a
+        /// running process but have no launch metadata. Keep that distinction
+        /// visible instead of implying every discovered package is launchable.
+        /// </summary>
+        public string LaunchAvailability
+        {
+            get
+            {
+                if (!DevicePlatformNames.IsHarmony(Platform)) return "";
+                if (IsProcessOnly) return "仅运行中可采集";
+                if (HasLaunchEntry) return "有启动入口";
+                return "可尝试启动";
+            }
+        }
+
+        public string TargetIdentifier
+        {
+            get
+            {
+                if (!string.IsNullOrWhiteSpace(BundleId))
+                {
+                    return DevicePlatformNames.IsHarmony(Platform) && HarmonyUserId >= 0
+                        ? BundleId + " · 用户 " + HarmonyUserId.ToString(CultureInfo.InvariantCulture)
+                        : BundleId;
+                }
+                return ProcessPid > 0 ? "PID " + ProcessPid.ToString(CultureInfo.InvariantCulture) : "";
+            }
+        }
 
         public string ListLabel
         {
@@ -154,7 +244,7 @@ namespace CSharpIosPerfMonitor
         {
             string mark = Recommended ? "推荐 - " : "";
             string version = string.IsNullOrWhiteSpace(Version) ? "" : " - " + Version;
-            return string.Format("{0}{1} - {2}{3}", mark, FirstNonEmpty(Name, BundleId), BundleId, version);
+            return string.Format("{0}{1} - {2}{3}", mark, FirstNonEmpty(Name, BundleId, ProcessName), TargetIdentifier, version);
         }
 
         private static string FirstNonEmpty(params string[] values)
@@ -189,6 +279,7 @@ namespace CSharpIosPerfMonitor
             Platform = "";
             IconKey = "";
             IconPath = "";
+            HarmonyUserId = -1;
         }
 
         public int Pid { get; set; }
@@ -202,6 +293,7 @@ namespace CSharpIosPerfMonitor
         public long StartAbsTime { get; set; }
         public long AndroidStartTimeTicks { get; set; }
         public long HarmonyStartTimeTicks { get; set; }
+        public int HarmonyUserId { get; set; }
         public long ProcessUniqueId { get; set; }
         public int OwnerPid { get; set; }
         public string OwnerName { get; set; }

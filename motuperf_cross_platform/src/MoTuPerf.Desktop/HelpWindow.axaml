@@ -45,6 +45,7 @@
           <Border Classes="helpSection">
             <StackPanel>
               <TextBlock Text="鸿蒙连接与支持范围" Classes="helpTitle" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="应用列表会合并多用户 Bundle Manager 清单、全部可读取的兼容包和运行中进程；能读取到的应用名称与版本会一并显示。启动时优先使用设备返回的 Ability 和 abilityInfos 入口；Android 兼容应用会先解析真实 Launcher 组件，再尝试兼容启动。" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="安装官方 HarmonyOS/OpenHarmony SDK 的 toolchains，保留 HDC 所需配套文件；将工具目录加入 PATH，或将 MOTUPERF_HDC 设置为 HDC 可执行文件的完整路径，然后重启 MoTuPerf。Windows 使用 hdc.exe，macOS 使用对应芯片版本的 hdc。设备端开启开发者调试，USB 连接后解锁并允许调试。&#x0A;通过 HDC 检测设备。应用列表会合并 Bundle Manager 清单、可读取的全部兼容包（包含系统/预装包）和运行中进程，不限定固定包名；选择任意可读应用后，启动流程优先使用设备返回的 Ability，失败时依次尝试包级启动和 Android 兼容容器启动。若某个应用没有可读取入口，仍可刷新进程并选择该应用当前进程。&#xA;选择鸿蒙设备后统一使用 HDC 采集。当前提供进程 CPU、内存、截图及设备允许读取的温度。CPU 归一化和逐核数据依赖可读计数器；内存优先 PSS，否则标明 RSS。FPS、FrameTime、Jank/BigJank、系统热状态和应用图标暂未接入。若 /proc 进程身份不可读，会给出权限提示并停止；所有缺测保持 --。鸿蒙真机和 macOS 兼容性仍需验收。" />
             </StackPanel>
           </Border>

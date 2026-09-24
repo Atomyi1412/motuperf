@@ -54,6 +54,8 @@ namespace MoTuPerf.Desktop
         private string _deviceCountStatus = "正在检测设备...";
         private DeviceDiagnosticsSnapshot _deviceDiagnostics = DeviceDiagnosticsFormatter.Loading();
         private string _loadedDeviceUdid = "";
+        private string _preferredAppBundleId = "";
+        private int _preferredHarmonyUserId = -1;
 
         public DevicePickerWindow()
             : this(null)
@@ -262,24 +264,63 @@ namespace MoTuPerf.Desktop
             {
                 Task<List<AppInfo>> appsTask = _lookup.ListAppsAsync(device, token);
                 Task<List<ProcessInfo>> processesTask = _lookup.ListProcessesAsync(device, token);
-                await Task.WhenAll(appsTask, processesTask);
+                List<AppInfo> loadedApps = null;
+                List<ProcessInfo> loadedProcesses = null;
+                Exception appsError = null;
+                Exception processesError = null;
+                try { loadedApps = await appsTask; }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex) { appsError = ex; }
+                try { loadedProcesses = await processesTask; }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex) { processesError = ex; }
                 if (!IsCurrentLoad(generation, deviceUdid)) return;
+                loadedApps = loadedApps ?? new List<AppInfo>();
+                loadedProcesses = loadedProcesses ?? new List<ProcessInfo>();
+                if (appsError != null && processesError != null)
+                    throw new IOException("读取 APP 和进程失败：" + FirstNonEmpty(appsError.Message, processesError.Message));
+                if (appsError != null)
+                {
+                    if (!DeviceLookupService.IsHarmony(device) || loadedProcesses.Count == 0)
+                        throw new IOException("读取 APP 失败：" + appsError.Message);
+                    loadedApps = HarmonyAppsFromProcesses(loadedProcesses);
+                }
+                else if (loadedApps.Count == 0 && DeviceLookupService.IsHarmony(device) && loadedProcesses.Count > 0)
+                {
+                    loadedApps = HarmonyAppsFromProcesses(loadedProcesses);
+                }
+                if (DeviceLookupService.IsHarmony(device) && !string.IsNullOrWhiteSpace(_preferredAppBundleId))
+                {
+                    loadedProcesses = await WaitForHarmonyProcessAsync(
+                        device,
+                        loadedProcesses,
+                        token,
+                        generation,
+                        deviceUdid,
+                        _preferredHarmonyUserId);
+                }
                 _apps.Clear();
-                _apps.AddRange(appsTask.Result);
+                _apps.AddRange(loadedApps);
                 _processes.Clear();
-                _processes.AddRange(processesTask.Result);
-                AppInfo selectedApp = FindInitialApp()
-                    ?? (previousApp == null ? null : _apps.FirstOrDefault(delegate(AppInfo app) { return string.Equals(app.BundleId, previousApp.BundleId, StringComparison.OrdinalIgnoreCase); }))
+                _processes.AddRange(loadedProcesses);
+                AppInfo selectedApp = FindAppByBundle(_preferredAppBundleId, _preferredHarmonyUserId)
+                    ?? FindInitialApp()
+                    ?? (previousApp == null ? null : _apps.FirstOrDefault(delegate(AppInfo app) { return SameAppSelection(app, previousApp); }))
                     ?? _apps.FirstOrDefault(delegate(AppInfo app) { return app.Recommended; })
+                    ?? _apps.FirstOrDefault(delegate(AppInfo app) { return !string.IsNullOrWhiteSpace(app.BundleId); })
                     ?? _apps.FirstOrDefault();
-                ProcessInfo selectedProcess = FindInitialProcess()
-                    ?? (previousProcess == null ? null : _processes.FirstOrDefault(delegate(ProcessInfo process)
-                    {
-                        return process.Pid == previousProcess.Pid
-                            && string.Equals(process.Name, previousProcess.Name, StringComparison.OrdinalIgnoreCase);
-                    }))
-                    ?? _processes.FirstOrDefault(delegate(ProcessInfo process) { return process.Recommended; })
-                    ?? _processes.FirstOrDefault();
+                ProcessInfo selectedProcess = FindProcessForApp(selectedApp);
+                if (selectedProcess == null && (!DeviceLookupService.IsHarmony(device) || selectedApp == null))
+                {
+                    selectedProcess = FindInitialProcess()
+                        ?? (previousProcess == null ? null : _processes.FirstOrDefault(delegate(ProcessInfo process)
+                        {
+                            return process.Pid == previousProcess.Pid
+                                && string.Equals(process.Name, previousProcess.Name, StringComparison.OrdinalIgnoreCase);
+                        }))
+                        ?? _processes.FirstOrDefault(delegate(ProcessInfo process) { return process.Recommended; })
+                        ?? _processes.FirstOrDefault();
+                }
                 RunSelectionSync(delegate
                 {
                     ApplyAppFilter();
@@ -288,8 +329,19 @@ namespace MoTuPerf.Desktop
                     ProcessList.SelectedItem = selectedProcess;
                 });
                 UpdateSelectedAppSummary(selectedApp ?? FindAppForProcess(selectedProcess));
-                StatusText.Text = _deviceCountStatus;
+                bool launchProcessMissing = DeviceLookupService.IsHarmony(device)
+                    && !string.IsNullOrWhiteSpace(_preferredAppBundleId)
+                    && FindHarmonyProcessForBundle(loadedProcesses, _preferredAppBundleId, _preferredHarmonyUserId) == null;
+                StatusText.Text = launchProcessMissing
+                    ? "APP 已启动，但暂未检测到匹配进程，请稍后刷新进程列表。"
+                    : appsError != null
+                        ? "应用清单暂不可用，已保留真实进程列表，请直接选择目标 PID。"
+                        : processesError == null
+                        ? _deviceCountStatus
+                        : "应用列表已读取，进程列表暂不可用，请刷新或检查 HDC 进程权限。";
                 _loadedDeviceUdid = deviceUdid;
+                _preferredAppBundleId = "";
+                _preferredHarmonyUserId = -1;
                 _ = HydrateIconsAndRefreshAsync(
                     device,
                     _apps.ToArray(),
@@ -302,6 +354,42 @@ namespace MoTuPerf.Desktop
             catch (Exception ex) { StatusText.Text = "读取 APP/进程失败：" + ex.Message; }
         }
 
+        internal static List<AppInfo> HarmonyAppsFromProcesses(IEnumerable<ProcessInfo> processes)
+        {
+            List<AppInfo> apps = new List<AppInfo>();
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (ProcessInfo process in processes ?? Enumerable.Empty<ProcessInfo>())
+            {
+                if (!ProcessTargetMatcher.IsValidTarget(process)
+                    || !DeviceLookupService.IsHarmony(process.Platform)) continue;
+                string bundle = FirstNonEmpty(process.BundleId, process.OwnerBundleId);
+                string key = string.IsNullOrWhiteSpace(bundle)
+                    ? "pid:" + process.Pid.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    : "bundle:" + bundle + ":user:" + process.HarmonyUserId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                if (!seen.Add(key)) continue;
+                AppInfo app = new AppInfo
+                {
+                    BundleId = bundle,
+                    Name = FirstNonEmpty(process.DisplayName, process.Name, bundle),
+                    ProcessPid = string.IsNullOrWhiteSpace(bundle) ? process.Pid : 0,
+                    ProcessName = string.IsNullOrWhiteSpace(bundle) ? process.Name : "",
+                    Platform = "harmony",
+                    Recommended = process.Recommended,
+                    Reason = string.IsNullOrWhiteSpace(bundle)
+                        ? "运行中的鸿蒙进程 · PID " + process.Pid.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                        : "运行中的鸿蒙应用",
+                    IsRunning = true,
+                    IsProcessOnly = true,
+                    HarmonyUserId = process.HarmonyUserId
+                };
+                if (process.HarmonyUserId >= 0) app.HarmonyUserIds.Add(process.HarmonyUserId);
+                apps.Add(app);
+            }
+            return apps.OrderByDescending(delegate(AppInfo app) { return app.Recommended; })
+                .ThenBy(delegate(AppInfo app) { return app.BundleId; })
+                .ToList();
+        }
+
         private async void LaunchSelectedApp(object sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             if (_launchInProgress || _driverDownloadInProgress) return;
@@ -312,14 +400,28 @@ namespace MoTuPerf.Desktop
                 StatusText.Text = "请先选择设备和 APP";
                 return;
             }
+            if (app.IsProcessOnly && DeviceLookupService.IsHarmony(device))
+            {
+                if (!TrySelectHarmonyRunningProcess(device, app))
+                    StatusText.Text = "该鸿蒙目标只有运行中进程，请在选择进程页手动选择真实 PID。";
+                return;
+            }
             _launchInProgress = true;
             try
             {
                 StatusText.Text = "正在启动 " + app.Name + "...";
-                CancellationToken token = NewLoadToken(out _);
+                _preferredAppBundleId = app.BundleId ?? "";
+                _preferredHarmonyUserId = app.HarmonyUserId;
+                long launchGeneration;
+                CancellationToken token = NewLoadToken(out launchGeneration);
                 ProcessResult result = await _lookup.LaunchAppAsync(device, app, token);
                 if (result.ExitCode != 0)
                 {
+                    _preferredAppBundleId = "";
+                    if (DeviceLookupService.IsHarmony(device)
+                        && await RefreshHarmonyProcessesAfterLaunchFailureAsync(device, app, token, launchGeneration))
+                        return;
+                    if (TrySelectHarmonyRunningProcess(device, app)) return;
                     StatusText.Text = IosLookupService.IsDeveloperModeDisabled(result)
                         ? "启动失败：请在 iOS 设置中开启开发者模式，重启并解锁设备后重试。"
                         : "启动失败：" + FirstNonEmptyLine(result.Stderr, result.Stdout);
@@ -332,7 +434,52 @@ namespace MoTuPerf.Desktop
             }
             catch (OperationCanceledException) { }
             catch (Exception ex) { StatusText.Text = "启动 APP 失败：" + ex.Message; }
-            finally { _launchInProgress = false; }
+            finally
+            {
+                _launchInProgress = false;
+                _preferredHarmonyUserId = -1;
+            }
+        }
+
+        private bool TrySelectHarmonyRunningProcess(DeviceInfo device, AppInfo app)
+        {
+            if (!DeviceLookupService.IsHarmony(device) || app == null) return false;
+            ProcessInfo process = FindProcessForApp(app);
+            if (process == null) return false;
+            RunSelectionSync(delegate
+            {
+                SetLaunchMode(false);
+                ProcessList.SelectedItem = process;
+            });
+            UpdateSelectedAppSummary(app);
+            StatusText.Text = "启动入口不可用，已切换到唯一匹配进程 PID "
+                + process.Pid.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                + "，可以直接开始采集。";
+            return true;
+        }
+
+        private async Task<bool> RefreshHarmonyProcessesAfterLaunchFailureAsync(
+            DeviceInfo device,
+            AppInfo app,
+            CancellationToken token,
+            long generation)
+        {
+            if (!IsCurrentLoad(generation, device == null ? "" : device.Udid)) return false;
+            List<ProcessInfo> latest;
+            try
+            {
+                latest = await _lookup.ListProcessesAsync(device, token).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch
+            {
+                return false;
+            }
+            if (!IsCurrentLoad(generation, device == null ? "" : device.Udid)) return false;
+            _processes.Clear();
+            _processes.AddRange(latest ?? new List<ProcessInfo>());
+            RunSelectionSync(delegate { ApplyProcessFilter(); });
+            return TrySelectHarmonyRunningProcess(device, app);
         }
 
         private void AppSearchChanged(object sender, TextChangedEventArgs e) { ApplyAppFilter(); }
@@ -343,16 +490,19 @@ namespace MoTuPerf.Desktop
             AppInfo current = AppList.SelectedItem as AppInfo;
             List<AppInfo> items = string.IsNullOrWhiteSpace(query) ? _apps.ToList() : _apps.Where(delegate(AppInfo app)
             {
-                return Contains(app.Name, query) || Contains(app.BundleId, query) || Contains(app.Version, query) || Contains(app.Reason, query);
+                return Contains(app.Name, query) || Contains(app.BundleId, query) || Contains(app.TargetIdentifier, query)
+                    || Contains(app.Version, query) || Contains(app.Reason, query)
+                    || app.ProcessPid.ToString().Contains(query);
             }).ToList();
             AppList.ItemsSource = items;
-            AppInfo selected = current == null ? null : items.FirstOrDefault(delegate(AppInfo app) { return app.BundleId == current.BundleId; });
+            AppInfo selected = current == null ? null : items.FirstOrDefault(delegate(AppInfo app) { return SameAppSelection(app, current); });
             if (selected != null) AppList.SelectedItem = selected;
         }
         private void ApplyProcessFilter()
         {
             string query = (ProcessSearch.Text ?? "").Trim();
             ProcessInfo current = ProcessList.SelectedItem as ProcessInfo;
+            DeviceInfo selectedDevice = DeviceList.SelectedItem as DeviceInfo;
             IEnumerable<ProcessInfo> source = _processes.Where(ProcessTargetMatcher.IsValidTarget);
             if (string.IsNullOrWhiteSpace(query))
             {
@@ -380,8 +530,19 @@ namespace MoTuPerf.Desktop
             List<ProcessInfo> items = source.OrderByDescending(delegate(ProcessInfo process) { return process.Recommended; }).ToList();
             ProcessList.ItemsSource = items;
             ProcessInfo selected = current == null ? null : items.FirstOrDefault(delegate(ProcessInfo process) { return process.Pid == current.Pid; });
-            selected = selected ?? items.FirstOrDefault(delegate(ProcessInfo process) { return process.Recommended; }) ?? items.FirstOrDefault();
-            if (selected != null) ProcessList.SelectedItem = selected;
+            AppInfo selectedAppForProcess = AppList.SelectedItem as AppInfo;
+            ProcessInfo matchingAppProcess = FindProcessForApp(selectedAppForProcess);
+            bool harmonyAppSelected = DeviceLookupService.IsHarmony(selectedDevice) && selectedAppForProcess != null;
+            if (harmonyAppSelected)
+                selected = matchingAppProcess == null
+                    ? null
+                    : items.FirstOrDefault(delegate(ProcessInfo process) { return process.Pid == matchingAppProcess.Pid; });
+            else if (selected == null && matchingAppProcess != null)
+                selected = items.FirstOrDefault(delegate(ProcessInfo process) { return process.Pid == matchingAppProcess.Pid; });
+            bool keepHarmonyAppWithoutProcess = harmonyAppSelected && matchingAppProcess == null;
+            if (!keepHarmonyAppWithoutProcess)
+                selected = selected ?? items.FirstOrDefault(delegate(ProcessInfo process) { return process.Recommended; }) ?? items.FirstOrDefault();
+            ProcessList.SelectedItem = selected;
         }
 
         private void Confirm(object sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -398,7 +559,7 @@ namespace MoTuPerf.Desktop
             Close(new DeviceSelection(device, app, process, AutoStartCheckBox.IsChecked == true));
         }
         private void Cancel(object sender, Avalonia.Interactivity.RoutedEventArgs e) { Close(null); }
-        private AppInfo FindInitialApp() { return _initialSelection == null || _initialSelection.App == null ? null : _apps.FirstOrDefault(delegate(AppInfo app) { return app.BundleId == _initialSelection.App.BundleId; }); }
+        private AppInfo FindInitialApp() { return _initialSelection == null || _initialSelection.App == null ? null : _apps.FirstOrDefault(delegate(AppInfo app) { return SameAppSelection(app, _initialSelection.App); }); }
         private ProcessInfo FindInitialProcess() { return _initialSelection == null || _initialSelection.Process == null ? null : _processes.FirstOrDefault(delegate(ProcessInfo process) { return process.Pid == _initialSelection.Process.Pid; }); }
         private CancellationToken NewLoadToken(out long generation)
         {
@@ -452,14 +613,192 @@ namespace MoTuPerf.Desktop
         {
             if (process == null) return null;
             string bundle = FirstNonEmpty(process.BundleId, process.OwnerBundleId);
-            return _apps.FirstOrDefault(delegate(AppInfo app) { return !string.IsNullOrWhiteSpace(bundle) && string.Equals(app.BundleId, bundle, StringComparison.OrdinalIgnoreCase); });
+            AppInfo pidMatch = _apps.FirstOrDefault(delegate(AppInfo app)
+            {
+                if (app == null) return false;
+                if (app.ProcessPid == process.Pid
+                    && (string.IsNullOrWhiteSpace(app.ProcessName)
+                        || string.Equals(app.ProcessName, process.Name, StringComparison.OrdinalIgnoreCase))) return true;
+                return false;
+            });
+            if (pidMatch != null) return pidMatch;
+            List<AppInfo> bundleMatches = _apps.Where(delegate(AppInfo app)
+            {
+                return app != null && !string.IsNullOrWhiteSpace(bundle)
+                    && string.Equals(app.BundleId, bundle, StringComparison.OrdinalIgnoreCase);
+            }).ToList();
+            if (DeviceLookupService.IsHarmony(process.Platform) && process.HarmonyUserId >= 0)
+            {
+                AppInfo userMatch = bundleMatches.FirstOrDefault(delegate(AppInfo app)
+                {
+                    return app.HarmonyUserId == process.HarmonyUserId;
+                });
+                if (userMatch != null) return userMatch;
+            }
+            // If HDC did not expose the process user, do not silently bind a
+            // same-Bundle process to the first profile row. The user can
+            // still select the real process explicitly from the process tab.
+            return bundleMatches.Count == 1 ? bundleMatches[0] : null;
+        }
+
+        private AppInfo FindAppByBundle(string bundle)
+        {
+            return FindAppByBundle(bundle, -1);
+        }
+
+        private AppInfo FindAppByBundle(string bundle, int harmonyUserId)
+        {
+            if (string.IsNullOrWhiteSpace(bundle)) return null;
+            List<AppInfo> matches = _apps.Where(delegate(AppInfo app)
+            {
+                return app != null && string.Equals(app.BundleId, bundle, StringComparison.OrdinalIgnoreCase);
+            }).ToList();
+            if (harmonyUserId >= 0)
+            {
+                AppInfo userMatch = matches.FirstOrDefault(delegate(AppInfo app) { return app.HarmonyUserId == harmonyUserId; });
+                if (userMatch != null) return userMatch;
+            }
+            return matches.FirstOrDefault();
+        }
+
+        private ProcessInfo FindProcessForApp(AppInfo app)
+        {
+            if (app == null) return null;
+            if (app.ProcessPid > 0)
+            {
+                ProcessInfo processOnly = _processes.FirstOrDefault(delegate(ProcessInfo process)
+                {
+                    return ProcessTargetMatcher.IsValidTarget(process)
+                        && process.Pid == app.ProcessPid
+                        && (string.IsNullOrWhiteSpace(app.ProcessName)
+                            || string.Equals(process.Name, app.ProcessName, StringComparison.OrdinalIgnoreCase));
+                });
+                if (processOnly != null) return processOnly;
+            }
+            if (string.IsNullOrWhiteSpace(app.BundleId)) return null;
+            return DeviceLookupService.IsHarmony(app.Platform)
+                ? FindHarmonyProcessForApp(_processes, app)
+                : FindProcessForBundle(_processes, app.BundleId);
+        }
+
+        private static bool SameAppSelection(AppInfo left, AppInfo right)
+        {
+            if (left == null || right == null) return false;
+            if (left.ProcessPid > 0 || right.ProcessPid > 0)
+                return left.ProcessPid > 0 && left.ProcessPid == right.ProcessPid
+                    && (string.IsNullOrWhiteSpace(left.ProcessName) || string.IsNullOrWhiteSpace(right.ProcessName)
+                        || string.Equals(left.ProcessName, right.ProcessName, StringComparison.OrdinalIgnoreCase));
+            if (string.IsNullOrWhiteSpace(left.BundleId) || string.IsNullOrWhiteSpace(right.BundleId)
+                || !string.Equals(left.BundleId, right.BundleId, StringComparison.OrdinalIgnoreCase)) return false;
+            if (DeviceLookupService.IsHarmony(left.Platform) || DeviceLookupService.IsHarmony(right.Platform))
+            {
+                if (left.HarmonyUserId >= 0 || right.HarmonyUserId >= 0)
+                    return left.HarmonyUserId >= 0 && right.HarmonyUserId >= 0
+                        && left.HarmonyUserId == right.HarmonyUserId;
+            }
+            return true;
+        }
+
+        private static ProcessInfo FindProcessForBundle(IEnumerable<ProcessInfo> processes, string bundle)
+        {
+            if (string.IsNullOrWhiteSpace(bundle)) return null;
+            return (processes ?? Enumerable.Empty<ProcessInfo>())
+                .Where(ProcessTargetMatcher.IsValidTarget)
+                .Where(delegate(ProcessInfo process)
+                {
+                    return string.Equals(process.BundleId, bundle, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(process.OwnerBundleId, bundle, StringComparison.OrdinalIgnoreCase);
+                })
+                .OrderByDescending(delegate(ProcessInfo process) { return string.Equals(process.Name, bundle, StringComparison.OrdinalIgnoreCase); })
+                .ThenByDescending(delegate(ProcessInfo process) { return process.Recommended; })
+                .FirstOrDefault();
+        }
+
+        internal static ProcessInfo FindHarmonyProcessForBundle(IEnumerable<ProcessInfo> processes, string bundle)
+        {
+            return FindHarmonyProcessForBundle(processes, bundle, -1);
+        }
+
+        internal static ProcessInfo FindHarmonyProcessForApp(IEnumerable<ProcessInfo> processes, AppInfo app)
+        {
+            return app == null ? null : FindHarmonyProcessForBundle(processes, app.BundleId, app.HarmonyUserId);
+        }
+
+        internal static ProcessInfo FindHarmonyProcessForBundle(IEnumerable<ProcessInfo> processes, string bundle, int harmonyUserId)
+        {
+            if (string.IsNullOrWhiteSpace(bundle)) return null;
+            List<ProcessInfo> matches = (processes ?? Enumerable.Empty<ProcessInfo>())
+                .Where(ProcessTargetMatcher.IsValidTarget)
+                .Where(delegate(ProcessInfo process)
+                {
+                    return DeviceLookupService.IsHarmony(process.Platform)
+                        && (string.Equals(process.BundleId, bundle, StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(process.OwnerBundleId, bundle, StringComparison.OrdinalIgnoreCase));
+                })
+                .ToList();
+            if (matches.Count == 0) return null;
+
+            if (harmonyUserId >= 0)
+            {
+                List<ProcessInfo> userMatches = matches.Where(delegate(ProcessInfo process)
+                {
+                    return process.HarmonyUserId == harmonyUserId;
+                }).ToList();
+                if (userMatches.Count > 0)
+                    matches = userMatches;
+                else if (matches.Count != 1 || matches[0].HarmonyUserId >= 0)
+                    return null;
+            }
+
+            // A plain Bundle match is safe only when it identifies the main
+            // process, a unique recommended process, or the sole candidate.
+            // Worker/render/service processes otherwise need an explicit user
+            // selection to avoid collecting the wrong PID.
+            List<ProcessInfo> exact = matches.Where(delegate(ProcessInfo process)
+            {
+                return string.Equals(process.Name, bundle, StringComparison.OrdinalIgnoreCase);
+            }).ToList();
+            if (exact.Count == 1) return exact[0];
+            List<ProcessInfo> recommended = matches.Where(delegate(ProcessInfo process) { return process.Recommended; }).ToList();
+            if (recommended.Count == 1) return recommended[0];
+            return matches.Count == 1 ? matches[0] : null;
+        }
+
+        private async Task<List<ProcessInfo>> WaitForHarmonyProcessAsync(
+            DeviceInfo device,
+            List<ProcessInfo> processes,
+            CancellationToken token,
+            long generation,
+            string deviceUdid,
+            int harmonyUserId)
+        {
+            List<ProcessInfo> latest = processes ?? new List<ProcessInfo>();
+            for (int attempt = 0; attempt < 8; attempt++)
+            {
+                if (!IsCurrentLoad(generation, deviceUdid)
+                    || FindHarmonyProcessForBundle(latest, _preferredAppBundleId, harmonyUserId) != null)
+                    return latest;
+                await Task.Delay(500, token).ConfigureAwait(true);
+                try
+                {
+                    latest = await _lookup.ListProcessesAsync(device, token).ConfigureAwait(true);
+                }
+                catch (OperationCanceledException) { throw; }
+                catch
+                {
+                    // Startup can temporarily make the process view unreadable.
+                    // Keep polling the same target instead of falling back to a
+                    // different process or declaring another app selected.
+                }
+            }
+            return latest;
         }
 
         private void UpdateSelectedAppSummary(AppInfo app)
         {
             if (SelectedAppName == null) return;
             SelectedAppName.Text = app == null ? "请选择 APP" : FirstNonEmpty(app.Name, app.BundleId);
-            SelectedAppBundle.Text = app == null ? "" : app.BundleId;
+            SelectedAppBundle.Text = app == null ? "" : app.TargetIdentifier;
             string glyph = AppIconGlyph(app == null ? "" : app.IconKey);
             SelectedAppGlyph.Text = glyph;
             bool hasIcon = app != null && !string.IsNullOrWhiteSpace(app.IconPath) && File.Exists(app.IconPath);
@@ -500,7 +839,7 @@ namespace MoTuPerf.Desktop
                     {
                         ApplyAppFilter();
                         if (!_launchMode) ApplyProcessFilter();
-                        if (selectedApp != null) AppList.SelectedItem = _apps.FirstOrDefault(delegate(AppInfo app) { return app.BundleId == selectedApp.BundleId; });
+                        if (selectedApp != null) AppList.SelectedItem = _apps.FirstOrDefault(delegate(AppInfo app) { return SameAppSelection(app, selectedApp); });
                         if (!_launchMode && selectedProcess != null) ProcessList.SelectedItem = _processes.FirstOrDefault(delegate(ProcessInfo process) { return process.Pid == selectedProcess.Pid; });
                     });
                     AppInfo summaryApp = _launchMode
@@ -610,7 +949,8 @@ namespace MoTuPerf.Desktop
     {
         public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
         {
-            return string.IsNullOrWhiteSpace(value as string);
+            bool empty = string.IsNullOrWhiteSpace(value as string);
+            return string.Equals(parameter as string, "notEmpty", StringComparison.OrdinalIgnoreCase) ? !empty : empty;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)

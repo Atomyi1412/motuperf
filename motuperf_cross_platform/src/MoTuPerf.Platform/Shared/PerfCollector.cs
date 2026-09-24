@@ -17,6 +17,7 @@ namespace CSharpIosPerfMonitor
         private const double MaximumReasonableFrameTimeMs = 60000.0;
         internal const double IosFpsFreshSeconds = 3.5;
         internal const double AndroidFpsFreshSeconds = 4.0;
+        internal const double HarmonyFpsFreshSeconds = 4.0;
         internal const double ProcessMetricFreshSeconds = 6.0;
         private readonly object _lock = new object();
         private readonly Queue<PerfSample> _pendingFrameSamples = new Queue<PerfSample>();
@@ -93,7 +94,6 @@ namespace CSharpIosPerfMonitor
         private bool _targetConfirmed;
         private int _activeTargetPid;
         private bool _waitingNoticeShown;
-        private bool _android;
         private int _captureGeneration;
         private DateTime _startedAt;
         private CancellationTokenSource _cts;
@@ -196,7 +196,7 @@ namespace CSharpIosPerfMonitor
             _cts = captureCts;
             bool isHarmony = DeviceLookupService.IsHarmony(config.Platform);
             bool isAndroid = DeviceLookupService.IsAndroid(config.Platform);
-            _android = isAndroid;
+            string platform = string.IsNullOrWhiteSpace(config.Platform) ? "ios" : config.Platform;
             CaptureDiagnosticsLog diagnostics = CaptureDiagnosticsLog.TryCreate();
             lock (_lock) _diagnosticsLog = diagnostics;
             LastDiagnosticsLogPath = diagnostics == null ? "" : diagnostics.Path;
@@ -260,8 +260,8 @@ namespace CSharpIosPerfMonitor
             WriteDiagnosticsEvent("runner_started", "采集子进程已启动，pid=" + captureProcess.Id.ToString(CultureInfo.InvariantCulture), "runner_started");
             CancellationToken captureToken = captureCts.Token;
             Task stderrTask = Task.Run(() => RunCaptureTaskAsync("stderr", () => ReadStderrLoop(captureProcess, label, generation, captureToken), diagnostics, generation, captureToken));
-            Task stdoutTask = Task.Run(() => RunCaptureTaskAsync("stdout", () => ReadStdoutLoop(captureProcess, label, generation, stderrTask, captureToken, isAndroid), diagnostics, generation, captureToken));
-            Task sampleTask = Task.Run(() => RunCaptureTaskAsync("samples", () => SampleLoop(config, generation, captureToken, isAndroid), diagnostics, generation, captureToken));
+            Task stdoutTask = Task.Run(() => RunCaptureTaskAsync("stdout", () => ReadStdoutLoop(captureProcess, label, generation, stderrTask, captureToken, platform), diagnostics, generation, captureToken));
+            Task sampleTask = Task.Run(() => RunCaptureTaskAsync("samples", () => SampleLoop(config, generation, captureToken, platform), diagnostics, generation, captureToken));
             Task.WhenAll(stderrTask, stdoutTask, sampleTask).ContinueWith(delegate
             {
                 try { captureProcess.Dispose(); } catch { }
@@ -334,7 +334,7 @@ namespace CSharpIosPerfMonitor
             }
         }
 
-        private async Task ReadStdoutLoop(Process process, string label, int generation, Task stderrTask, CancellationToken token, bool isAndroid)
+        private async Task ReadStdoutLoop(Process process, string label, int generation, Task stderrTask, CancellationToken token, string platform)
         {
             try
             {
@@ -343,7 +343,7 @@ namespace CSharpIosPerfMonitor
                     string line = await process.StandardOutput.ReadLineAsync();
                     if (line == null) break;
                     lock (_lock) { if (generation == _captureGeneration) _diagnosticsLog?.ObserveOutput(); }
-                    ParseLine(line, generation, isAndroid);
+                    ParseLine(line, generation, platform);
                 }
                 if (!token.IsCancellationRequested)
                 {
@@ -391,7 +391,7 @@ namespace CSharpIosPerfMonitor
             }
         }
 
-        private async Task SampleLoop(CaptureConfig config, int generation, CancellationToken token, bool isAndroid)
+        private async Task SampleLoop(CaptureConfig config, int generation, CancellationToken token, string platform)
         {
             while (!token.IsCancellationRequested && IsGenerationCurrent(generation))
             {
@@ -451,7 +451,7 @@ namespace CSharpIosPerfMonitor
                     }
                     else
                     {
-                        double fpsFreshSeconds = isAndroid ? AndroidFpsFreshSeconds : IosFpsFreshSeconds;
+                        double fpsFreshSeconds = FpsFreshSeconds(platform);
                         bool hasFreshFps = _latestFps.HasValue && _latestFpsAt.HasValue && (now - _latestFpsAt.Value).TotalSeconds <= fpsFreshSeconds;
                         frameSamples.Add(new PerfSample
                         {
@@ -704,7 +704,7 @@ namespace CSharpIosPerfMonitor
             return "采集已启动，" + processStatus + "；" + frameStatus + "。";
         }
 
-        private void ParseLine(string line, int generation, bool isAndroid)
+        private void ParseLine(string line, int generation, string platform)
         {
             if (string.IsNullOrWhiteSpace(line)) return;
             int firstSpace = line.IndexOf(' ');
@@ -1018,7 +1018,7 @@ namespace CSharpIosPerfMonitor
                         _latestMemoryMetric = Convert.ToString(Get(obj, "metric") ?? "");
                         _latestMemorySource = Convert.ToString(Get(obj, "source") ?? "");
                         _latestMemoryRss = rssValue;
-                        PerfSample sample = CreateCurrentStateSampleLocked(receivedAt, isAndroid);
+                        PerfSample sample = CreateCurrentStateSampleLocked(receivedAt, platform);
                         sample.MemoryUpdated = true;
                         _pendingProcessSamples.Enqueue(sample);
                         SignalSampleLoop();
@@ -1056,7 +1056,7 @@ namespace CSharpIosPerfMonitor
                             _latestCpuCoreSource = Convert.ToString(Get(obj, "core_source") ?? Get(obj, "source") ?? "");
                             _latestCpuCoreScope = Convert.ToString(Get(obj, "core_scope") ?? "device");
                         }
-                        PerfSample sample = CreateCurrentStateSampleLocked(receivedAt, isAndroid);
+                        PerfSample sample = CreateCurrentStateSampleLocked(receivedAt, platform);
                         sample.CpuUpdated = cpuValue.HasValue;
                         sample.CpuNormalizedUpdated = normalizedCpuValue.HasValue;
                         sample.CpuCoreUpdated = validCoreValues;
@@ -1070,7 +1070,7 @@ namespace CSharpIosPerfMonitor
                     if (values.Count > 0)
                     {
                         DateTime receivedAt = DateTime.Now;
-                        PerfSample sample = CreateCurrentStateSampleLocked(receivedAt, isAndroid);
+                        PerfSample sample = CreateCurrentStateSampleLocked(receivedAt, platform);
                         sample.HasTemperature = true;
                         sample.TemperatureCelsius = values;
                         sample.TemperatureUpdated = true;
@@ -1084,12 +1084,12 @@ namespace CSharpIosPerfMonitor
                 else
                 {
                     int level;
-                    string platform = Convert.ToString(Get(obj, "platform") ?? "").Trim().ToLowerInvariant();
+                    string eventPlatform = Convert.ToString(Get(obj, "platform") ?? "").Trim().ToLowerInvariant();
                     string name = Convert.ToString(Get(obj, "state") ?? "").Trim().ToLowerInvariant();
-                    if (TryThermalStateLevel(Get(obj, "value"), out level) && ThermalStateName(platform, level) == name)
+                    if (TryThermalStateLevel(Get(obj, "value"), out level) && ThermalStateName(eventPlatform, level) == name)
                     {
                         DateTime receivedAt = DateTime.Now;
-                        PerfSample sample = CreateCurrentStateSampleLocked(receivedAt, isAndroid);
+                        PerfSample sample = CreateCurrentStateSampleLocked(receivedAt, eventPlatform);
                         sample.HasThermalState = true;
                         sample.ThermalStateLevel = level;
                         sample.ThermalStateName = name;
@@ -1109,9 +1109,9 @@ namespace CSharpIosPerfMonitor
             }
         }
 
-        private PerfSample CreateCurrentStateSampleLocked(DateTime now, bool isAndroid)
+        private PerfSample CreateCurrentStateSampleLocked(DateTime now, string platform)
         {
-            double fpsFreshSeconds = isAndroid ? AndroidFpsFreshSeconds : IosFpsFreshSeconds;
+            double fpsFreshSeconds = FpsFreshSeconds(platform);
             bool hasFreshFps = _latestFps.HasValue
                 && _latestFpsAt.HasValue
                 && (now - _latestFpsAt.Value).TotalSeconds <= fpsFreshSeconds;
@@ -1197,6 +1197,12 @@ namespace CSharpIosPerfMonitor
                 HasFreshnessMetadata = true,
                 Source = hasFreshFps ? _latestFpsSource : ""
             };
+        }
+
+        private static double FpsFreshSeconds(string platform)
+        {
+            if (DeviceLookupService.IsHarmony(platform)) return HarmonyFpsFreshSeconds;
+            return DeviceLookupService.IsAndroid(platform) ? AndroidFpsFreshSeconds : IosFpsFreshSeconds;
         }
 
         private static object Get(Dictionary<string, object> obj, string key)
@@ -1442,6 +1448,7 @@ namespace CSharpIosPerfMonitor
                 if (level == 6) return "shutdown";
                 return "";
             }
+            if (!string.Equals(platform, "ios", StringComparison.OrdinalIgnoreCase)) return "";
             if (level == 0) return "nominal";
             if (level == 1) return "fair";
             if (level == 2) return "serious";

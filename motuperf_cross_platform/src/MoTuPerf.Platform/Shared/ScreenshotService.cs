@@ -212,15 +212,31 @@ namespace CSharpIosPerfMonitor
         private async Task<ProcessResult> CaptureHarmonyAsync(string path, CancellationToken token)
         {
             string remote = "/data/local/tmp/motuperf-" + Guid.NewGuid().ToString("N") + ".png";
+            ProcessResult lastResult = new ProcessResult(1, "", "鸿蒙截图命令尚未执行。");
             try
             {
-                ProcessResult captured = await ProcessRunner.RunAsync(RuntimeTools.HdcExecutable,
-                    HarmonyLookupService.TargetArgs(Udid, "snapshot_display", "-f", remote), 15000, token);
-                if (captured.ExitCode != 0 || (captured.Stdout ?? "").Contains("[Fail]")) return new ProcessResult(1, captured.Stdout, captured.Stderr);
-                ProcessResult received = await ProcessRunner.RunAsync(RuntimeTools.HdcExecutable,
-                    new[] { "-t", Udid, "file", "recv", remote, path }, 15000, token);
-                if (received.ExitCode != 0) return received;
-                return IsUsableAndroidPng(path) ? received : new ProcessResult(1, "", "鸿蒙截图为空、无法解码或为全黑图像。");
+                foreach (string[] captureCommand in HarmonyScreenshotCommands(remote))
+                {
+                    ProcessResult captured = await ProcessRunner.RunAsync(RuntimeTools.HdcExecutable,
+                        HarmonyLookupService.TargetArgs(Udid, captureCommand), 15000, token);
+                    lastResult = captured;
+                    if (captured.ExitCode != 0 || (captured.Stdout ?? "").Contains("[Fail]"))
+                    {
+                        TryDelete(path);
+                        continue;
+                    }
+
+                    ProcessResult received = await ProcessRunner.RunAsync(RuntimeTools.HdcExecutable,
+                        new[] { "-t", Udid, "file", "recv", remote, path }, 15000, token);
+                    lastResult = received;
+                    if (received.ExitCode == 0 && IsUsableAndroidPng(path)) return received;
+                    TryDelete(path);
+                }
+
+                return new ProcessResult(
+                    lastResult.ExitCode == 0 ? 1 : lastResult.ExitCode,
+                    lastResult.Stdout,
+                    "鸿蒙截图失败：已尝试 snapshot_display 和 screencap -p。" + Clip(lastResult.Stderr + lastResult.Stdout));
             }
             finally
             {
@@ -587,6 +603,15 @@ namespace CSharpIosPerfMonitor
         private static void Raise<T>(Action<T> handler, T value)
         {
             if (handler != null) handler(value);
+        }
+
+        internal static IReadOnlyList<string[]> HarmonyScreenshotCommands(string remote)
+        {
+            return new[]
+            {
+                new[] { "snapshot_display", "-f", remote ?? "" },
+                new[] { "screencap", "-p", remote ?? "" }
+            };
         }
     }
 }

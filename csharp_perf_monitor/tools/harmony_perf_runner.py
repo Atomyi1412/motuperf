@@ -48,8 +48,12 @@ class Hdc:
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise HdcFailure(str(exc)) from exc
-        if result.returncode != 0 or "[Fail]" in result.stdout:
-            raise HdcFailure((result.stderr + " " + result.stdout).strip()[:240])
+        output = (result.stderr + " " + result.stdout).strip()
+        # HDC versions differ on which stream receives transport failures.
+        # Treat the marker in either stream as a failed command so a device
+        # error cannot be parsed as a valid process snapshot.
+        if result.returncode != 0 or "[Fail]" in output:
+            raise HdcFailure(output[:240])
         return result.stdout
 
 
@@ -82,10 +86,23 @@ def proc_stat(text: str, pid: int) -> tuple[int, int] | None:
         return None
 
 
+def proc_stat_name(text: str, pid: int) -> str:
+    match = re.fullmatch(r"\s*(\d+) \((.*)\) (.+)\s*", text.strip())
+    if match is None or int(match[1]) != pid:
+        return ""
+    return match[2].strip()
+
+
 def parse_snapshot(text: str, pid: int) -> ProcessSnapshot | None:
     data = sections(text)
-    identity = proc_stat(data.get("__MOTUPERF_STAT__", ""), pid)
+    stat_text = data.get("__MOTUPERF_STAT__", "")
+    identity = proc_stat(stat_text, pid)
     name = data.get("__MOTUPERF_NAME__", "").split("\x00", 1)[0].strip()
+    if not name:
+        # Some system or restricted processes expose an empty cmdline while
+        # /proc/<pid>/stat remains readable. The comm field is still the
+        # device-reported process identity and is safe for PID reuse checks.
+        name = proc_stat_name(stat_text, pid)
     if identity is None or not name:
         return None
     cores: list[tuple[int, int, int]] = []
@@ -278,7 +295,7 @@ def collect(args: argparse.Namespace, hdc: Hdc) -> int:
             try:
                 raw = hdc.shell("for z in /sys/class/thermal/thermal_zone*; do "
                                 "printf '%s|' \"${z##*/}\"; tr -d '\\n' < \"$z/type\"; "
-                                "printf '|'; cat \"$z/temp\"; done", timeout=3.0)
+                                "printf '|'; cat \"$z/temp\"; printf '\\n'; done", timeout=3.0)
                 values = parse_temperatures(raw)
                 if values:
                     emit("temperature", {"values": values, "source": "hdc-sysfs-thermal-millidegrees", "scope": "device", "platform": "harmony"})
