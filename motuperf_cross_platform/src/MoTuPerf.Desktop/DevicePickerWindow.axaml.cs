@@ -53,6 +53,7 @@ namespace MoTuPerf.Desktop
         private string _appleDriverButtonIdleText = "下载苹果设备驱动";
         private string _deviceCountStatus = "正在检测设备...";
         private DeviceDiagnosticsSnapshot _deviceDiagnostics = DeviceDiagnosticsFormatter.Loading();
+        private string _loadedDeviceUdid = "";
 
         public DevicePickerWindow()
             : this(null)
@@ -246,6 +247,12 @@ namespace MoTuPerf.Desktop
                 return;
             }
             string deviceUdid = device.Udid ?? "";
+            AppInfo previousApp = string.Equals(_loadedDeviceUdid, deviceUdid, StringComparison.OrdinalIgnoreCase)
+                ? AppList.SelectedItem as AppInfo
+                : null;
+            ProcessInfo previousProcess = string.Equals(_loadedDeviceUdid, deviceUdid, StringComparison.OrdinalIgnoreCase)
+                ? ProcessList.SelectedItem as ProcessInfo
+                : null;
             long generation;
             CancellationToken token = NewLoadToken(out generation);
             StatusText.Text = "正在读取 " + device.PickerLabel + " 的 APP 和进程...";
@@ -261,8 +268,18 @@ namespace MoTuPerf.Desktop
                 _apps.AddRange(appsTask.Result);
                 _processes.Clear();
                 _processes.AddRange(processesTask.Result);
-                AppInfo selectedApp = FindInitialApp() ?? _apps.FirstOrDefault(delegate(AppInfo app) { return app.Recommended; }) ?? _apps.FirstOrDefault();
-                ProcessInfo selectedProcess = FindInitialProcess() ?? _processes.FirstOrDefault(delegate(ProcessInfo process) { return process.Recommended; }) ?? _processes.FirstOrDefault();
+                AppInfo selectedApp = FindInitialApp()
+                    ?? (previousApp == null ? null : _apps.FirstOrDefault(delegate(AppInfo app) { return string.Equals(app.BundleId, previousApp.BundleId, StringComparison.OrdinalIgnoreCase); }))
+                    ?? _apps.FirstOrDefault(delegate(AppInfo app) { return app.Recommended; })
+                    ?? _apps.FirstOrDefault();
+                ProcessInfo selectedProcess = FindInitialProcess()
+                    ?? (previousProcess == null ? null : _processes.FirstOrDefault(delegate(ProcessInfo process)
+                    {
+                        return process.Pid == previousProcess.Pid
+                            && string.Equals(process.Name, previousProcess.Name, StringComparison.OrdinalIgnoreCase);
+                    }))
+                    ?? _processes.FirstOrDefault(delegate(ProcessInfo process) { return process.Recommended; })
+                    ?? _processes.FirstOrDefault();
                 RunSelectionSync(delegate
                 {
                     ApplyAppFilter();
@@ -272,6 +289,7 @@ namespace MoTuPerf.Desktop
                 });
                 UpdateSelectedAppSummary(selectedApp ?? FindAppForProcess(selectedProcess));
                 StatusText.Text = _deviceCountStatus;
+                _loadedDeviceUdid = deviceUdid;
                 _ = HydrateIconsAndRefreshAsync(
                     device,
                     _apps.ToArray(),

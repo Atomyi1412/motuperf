@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using CSharpIosPerfMonitor;
 using Xunit;
 
@@ -34,6 +36,110 @@ namespace MoTuPerf.Platform.Tests
             Assert.Equal(2, apps.Count);
             Assert.Equal("EntryAbility", HarmonyLookupService.ParseMainAbility("bundle:\n{\"hapModuleInfos\":[{\"mainElementName\":\"EntryAbility\"}]}"));
             Assert.Equal("", HarmonyLookupService.ParseMainAbility("failed"));
+        }
+
+        [Fact]
+        public void ParsesBundleManagerJsonAndKeyValueVariantsWithoutFixedPackageNames()
+        {
+            var apps = HarmonyLookupService.ParseApps(
+                "{\"bundleName\":\"com.example.native\",\"modulePackage\":\"com.example.native\"}\n"
+                + "bundle_name: com.example.compat\n"
+                + "package name: com.example.legacy\n");
+
+            Assert.Equal(new[] { "com.example.native", "com.example.compat", "com.example.legacy" }, apps.Select(app => app.BundleId));
+            Assert.Equal("MainAbility", HarmonyLookupService.ParseMainAbility("mainElementName = MainAbility"));
+            Assert.Equal("MainAbility", HarmonyLookupService.ParseMainAbility("entryAbilityName: 'MainAbility'"));
+        }
+
+        [Fact]
+        public void ParsesCompatibilityPackagesAndMergesRunningApps()
+        {
+            Assert.Equal(new[] { "com.example.compat", "com.example.other" }, HarmonyLookupService.ParseAndroidPackages(
+                "package:/data/app/com.example.compat/base.apk=com.example.compat\n"
+                + "package:com.example.other uid:10234\nnot-a-package\n"));
+
+            var apps = new List<AppInfo>();
+            var processes = HarmonyLookupService.ParseProcesses(
+                "PID NAME ARGS\n"
+                + "401 com.example.native com.example.native\n"
+                + "402 com.example.compat:render com.example.compat:render\n", "device");
+            HarmonyLookupService.MergeProcessApps(apps, processes);
+
+            Assert.Equal(new[] { "com.example.compat", "com.example.native" }, apps.Select(app => app.BundleId).OrderBy(value => value));
+        }
+
+        [Fact]
+        public void FindsEntryAbilityAndModuleAcrossBundleManagerShapes()
+        {
+            string output = "prefix\n{\"hapModuleInfos\":[{\"moduleName\":\"entry\",\"entryAbilityName\":\"EntryAbility\"}]}\n";
+            Assert.Equal("EntryAbility", HarmonyLookupService.ParseMainAbility(output));
+            Assert.Equal("entry", HarmonyLookupService.ParseMainModule(output));
+            Assert.Equal("MainAbility", HarmonyLookupService.ParseMainAbility("abilityName: MainAbility"));
+        }
+
+        [Fact]
+        public void EnumeratesEveryRealLaunchEntryWithoutGuessingNames()
+        {
+            string output = "{\"hapModuleInfos\":["
+                + "{\"moduleName\":\"entry\",\"mainElementName\":\"EntryAbility\"},"
+                + "{\"moduleName\":\"feature\",\"mainElementName\":\"FeatureAbility\"}]}";
+
+            var entries = HarmonyLookupService.ParseLaunchEntryPoints(output);
+
+            Assert.Equal(2, entries.Count);
+            Assert.Contains(entries, entry => entry.Module == "entry" && entry.Ability == "EntryAbility");
+            Assert.Contains(entries, entry => entry.Module == "feature" && entry.Ability == "FeatureAbility");
+        }
+
+        [Fact]
+        public void MergesProcessViewsByPidAndKeepsTheMostCompleteIdentity()
+        {
+            var first = HarmonyLookupService.ParseProcesses(
+                "PID ARGS\n601 /system/bin/appspawn --bundle-name com.example.game\n", "device");
+            var second = HarmonyLookupService.ParseProcesses(
+                "UID PID PPID CMD\nu0 601 1 com.example.game:render\n", "device");
+
+            var merged = HarmonyLookupService.MergeProcesses(first.Concat(second));
+
+            Assert.Single(merged);
+            Assert.Equal(601, merged[0].Pid);
+            Assert.Equal("com.example.game", merged[0].BundleId);
+        }
+
+        [Fact]
+        public void ParsesAdditionalBundleIdentityKeys()
+        {
+            var apps = HarmonyLookupService.ParseApps(
+                "bundle id: com.example.one\n"
+                + "applicationId=com.example.two\n"
+                + "appIdentifier: com.example.three\n");
+
+            Assert.Equal(new[] { "com.example.one", "com.example.two", "com.example.three" }, apps.Select(app => app.BundleId));
+        }
+
+        [Fact]
+        public void ParsesHeaderlessAndCaseVariantHarmonyProcessOutput()
+        {
+            var rows = HarmonyLookupService.ParseProcesses(
+                "uid pid ppid name\n"
+                + "u0 501 1 com.example.native\n"
+                + "u0 502 1 /system/bin/com.example.compat:worker --flag\n", "device");
+
+            Assert.Equal(2, rows.Count);
+            Assert.Equal("com.example.native", rows.Single(row => row.Pid == 501).BundleId);
+            Assert.Equal("com.example.compat", rows.Single(row => row.Pid == 502).BundleId);
+        }
+
+        [Fact]
+        public void FindsBundleInProcessCommandArguments()
+        {
+            var rows = HarmonyLookupService.ParseProcesses(
+                "PID ARGS\n"
+                + "601 /system/bin/appspawn --bundle-name com.example.launcher --user 0\n", "device");
+
+            Assert.Single(rows);
+            Assert.Equal("com.example.launcher", rows[0].BundleId);
+            Assert.Equal("com.example.launcher", rows[0].Name);
         }
 
         [Fact]

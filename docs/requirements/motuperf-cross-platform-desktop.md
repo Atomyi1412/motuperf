@@ -4,7 +4,7 @@
 
 ## 1. 用户目标
 
-测试人员在 Windows 或 macOS 上使用同一套 MoTuPerf 操作界面，通过 USB 选择 iOS/Android 设备、APP 和进程，采集真实性能数据，查看联动曲线与截图，并保存现场或导出表格。
+测试人员在 Windows 或 macOS 上使用同一套 MoTuPerf 操作界面，通过 USB 选择 iOS、Android 或鸿蒙设备、APP 和进程，采集真实性能数据，查看联动曲线与截图，并保存现场或导出表格。
 
 ## 2. 产品原则
 
@@ -15,7 +15,7 @@
 
 ## 3. 功能范围
 
-- 选择并刷新设备、APP 和进程，支持搜索、推荐和启动 APP。
+- 选择并刷新设备、APP 和进程，支持搜索、推荐和启动 APP；鸿蒙覆盖 HDC 可枚举的原生应用和 Android 兼容容器应用。
 - 按所选 PID 采集进程 CPU 和内存，按真实显示源采集 FPS、FrameTime、Jank 和 BigJank。
 - 采集设备温度；iOS 支持 Thermal State 时显示 `0/1/2/3`。
 - 每 3 秒异步截图，并与全部指标共享时间选择。

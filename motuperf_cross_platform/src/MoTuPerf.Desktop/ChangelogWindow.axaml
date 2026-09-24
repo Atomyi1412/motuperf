@@ -26,23 +26,23 @@
         <StackPanel Margin="22,10,18,12" Spacing="9">
           <Border Classes="helpSection">
             <StackPanel>
-              <TextBlock Text="v0.26.0" Classes="helpTitle" />
+              <TextBlock Text="v0.28.0" Classes="helpTitle" />
               <TextBlock Text="2026-09-24" Classes="dialogHint" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 新增鸿蒙 HDC 基础接入：设备检测、原生应用启动、进程选择、CPU、内存、截图和可读温度；支持现场文件保存/重开及 CSV 导出。&#xA;• 增加 HDC 缺失、未授权、离线和目标进程失效诊断；采样前后校验 PID 身份，多核 CPU 保留真实值，缺测不填零。&#xA;• 鸿蒙原始 CPU 优先使用计数器差分，可读时提供归一化和逐核视图；内存记录 PSS/RSS 与实际来源。&#xA;• 首版需安装官方 SDK 的 HDC；支持范围以 HDC 可枚举且可读取身份的进程为准，Android 兼容容器内应用尚未验证。鸿蒙 FPS、FrameTime、Jank/BigJank、系统热状态和应用图标暂未接入。当前以夹具验证为主，鸿蒙真机与 macOS 兼容性待验收。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 鸿蒙应用发现继续扩大覆盖范围：合并多种 Bundle Manager 输出、完整兼容包清单和多种进程清单，尽量保留所有能被 HDC 读取到的原生、系统、兼容容器及运行中应用。&#xA;• 启动 APP 时遍历设备真实返回的模块和 Ability 入口，失败后再使用包级启动及兼容容器回退，并汇总失败诊断；不硬编码应用包名或入口名称。&#xA;• 本版本只保留本地，等待鸿蒙真机验收确认后再决定是否发布。" />
             </StackPanel>
           </Border>
           <Border Classes="helpSection">
             <StackPanel>
-              <TextBlock Text="v0.25.2" Classes="helpTitle" />
-              <TextBlock Text="2026-09-22" Classes="dialogHint" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 移除数据显示区域重复展示的设备与进程状态，保留标题栏状态信息，释放内容区空间。" />
-            </StackPanel>
+              <TextBlock Text="v0.27.1" Classes="helpTitle" />
+              <TextBlock Text="2026-09-24" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 鸿蒙应用列表改为合并完整 Bundle Manager 清单、全部可读的兼容包清单和运行中的真实进程，不再只读取第三方包；不同系统版本缺少任一接口时仍尽量保留其他来源的应用。&#xA;• 增强兼容包路径格式、进程命令行包名和 bm dump -n 入口模块解析，所有应用继续使用真实 Ability、包级启动或兼容容器启动回退。&#xA;• 本版本只保留本地，等待鸿蒙真机验收确认后再决定是否发布。" />
+          </StackPanel>
           </Border>
           <Border Classes="helpSection">
             <StackPanel>
-              <TextBlock Text="v0.25.1" Classes="helpTitle" />
-              <TextBlock Text="2026-09-22" Classes="dialogHint" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 移除顶部无实际操作作用的“时间轴跟随”文字，减少界面干扰。" />
+              <TextBlock Text="v0.27.0" Classes="helpTitle" />
+              <TextBlock Text="2026-09-24" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 扩展鸿蒙应用支持：兼容 Bundle Manager 的 JSON、键值文本和旧版包名输出，覆盖原生鸿蒙应用与 Android 兼容容器应用。&#xA;• 应用清单解析不到时，从设备真实运行进程补出可测试应用；进程解析兼容多种 ps 表头、无表头输出和包名进程后缀。&#xA;• 启动 APP 支持 Ability 入口、包级启动及 Android 兼容启动回退；同一设备刷新列表时保留当前应用和进程选择。&#xA;• 本版本只保留本地，鸿蒙真机验收完成并确认前不推送、不打标签、不创建 Release。" />
             </StackPanel>
           </Border>
         </StackPanel>

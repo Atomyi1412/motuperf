@@ -9,6 +9,7 @@ It is separate from the preserved Windows WPF `v0.4.65` project.
 - macOS Apple Silicon only: `osx-arm64` for M1/M2/M3/M4.
 - Intel macOS (`osx-x64`) is intentionally out of scope for the first release.
 - The UI uses the existing real-device collection, metric, screenshot, session, and CSV contracts. It does not enable simulated data.
+- HarmonyOS/OpenHarmony applications are discovered through HDC Bundle Manager and running-process fallbacks; native and Android compatibility applications retain the Harmony device platform identity.
 
 ## Build And Test
 

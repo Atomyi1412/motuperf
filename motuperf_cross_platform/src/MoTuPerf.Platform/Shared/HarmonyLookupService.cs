@@ -10,6 +10,12 @@ using System.Threading.Tasks;
 
 namespace CSharpIosPerfMonitor
 {
+    internal sealed class HarmonyLaunchEntryPoint
+    {
+        public string Module { get; set; }
+        public string Ability { get; set; }
+    }
+
     /// <summary>
     /// Owns the HDC boundary for OpenHarmony/HarmonyOS devices. Harmony is kept
     /// as its own platform even when the selected application is an Android
@@ -132,23 +138,38 @@ namespace CSharpIosPerfMonitor
 
         public async Task<List<AppInfo>> ListAppsAsync(string serial, CancellationToken token)
         {
-            ProcessResult dump = await RunShellAsync(serial, new[] { "bm", "dump", "-a" }, 20000, token).ConfigureAwait(false);
-            List<AppInfo> apps = dump.ExitCode == 0 ? ParseApps(dump.Stdout) : new List<AppInfo>();
-            if (dump.ExitCode != 0 || (dump.Stdout ?? "").Contains("[Fail]"))
-                throw new IOException("无法读取鸿蒙应用列表，请检查 HDC 授权，或在设备上打开应用后选择进程。" + Sanitize(dump.Stdout + " " + dump.Stderr, 240));
+            List<AppInfo> apps = await ReadBundleManagerAppsAsync(serial, token).ConfigureAwait(false);
+            bool dumpFailed = apps.Count == 0;
+            HashSet<string> seen = new HashSet<string>(apps.Select(delegate(AppInfo app) { return app.BundleId; }), StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                // Do not use `-3` here. Harmony devices can expose launchable
+                // system/preinstalled applications through the Android
+                // compatibility layer as well as third-party packages.
+                foreach (string packageName in await ReadAndroidPackagesAsync(serial, token).ConfigureAwait(false))
+                    AddApp(apps, seen, packageName, "Android 兼容应用或系统应用");
+            }
+            catch (OperationCanceledException) { throw; }
+            catch { }
+
+            // Bundle Manager and package-manager views are not guaranteed to
+            // agree across HarmonyOS releases. Always merge real processes so
+            // an installed/running app remains selectable even when one
+            // inventory command omits it.
+            try
+            {
+                MergeProcessApps(apps, await ReadProcessListAsync(serial, token).ConfigureAwait(false));
+            }
+            catch (OperationCanceledException) { throw; }
+            catch { }
+            if (apps.Count == 0 && dumpFailed)
+                throw new IOException("无法读取鸿蒙应用列表，请检查 HDC 授权，或在设备上打开应用后刷新进程。");
             return apps.OrderByDescending(delegate(AppInfo app) { return app.Recommended; }).ThenBy(delegate(AppInfo app) { return app.BundleId; }).ToList();
         }
 
         public async Task<List<ProcessInfo>> ListProcessesAsync(string serial, CancellationToken token)
         {
-            ProcessResult result = await RunShellAsync(serial, new[] { "ps", "-A", "-o", "PID,ARGS" }, 12000, token).ConfigureAwait(false);
-            if (result == null || result.ExitCode != 0 || ParseProcesses(result.Stdout, serial).Count == 0)
-            {
-                result = await RunShellAsync(serial, new[] { "ps", "-ef" }, 12000, token).ConfigureAwait(false);
-            }
-            if (result == null || result.ExitCode != 0 || (result.Stdout ?? "").Contains("[Fail]"))
-                throw new IOException("无法读取鸿蒙进程：" + Sanitize(result?.Stdout + " " + result?.Stderr, 240));
-            List<ProcessInfo> processes = ParseProcesses(result.Stdout, serial);
+            List<ProcessInfo> processes = await ReadProcessListAsync(serial, token).ConfigureAwait(false);
             if (processes.Count > 0)
             {
                 string pids = string.Join(" ", processes.Select(p => p.Pid.ToString(CultureInfo.InvariantCulture)));
@@ -160,16 +181,120 @@ namespace CSharpIosPerfMonitor
             return processes;
         }
 
+        private async Task<List<string>> ReadAndroidPackagesAsync(string serial, CancellationToken token)
+        {
+            ProcessResult result = await RunShellAsync(serial, new[] { "pm", "list", "packages", "-f" }, 15000, token).ConfigureAwait(false);
+            if (result.ExitCode == 0 && !IsHdcFailure(result))
+            {
+                List<string> packages = ParseAndroidPackages(result.Stdout);
+                if (packages.Count > 0) return packages;
+            }
+
+            // A few compatibility containers expose package names but reject
+            // the APK-path form. Keep this fallback broad as well; filtering
+            // to third-party packages would hide valid launchable apps.
+            result = await RunShellAsync(serial, new[] { "pm", "list", "packages" }, 15000, token).ConfigureAwait(false);
+            return result.ExitCode == 0 && !IsHdcFailure(result)
+                ? ParseAndroidPackages(result.Stdout)
+                : new List<string>();
+        }
+
+        private async Task<List<AppInfo>> ReadBundleManagerAppsAsync(string serial, CancellationToken token)
+        {
+            List<AppInfo> apps = new List<AppInfo>();
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            ProcessResult[] results = new ProcessResult[2];
+            results[0] = await RunShellAsync(serial, new[] { "bm", "dump", "-a" }, 20000, token).ConfigureAwait(false);
+            if (results[0] != null && results[0].ExitCode == 0 && !IsHdcFailure(results[0]))
+            {
+                foreach (AppInfo app in ParseApps(results[0].Stdout)) AddApp(apps, seen, app.BundleId, "Bundle Manager 应用");
+            }
+            if (apps.Count == 0)
+            {
+                // Some releases require an explicit user when dumping the
+                // installed bundle list. This is a fallback only; unsupported
+                // options are ignored and do not hide package/process results.
+                results[1] = await RunShellAsync(serial, new[] { "bm", "dump", "-a", "-u", "0" }, 20000, token).ConfigureAwait(false);
+                if (results[1] != null && results[1].ExitCode == 0 && !IsHdcFailure(results[1]))
+                    foreach (AppInfo app in ParseApps(results[1].Stdout)) AddApp(apps, seen, app.BundleId, "Bundle Manager 应用");
+            }
+            return apps;
+        }
+
+        private async Task<List<ProcessInfo>> ReadProcessListAsync(string serial, CancellationToken token)
+        {
+            List<ProcessInfo> allProcesses = new List<ProcessInfo>();
+            bool commandSucceeded = false;
+            string diagnostics = "";
+            string[][] commands = new[]
+            {
+                new[] { "ps", "-A", "-o", "PID,ARGS" },
+                new[] { "ps", "-ef" },
+                new[] { "ps", "-A" },
+                new[] { "ps" }
+            };
+            foreach (string[] command in commands)
+            {
+                ProcessResult result;
+                try
+                {
+                    result = await RunShellAsync(serial, command, 12000, token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception exception)
+                {
+                    diagnostics = exception.Message;
+                    continue;
+                }
+                if (result != null && result.ExitCode == 0 && !IsHdcFailure(result))
+                {
+                    commandSucceeded = true;
+                    allProcesses.AddRange(ParseProcesses(result.Stdout, serial));
+                }
+                else if (result != null)
+                {
+                    diagnostics = result.Stdout + " " + result.Stderr;
+                }
+            }
+            List<ProcessInfo> processes = MergeProcesses(allProcesses);
+            if (processes.Count == 0 && !commandSucceeded)
+                throw new IOException("无法读取鸿蒙进程：" + Sanitize(diagnostics, 240));
+            return processes;
+        }
+
         public async Task<ProcessResult> LaunchAppAsync(string serial, string bundleId, CancellationToken token)
         {
             if (!ValidBundle(bundleId)) return new ProcessResult(1, "", "鸿蒙应用包名无效。");
             ProcessResult detail = await RunShellAsync(serial, new[] { "bm", "dump", "-n", bundleId }, 12000, token);
-            string ability = ParseMainAbility(detail.Stdout);
-            if (string.IsNullOrWhiteSpace(ability))
-                return new ProcessResult(1, "", "设备未提供可启动的入口 Ability，请在设备上打开应用，再刷新并选择进程。");
-            ProcessResult result = await RunShellAsync(serial, new[] { "aa", "start", "-b", bundleId, "-a", ability }, 15000, token).ConfigureAwait(false);
-            return result.ExitCode == 0 && result.Stdout.IndexOf("start ability successfully", StringComparison.OrdinalIgnoreCase) < 0
-                ? new ProcessResult(1, result.Stdout, result.Stderr) : result;
+            List<ProcessResult> attempts = new List<ProcessResult>();
+            if (detail != null) attempts.Add(detail);
+            HashSet<string> abilities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (HarmonyLaunchEntryPoint entry in ParseLaunchEntryPoints(detail == null ? "" : detail.Stdout))
+            {
+                if (!string.IsNullOrWhiteSpace(entry.Ability)) abilities.Add(entry.Ability);
+                if (!string.IsNullOrWhiteSpace(entry.Ability) && !string.IsNullOrWhiteSpace(entry.Module))
+                {
+                    ProcessResult result = await RunShellAsync(serial, new[] { "aa", "start", "-b", bundleId, "-m", entry.Module, "-a", entry.Ability }, 15000, token).ConfigureAwait(false);
+                    attempts.Add(result);
+                    if (IsSuccessfulCommand(result)) return result;
+                }
+            }
+            foreach (string ability in abilities)
+            {
+                ProcessResult result = await RunShellAsync(serial, new[] { "aa", "start", "-b", bundleId, "-a", ability }, 15000, token).ConfigureAwait(false);
+                attempts.Add(result);
+                if (IsSuccessfulCommand(result)) return result;
+            }
+            ProcessResult packageStart = await RunShellAsync(serial, new[] { "aa", "start", "-b", bundleId }, 15000, token).ConfigureAwait(false);
+            attempts.Add(packageStart);
+            if (IsSuccessfulCommand(packageStart)) return packageStart;
+            ProcessResult androidStart = await RunShellAsync(serial, new[] { "am", "start", "-a", "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER", "-p", bundleId }, 15000, token).ConfigureAwait(false);
+            attempts.Add(androidStart);
+            if (IsSuccessfulCommand(androidStart)) return androidStart;
+            ProcessResult monkeyStart = await RunShellAsync(serial, new[] { "monkey", "-p", bundleId, "-c", "android.intent.category.LAUNCHER", "1" }, 15000, token).ConfigureAwait(false);
+            attempts.Add(monkeyStart);
+            if (IsSuccessfulCommand(monkeyStart)) return monkeyStart;
+            return CombineLaunchFailures(attempts);
         }
 
         public Task HydrateAppIconsAsync(string serial, IList<AppInfo> apps, IList<ProcessInfo> processes, int maxIcons, CancellationToken token)
@@ -183,22 +308,69 @@ namespace CSharpIosPerfMonitor
         {
             List<AppInfo> apps = new List<AppInfo>();
             HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            MatchCollection keyed = Regex.Matches(
+                output ?? "",
+                @"(?i)(?:[""']?)(?:bundleName|bundle_name|bundle\s+name|bundleId|bundle_id|bundle\s+id|packageName|package_name|modulePackage|module_package|module\s+package|applicationId|application_id|appIdentifier|app_identifier|package\s+name)(?:[""']?)\s*[:=]\s*[""']?([A-Za-z][A-Za-z0-9_.]+)",
+                RegexOptions.CultureInvariant);
+            foreach (Match match in keyed)
+            {
+                AddApp(apps, seen, match.Groups[1].Value);
+            }
             foreach (string raw in Lines(output))
             {
-                string line = raw.Trim();
-                Match named = Regex.Match(line, "^\\s*[\"']?bundleName[\"']?\\s*[:=]\\s*[\"']?([A-Za-z][A-Za-z0-9_.]+)", RegexOptions.IgnoreCase);
-                string bundle = named.Success ? named.Groups[1].Value : line.Trim('"', ',', ' ', '\t');
-                if (!ValidBundle(bundle)) continue;
-                if (string.IsNullOrWhiteSpace(bundle) || !seen.Add(bundle)) continue;
-                apps.Add(new AppInfo
-                {
-                    BundleId = bundle,
-                    Name = bundle,
-                    Platform = "harmony",
-                    Recommended = false
-                });
+                string line = raw.Trim().Trim('{', '}', ',', ' ', '\t');
+                if (ValidBundle(line)) AddApp(apps, seen, line);
+                Match leadingBundle = Regex.Match(
+                    line,
+                    @"^(?<bundle>[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)(?:\s|[,;}]|$)",
+                    RegexOptions.CultureInvariant);
+                if (leadingBundle.Success) AddApp(apps, seen, leadingBundle.Groups["bundle"].Value, "Bundle Manager 应用");
             }
             return apps;
+        }
+
+        internal static List<ProcessInfo> MergeProcesses(IEnumerable<ProcessInfo> source)
+        {
+            Dictionary<int, ProcessInfo> byPid = new Dictionary<int, ProcessInfo>();
+            foreach (ProcessInfo process in source ?? Enumerable.Empty<ProcessInfo>())
+            {
+                if (!ProcessTargetMatcher.IsValidTarget(process)) continue;
+                ProcessInfo existing;
+                if (!byPid.TryGetValue(process.Pid, out existing))
+                {
+                    byPid[process.Pid] = process;
+                    continue;
+                }
+                bool replace = string.IsNullOrWhiteSpace(existing.BundleId) && !string.IsNullOrWhiteSpace(process.BundleId);
+                if (!replace && existing.HarmonyStartTimeTicks <= 0 && process.HarmonyStartTimeTicks > 0) replace = true;
+                if (replace) byPid[process.Pid] = process;
+            }
+            return byPid.Values
+                .OrderByDescending(delegate(ProcessInfo process) { return process.Recommended; })
+                .ThenBy(delegate(ProcessInfo process) { return process.Name; })
+                .ThenBy(delegate(ProcessInfo process) { return process.Pid; })
+                .ToList();
+        }
+
+        internal static List<string> ParseAndroidPackages(string output)
+        {
+            List<string> packages = new List<string>();
+            foreach (string raw in Lines(output))
+            {
+                string line = (raw ?? "").Trim();
+                if (!line.StartsWith("package:", StringComparison.OrdinalIgnoreCase)) continue;
+                string value = line.Substring("package:".Length).Trim();
+                int equals = value.LastIndexOf('=');
+                if (equals >= 0) value = value.Substring(equals + 1).Trim();
+                else
+                {
+                    Match first = Regex.Match(value, @"^([^\s]+)");
+                    value = first.Success ? first.Groups[1].Value : value;
+                }
+                value = value.Trim('"', '\'', ',', ';');
+                if (ValidBundle(value) && !packages.Contains(value, StringComparer.OrdinalIgnoreCase)) packages.Add(value);
+            }
+            return packages;
         }
 
         internal static List<ProcessInfo> ParseProcesses(string output, string serial)
@@ -211,15 +383,25 @@ namespace CSharpIosPerfMonitor
                 string line = raw.Trim();
                 if (line.Length == 0) continue;
                 string[] parts = Regex.Split(line, @"\s+");
-                if (parts.Contains("PID"))
+                int headerPid = IndexOfIgnoreCase(parts, "PID");
+                if (headerPid >= 0)
                 {
-                    pidIndex = Array.IndexOf(parts, "PID");
-                    commandIndex = Array.FindIndex(parts, x => x == "ARGS" || x == "CMD" || x == "COMMAND" || x == "NAME");
+                    pidIndex = headerPid;
+                    commandIndex = IndexOfAnyIgnoreCase(parts, "ARGS", "CMD", "COMMAND", "NAME");
                     continue;
                 }
-                if (pidIndex < 0 || commandIndex < 0 || parts.Length <= Math.Max(pidIndex, commandIndex)
-                    || !int.TryParse(parts[pidIndex], out int pid) || pid <= 0) continue;
-                string name = parts[commandIndex];
+                int rowPidIndex = pidIndex;
+                if (rowPidIndex < 0)
+                {
+                    if (parts.Length > 0 && int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int firstPid)) rowPidIndex = 0;
+                    else if (parts.Length > 1 && int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int secondPid)) rowPidIndex = 1;
+                }
+                if (rowPidIndex < 0 || parts.Length <= rowPidIndex
+                    || !int.TryParse(parts[rowPidIndex], NumberStyles.Integer, CultureInfo.InvariantCulture, out int pid) || pid <= 0) continue;
+                int rowCommandIndex = commandIndex >= 0 && commandIndex < parts.Length ? commandIndex : FindProcessTokenIndex(parts, rowPidIndex + 1);
+                if (rowCommandIndex < 0) continue;
+                string name = ProcessNameFromCommand(string.Join(" ", parts.Skip(rowCommandIndex)));
+                if (string.IsNullOrWhiteSpace(name)) continue;
                 string bundle = BundleFromProcess(name);
                 processes.Add(new ProcessInfo
                 {
@@ -241,6 +423,24 @@ namespace CSharpIosPerfMonitor
                 .ThenBy(delegate(ProcessInfo process) { return process.Name; })
                 .ThenBy(delegate(ProcessInfo process) { return process.Pid; })
                 .ToList();
+        }
+
+        internal static void MergeProcessApps(IList<AppInfo> apps, IEnumerable<ProcessInfo> processes)
+        {
+            if (apps == null || processes == null) return;
+            HashSet<string> seen = new HashSet<string>(apps.Where(a => a != null).Select(a => a.BundleId), StringComparer.OrdinalIgnoreCase);
+            foreach (ProcessInfo process in processes)
+            {
+                if (process == null || !ValidBundle(process.BundleId) || !seen.Add(process.BundleId)) continue;
+                apps.Add(new AppInfo
+                {
+                    BundleId = process.BundleId,
+                    Name = process.BundleId,
+                    Platform = "harmony",
+                    Recommended = process.ForegroundApplication,
+                    Reason = "运行中的鸿蒙应用"
+                });
+            }
         }
 
         internal static string DescribeDiscoveryException(Exception exception)
@@ -276,11 +476,32 @@ namespace CSharpIosPerfMonitor
 
         internal static string ParseMainAbility(string output)
         {
-            int start = (output ?? "").IndexOf('{');
-            if (start < 0) return "";
+            Match textValue = Regex.Match(
+                output ?? "",
+                @"(?i)(?:[""']?)(?:mainElementName|mainAbility|mainAbilityName|entryAbility|entryAbilityName|abilityName)(?:[""']?)\s*[:=]\s*[""']?([A-Za-z][A-Za-z0-9_.$-]*)(?:[""']?)",
+                RegexOptions.CultureInvariant);
+            if (textValue.Success) return textValue.Groups[1].Value.Trim();
+            string json = ExtractJsonObject(output);
+            if (string.IsNullOrWhiteSpace(json)) return "";
             try
             {
-                using (JsonDocument doc = JsonDocument.Parse(output.Substring(start))) return FindMainAbility(doc.RootElement);
+                using (JsonDocument doc = JsonDocument.Parse(json)) return FindMainAbility(doc.RootElement);
+            }
+            catch (JsonException) { return ""; }
+        }
+
+        internal static string ParseMainModule(string output)
+        {
+            Match textValue = Regex.Match(
+                output ?? "",
+                @"(?i)(?:[""']?)(?:moduleName|module_name|mainModuleName|main_module_name)(?:[""']?)\s*[:=]\s*[""']?([A-Za-z][A-Za-z0-9_.-]*)",
+                RegexOptions.CultureInvariant);
+            if (textValue.Success) return textValue.Groups[1].Value.Trim();
+            string json = ExtractJsonObject(output);
+            if (string.IsNullOrWhiteSpace(json)) return "";
+            try
+            {
+                using (JsonDocument doc = JsonDocument.Parse(json)) return FindMainModule(doc.RootElement);
             }
             catch (JsonException) { return ""; }
         }
@@ -289,9 +510,11 @@ namespace CSharpIosPerfMonitor
         {
             if (node.ValueKind == JsonValueKind.Object)
             {
-                foreach (string key in new[] { "mainAbility", "mainElementName" })
-                    if (node.TryGetProperty(key, out JsonElement value) && value.ValueKind == JsonValueKind.String
-                        && !string.IsNullOrWhiteSpace(value.GetString())) return value.GetString();
+                foreach (string key in new[] { "mainAbility", "mainElementName", "mainAbilityName", "entryAbility", "entryAbilityName", "abilityName" })
+                    foreach (JsonProperty property in node.EnumerateObject())
+                        if (string.Equals(property.Name, key, StringComparison.OrdinalIgnoreCase)
+                            && property.Value.ValueKind == JsonValueKind.String
+                            && !string.IsNullOrWhiteSpace(property.Value.GetString())) return property.Value.GetString();
                 foreach (JsonProperty property in node.EnumerateObject())
                 {
                     string found = FindMainAbility(property.Value);
@@ -305,6 +528,208 @@ namespace CSharpIosPerfMonitor
                     if (found.Length > 0) return found;
                 }
             return "";
+        }
+
+        internal static List<HarmonyLaunchEntryPoint> ParseLaunchEntryPoints(string output)
+        {
+            List<HarmonyLaunchEntryPoint> entries = new List<HarmonyLaunchEntryPoint>();
+            string json = ExtractJsonObject(output);
+            if (!string.IsNullOrWhiteSpace(json))
+            {
+                try
+                {
+                    using (JsonDocument document = JsonDocument.Parse(json))
+                    {
+                        CollectLaunchEntryPoints(document.RootElement, "", entries);
+                    }
+                }
+                catch (JsonException) { }
+            }
+
+            MatchCollection abilityMatches = Regex.Matches(
+                output ?? "",
+                @"(?i)(?:[""']?)(?:mainElementName|mainAbility|mainAbilityName|entryAbility|entryAbilityName|abilityName)(?:[""']?)\s*[:=]\s*[""']?([A-Za-z][A-Za-z0-9_.$-]*)",
+                RegexOptions.CultureInvariant);
+            MatchCollection moduleMatches = Regex.Matches(
+                output ?? "",
+                @"(?i)(?:[""']?)(?:moduleName|module_name|mainModuleName|main_module_name)(?:[""']?)\s*[:=]\s*[""']?([A-Za-z][A-Za-z0-9_.-]*)",
+                RegexOptions.CultureInvariant);
+            for (int i = 0; i < abilityMatches.Count; i++)
+            {
+                string module = moduleMatches.Count == 0
+                    ? ""
+                    : moduleMatches[Math.Min(i, moduleMatches.Count - 1)].Groups[1].Value;
+                AddLaunchEntry(entries, module, abilityMatches[i].Groups[1].Value);
+            }
+            if (entries.Count == 0)
+                AddLaunchEntry(entries, ParseMainModule(output), ParseMainAbility(output));
+            return entries;
+        }
+
+        private static void CollectLaunchEntryPoints(JsonElement node, string inheritedModule, IList<HarmonyLaunchEntryPoint> entries)
+        {
+            if (node.ValueKind == JsonValueKind.Object)
+            {
+                string module = FirstNonEmpty(JsonPropertyValue(node, "moduleName"), JsonPropertyValue(node, "module_name"),
+                    JsonPropertyValue(node, "mainModuleName"), JsonPropertyValue(node, "main_module_name"), inheritedModule);
+                string ability = FirstNonEmpty(JsonPropertyValue(node, "mainElementName"), JsonPropertyValue(node, "mainAbility"),
+                    JsonPropertyValue(node, "mainAbilityName"), JsonPropertyValue(node, "entryAbility"),
+                    JsonPropertyValue(node, "entryAbilityName"), JsonPropertyValue(node, "abilityName"));
+                if (!string.IsNullOrWhiteSpace(ability)) AddLaunchEntry(entries, module, ability);
+                foreach (JsonProperty property in node.EnumerateObject())
+                    CollectLaunchEntryPoints(property.Value, module, entries);
+                return;
+            }
+            if (node.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement value in node.EnumerateArray())
+                    CollectLaunchEntryPoints(value, inheritedModule, entries);
+            }
+        }
+
+        private static string JsonPropertyValue(JsonElement node, string name)
+        {
+            foreach (JsonProperty property in node.EnumerateObject())
+            {
+                if (!string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)) continue;
+                if (property.Value.ValueKind == JsonValueKind.String) return property.Value.GetString() ?? "";
+            }
+            return "";
+        }
+
+        private static void AddLaunchEntry(IList<HarmonyLaunchEntryPoint> entries, string module, string ability)
+        {
+            module = (module ?? "").Trim();
+            ability = (ability ?? "").Trim();
+            if (!ValidEntryToken(ability) || (!string.IsNullOrWhiteSpace(module) && !ValidEntryToken(module))) return;
+            if (entries.Any(delegate(HarmonyLaunchEntryPoint entry)
+            {
+                return string.Equals(entry.Module, module, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(entry.Ability, ability, StringComparison.OrdinalIgnoreCase);
+            })) return;
+            entries.Add(new HarmonyLaunchEntryPoint { Module = module, Ability = ability });
+        }
+
+        private static bool ValidEntryToken(string value)
+        {
+            return Regex.IsMatch(value ?? "", @"^[A-Za-z][A-Za-z0-9_.$-]*$", RegexOptions.CultureInvariant);
+        }
+
+        private static string FindMainModule(JsonElement node)
+        {
+            if (node.ValueKind == JsonValueKind.Object)
+            {
+                foreach (JsonProperty property in node.EnumerateObject())
+                    if ((string.Equals(property.Name, "moduleName", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(property.Name, "module_name", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(property.Name, "mainModuleName", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(property.Name, "main_module_name", StringComparison.OrdinalIgnoreCase))
+                        && property.Value.ValueKind == JsonValueKind.String
+                        && !string.IsNullOrWhiteSpace(property.Value.GetString())) return property.Value.GetString();
+                foreach (JsonProperty property in node.EnumerateObject())
+                {
+                    string found = FindMainModule(property.Value);
+                    if (found.Length > 0) return found;
+                }
+            }
+            if (node.ValueKind == JsonValueKind.Array)
+                foreach (JsonElement value in node.EnumerateArray())
+                {
+                    string found = FindMainModule(value);
+                    if (found.Length > 0) return found;
+                }
+            return "";
+        }
+
+        private static string ExtractJsonObject(string output)
+        {
+            string value = output ?? "";
+            int start = value.IndexOf('{');
+            int end = value.LastIndexOf('}');
+            return start >= 0 && end >= start ? value.Substring(start, end - start + 1) : "";
+        }
+
+
+        private static void AddApp(IList<AppInfo> apps, ISet<string> seen, string bundle, string reason = "")
+        {
+            bundle = (bundle ?? "").Trim().Trim('"', '\'', ',', ';');
+            if (!ValidBundle(bundle) || !seen.Add(bundle)) return;
+            apps.Add(new AppInfo
+            {
+                BundleId = bundle,
+                Name = bundle,
+                Platform = "harmony",
+                Recommended = false,
+                Reason = reason ?? ""
+            });
+        }
+
+        private static bool IsSuccessfulCommand(ProcessResult result)
+        {
+            if (result == null || result.ExitCode != 0 || IsHdcFailure(result)) return false;
+            string output = (result.Stdout ?? "") + "\n" + (result.Stderr ?? "");
+            return !Regex.IsMatch(output,
+                @"(?im)(^|\n)\s*(?:error|failed|failure|exception)\b|not found|does not exist|invalid ability|unknown option|permission denied",
+                RegexOptions.CultureInvariant);
+        }
+
+        private static ProcessResult CombineLaunchFailures(IEnumerable<ProcessResult> attempts)
+        {
+            string stdout = string.Join("\n", (attempts ?? Enumerable.Empty<ProcessResult>())
+                .Where(delegate(ProcessResult result) { return result != null && !string.IsNullOrWhiteSpace(result.Stdout); })
+                .Select(delegate(ProcessResult result) { return result.Stdout; }));
+            string stderr = string.Join("\n", (attempts ?? Enumerable.Empty<ProcessResult>())
+                .Where(delegate(ProcessResult result) { return result != null && !string.IsNullOrWhiteSpace(result.Stderr); })
+                .Select(delegate(ProcessResult result) { return result.Stderr; }));
+            return new ProcessResult(1, Sanitize(stdout, 4000), Sanitize(stderr, 4000));
+        }
+
+        private static bool IsHdcFailure(ProcessResult result)
+        {
+            string output = (result == null ? "" : result.Stdout) + "\n" + (result == null ? "" : result.Stderr);
+            return output.IndexOf("[Fail]", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static int IndexOfIgnoreCase(string[] values, string expected)
+        {
+            if (values == null) return -1;
+            for (int i = 0; i < values.Length; i++)
+                if (string.Equals(values[i], expected, StringComparison.OrdinalIgnoreCase)) return i;
+            return -1;
+        }
+
+        private static int IndexOfAnyIgnoreCase(string[] values, params string[] expected)
+        {
+            if (expected == null) return -1;
+            foreach (string item in expected)
+            {
+                int index = IndexOfIgnoreCase(values, item);
+                if (index >= 0) return index;
+            }
+            return -1;
+        }
+
+        private static int FindProcessTokenIndex(string[] parts, int start)
+        {
+            for (int i = Math.Max(0, start); i < (parts == null ? 0 : parts.Length); i++)
+            {
+                if (ValidBundle(BundleFromProcess(parts[i]))) return i;
+                if (parts[i].StartsWith("/", StringComparison.Ordinal) || parts[i].StartsWith("[", StringComparison.Ordinal)) return i;
+            }
+            return -1;
+        }
+
+        private static string ProcessNameFromCommand(string command)
+        {
+            string value = (command ?? "").Trim().Trim('"', '\'');
+            MatchCollection tokens = Regex.Matches(value, @"\S+");
+            foreach (Match token in tokens)
+            {
+                string candidate = token.Value.Trim('"', '\'');
+                if (ValidBundle(BundleFromProcess(candidate))) return candidate;
+            }
+            int space = value.IndexOf(' ');
+            return (space >= 0 ? value.Substring(0, space) : value).Trim();
         }
 
         private static bool ValidBundle(string value) { return Regex.IsMatch(value ?? "", @"^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$"); }
@@ -358,10 +783,17 @@ namespace CSharpIosPerfMonitor
         private static string BundleFromProcess(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) return "";
-            string value = name;
-            int colon = value.IndexOf(':');
-            if (colon > 0) value = value.Substring(0, colon);
-            return ValidBundle(value) ? value : "";
+            string value = name.Trim().Trim('"', '\'');
+            Match explicitBundle = Regex.Match(
+                value,
+                @"(?i)(?:bundle[-_ ]?name|package[-_ ]?name)\s*[=:]\s*[""']?([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)(?::[A-Za-z0-9_.-]+)?",
+                RegexOptions.CultureInvariant);
+            if (explicitBundle.Success && ValidBundle(explicitBundle.Groups[1].Value)) return explicitBundle.Groups[1].Value;
+            Match match = Regex.Match(
+                value,
+                @"(?<![A-Za-z0-9_])([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)(?::[A-Za-z0-9_.-]+)?(?:/|$)",
+                RegexOptions.CultureInvariant);
+            return match.Success && ValidBundle(match.Groups[1].Value) ? match.Groups[1].Value : "";
         }
 
         private static bool IsConnectedState(string state)
