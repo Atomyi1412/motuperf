@@ -1,5 +1,17 @@
 # 更新日志
 
+## v0.40.3 - 2026-09-25
+
+- 修复鸿蒙单段 Bundle 名称在应用清单中因必须带点号而漏列的问题，同时保留普通 `foundation` 等系统进程的进程-only 识别，避免把进程名误当成应用包。
+- 对 Service、Form、DataShare、WorkScheduler 和 Extension 能力保留真实模块/Ability 归属，但不再把它们当成独立 UI 启动入口；只有运行中的真实 PID 才能进入采集，缺测指标继续保持 `--`。
+- 增加单段 Bundle、显式进程 Bundle 字段、缩进清单和服务-only 目标回归测试；本版本只保留本地代码，未打包、未推送、未创建 Release。
+
+## v0.40.2 - 2026-09-25
+
+- 修复鸿蒙 Bundle Manager 中 `serviceAbilityInfos`、`formAbilityInfoList`、`dataShareAbilityInfos`、`workSchedulerAbilities` 等非 `Extension` 能力集合的解析，支持其中的 `className` 和厂商自定义 `*AbilityName` 字段，避免可发现能力漏列。
+- 保留能力归属应用的真实 Bundle、用户资料和模块信息，防止 Ability 或 Service 类名被误显示为独立应用；增加 JSON 与缩进文本格式的回归测试。
+- 本版本只保留本地代码，未打包、未推送、未创建 Release，等待鸿蒙真机验收。
+
 ## v0.40.1 - 2026-09-25
 
 - 鸿蒙设备选择页改为使用同一轮 HDC 目标快照读取应用、进程和进程启动时钟，避免重复扫描造成列表来自不同时间点、刷新变慢或应用与进程不一致。

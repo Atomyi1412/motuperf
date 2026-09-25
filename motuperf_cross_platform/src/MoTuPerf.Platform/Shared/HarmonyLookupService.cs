@@ -14,6 +14,7 @@ namespace CSharpIosPerfMonitor
     {
         public string Module { get; set; }
         public string Ability { get; set; }
+        public bool IsUiEntry { get; set; } = true;
     }
 
     internal sealed class HarmonyPackageRecord
@@ -585,6 +586,8 @@ namespace CSharpIosPerfMonitor
         {
             if (app == null)
                 return Task.FromResult(new ProcessResult(1, "", "未选择有效的鸿蒙应用。"));
+            if (app.IsProcessOnly)
+                return Task.FromResult(new ProcessResult(1, "", "该鸿蒙目标没有独立启动入口，只能选择运行中的真实进程采集。"));
             IEnumerable<int> rawUsers = app.HarmonyUserId >= 0
                 ? new[] { app.HarmonyUserId }
                 : app.HarmonyUserIds ?? new List<int>();
@@ -610,7 +613,7 @@ namespace CSharpIosPerfMonitor
             IEnumerable<HarmonyLaunchEntryInfo> harmonyLaunchEntries,
             CancellationToken token)
         {
-            if (!ValidBundle(bundleId)) return new ProcessResult(1, "", "鸿蒙应用包名无效。");
+            if (!ValidHarmonyApplicationBundle(bundleId)) return new ProcessResult(1, "", "鸿蒙应用包名无效。");
             List<int> users = (harmonyUserIds ?? Enumerable.Empty<int>())
                 .Where(delegate(int userId) { return userId >= 0; })
                 .Distinct()
@@ -621,7 +624,7 @@ namespace CSharpIosPerfMonitor
             List<HarmonyLaunchEntryInfo> knownEntries = (harmonyLaunchEntries ?? Enumerable.Empty<HarmonyLaunchEntryInfo>())
                 .Where(delegate(HarmonyLaunchEntryInfo entry)
                 {
-                    return entry != null && !string.IsNullOrWhiteSpace(entry.Ability);
+                    return entry != null && entry.IsUiEntry && !string.IsNullOrWhiteSpace(entry.Ability);
                 })
                 .GroupBy(delegate(HarmonyLaunchEntryInfo entry)
                 {
@@ -653,8 +656,8 @@ namespace CSharpIosPerfMonitor
                 string detailOutput = detail == null ? "" : (detail.Stdout ?? "") + "\n" + (detail.Stderr ?? "");
                 foreach (HarmonyLaunchEntryPoint entry in ParseLaunchEntryPoints(detailOutput))
                 {
-                    if (!string.IsNullOrWhiteSpace(entry.Ability)) abilities.Add(entry.Ability);
-                    if (!string.IsNullOrWhiteSpace(entry.Ability) && !string.IsNullOrWhiteSpace(entry.Module))
+                    if (entry.IsUiEntry && !string.IsNullOrWhiteSpace(entry.Ability)) abilities.Add(entry.Ability);
+                    if (entry.IsUiEntry && !string.IsNullOrWhiteSpace(entry.Ability) && !string.IsNullOrWhiteSpace(entry.Module))
                     {
                         foreach (string[] startArgs in AbilityStartArgsVariants(bundleId, entry.Module, entry.Ability, userId))
                         {
@@ -923,6 +926,17 @@ namespace CSharpIosPerfMonitor
             return TryParseKeyValueField(value, out key, out ignored) && IsAbilityInfoCollection(key);
         }
 
+        private static bool IsBundleRecordCollection(string propertyName)
+        {
+            string normalized = NormalizePropertyName(propertyName);
+            return string.Equals(normalized, "bundleInfo", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "bundleInfos", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "bundleInfoList", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "bundles", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "bundleRecords", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "installedBundles", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static bool TryParseKeyValueField(string value, out string key, out string fieldValue)
         {
             Match match = Regex.Match(
@@ -936,13 +950,21 @@ namespace CSharpIosPerfMonitor
 
         private static bool TryParseAbilityNameField(string value, bool allowGenericName, out string ability)
         {
+            bool ignored;
+            return TryParseAbilityNameField(value, allowGenericName, out ability, out ignored);
+        }
+
+        private static bool TryParseAbilityNameField(string value, bool allowGenericName, out string ability, out bool isUiEntry)
+        {
             Match match = Regex.Match(
                 (value ?? "").Trim(),
                 @"^(?:[-\s]*)?(?<key>[A-Za-z][A-Za-z0-9_ -]*)\s*[:=]\s*['""]?(?<value>[A-Za-z][A-Za-z0-9_.$-]*)",
                 RegexOptions.CultureInvariant);
             ability = "";
+            isUiEntry = true;
             if (!match.Success || !IsAbilityNameProperty(match.Groups["key"].Value, allowGenericName)) return false;
             ability = match.Groups["value"].Value.Trim();
+            isUiEntry = IsUiAbilityField(match.Groups["key"].Value);
             return ValidEntryToken(ability);
         }
 
@@ -950,8 +972,10 @@ namespace CSharpIosPerfMonitor
         {
             string bundle = "";
             int bundleIndent = -1;
+            int bundleCollectionIndent = -1;
             string module = "";
             bool insideAbilityCollection = false;
+            bool insideNonUiAbilityCollection = false;
             int abilityIndent = -1;
             foreach (string raw in Lines(output))
             {
@@ -963,9 +987,19 @@ namespace CSharpIosPerfMonitor
                 string collectionKey;
                 string collectionValue;
                 if (TryParseKeyValueField(trimmed, out collectionKey, out collectionValue)
+                    && IsBundleRecordCollection(collectionKey))
+                {
+                    bundleCollectionIndent = indent;
+                    continue;
+                }
+                if (bundleCollectionIndent >= 0 && indent <= bundleCollectionIndent)
+                    bundleCollectionIndent = -1;
+
+                if (TryParseKeyValueField(trimmed, out collectionKey, out collectionValue)
                     && IsAbilityInfoCollection(collectionKey))
                 {
                     insideAbilityCollection = true;
+                    insideNonUiAbilityCollection = !IsUiAbilityField(collectionKey);
                     abilityIndent = indent;
                     string inlineAbility = collectionValue.Trim().Trim(',', '"', '\'');
                     if (!string.IsNullOrWhiteSpace(bundle) && ValidEntryToken(inlineAbility))
@@ -976,7 +1010,7 @@ namespace CSharpIosPerfMonitor
                         });
                         AddHarmonyLaunchEntries(inlineApp, new[]
                         {
-                            new HarmonyLaunchEntryInfo { Module = module, Ability = inlineAbility }
+                            new HarmonyLaunchEntryInfo { Module = module, Ability = inlineAbility, IsUiEntry = !insideNonUiAbilityCollection }
                         });
                     }
                     continue;
@@ -987,7 +1021,8 @@ namespace CSharpIosPerfMonitor
                     if (indent > abilityIndent)
                     {
                         string abilityValue;
-                        if (TryParseAbilityNameField(trimmed, true, out abilityValue)
+                        bool abilityIsUi;
+                        if (TryParseAbilityNameField(trimmed, true, out abilityValue, out abilityIsUi)
                             && !string.IsNullOrWhiteSpace(bundle))
                         {
                             AppInfo owner = apps.FirstOrDefault(delegate(AppInfo app)
@@ -999,7 +1034,8 @@ namespace CSharpIosPerfMonitor
                                 new HarmonyLaunchEntryInfo
                                 {
                                     Module = module,
-                                    Ability = abilityValue
+                                    Ability = abilityValue,
+                                    IsUiEntry = !insideNonUiAbilityCollection && abilityIsUi
                                 }
                             });
                         }
@@ -1009,6 +1045,7 @@ namespace CSharpIosPerfMonitor
                         continue;
                     }
                     insideAbilityCollection = false;
+                    insideNonUiAbilityCollection = false;
                 }
 
                 Match moduleMatch = Regex.Match(
@@ -1022,7 +1059,8 @@ namespace CSharpIosPerfMonitor
                 }
 
                 string directAbilityValue;
-                if (TryParseAbilityNameField(trimmed, false, out directAbilityValue)
+                bool directAbilityIsUi;
+                if (TryParseAbilityNameField(trimmed, false, out directAbilityValue, out directAbilityIsUi)
                     && !string.IsNullOrWhiteSpace(bundle))
                 {
                     AppInfo owner = apps.FirstOrDefault(delegate(AppInfo app)
@@ -1034,7 +1072,8 @@ namespace CSharpIosPerfMonitor
                         new HarmonyLaunchEntryInfo
                         {
                             Module = module,
-                            Ability = directAbilityValue
+                            Ability = directAbilityValue,
+                            IsUiEntry = directAbilityIsUi
                         }
                     });
                     continue;
@@ -1046,11 +1085,13 @@ namespace CSharpIosPerfMonitor
                     RegexOptions.CultureInvariant);
                 Match nameBundle = Regex.Match(
                     trimmed,
-                    @"(?i)^(?:[-\s]*)?name\s*[:=]\s*['""]?(?<bundle>[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)",
+                    @"(?i)^(?:[-\s]*)?name\s*[:=]\s*['""]?(?<bundle>[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*)",
                     RegexOptions.CultureInvariant);
                 string discoveredBundle = bundleMatch.Success
                     ? bundleMatch.Groups["bundle"].Value
-                    : nameBundle.Success && (string.IsNullOrWhiteSpace(bundle) || indent <= bundleIndent)
+                    : nameBundle.Success
+                        && (ValidBundle(nameBundle.Groups["bundle"].Value) || bundleCollectionIndent >= 0)
+                        && (string.IsNullOrWhiteSpace(bundle) || indent <= bundleIndent)
                         ? nameBundle.Groups["bundle"].Value
                         : "";
                 if (!string.IsNullOrWhiteSpace(discoveredBundle))
@@ -1063,6 +1104,7 @@ namespace CSharpIosPerfMonitor
                         bundleIndent = indent;
                         module = "";
                         insideAbilityCollection = false;
+                        insideNonUiAbilityCollection = false;
                         abilityIndent = -1;
                     }
                     AddApp(apps, seen, bundle, "Bundle Manager 应用");
@@ -1116,7 +1158,7 @@ namespace CSharpIosPerfMonitor
                     JsonPropertyValue(node, "appIdentifier"), JsonPropertyValue(node, "app_identifier"),
                     IsHarmonyBundleRecord(node, namedBundle) ? namedBundle : "",
                     fallbackBundle);
-                if (!insideAbilityCollection && ValidBundle(bundle))
+                if (!insideAbilityCollection && ValidHarmonyApplicationBundle(bundle))
                 {
                     AddApp(apps, seen, bundle, "Bundle Manager 应用",
                         FirstNonEmpty(JsonPropertyValue(node, "appName"), JsonPropertyValue(node, "applicationName"),
@@ -1128,7 +1170,7 @@ namespace CSharpIosPerfMonitor
                             JsonPropertyValue(node, "versionNumber"), JsonPropertyValue(node, "version_code"), JsonPropertyValue(node, "version"),
                             NestedJsonPropertyValue(node, "applicationInfo", "versionName", "versionCode", "versionNumber", "version"),
                             NestedJsonPropertyValue(node, "appInfo", "versionName", "versionCode", "versionNumber", "version")),
-                        ParseLaunchEntryPoints(node.GetRawText()).Count > 0,
+                        ParseLaunchEntryPoints(node.GetRawText()).Any(delegate(HarmonyLaunchEntryPoint entry) { return entry.IsUiEntry; }),
                         harmonyLaunchEntries: ToHarmonyLaunchEntries(ParseLaunchEntryPoints(node.GetRawText())),
                         harmonyUserId: ParseEmbeddedHarmonyUserId(node));
                 }
@@ -1155,7 +1197,7 @@ namespace CSharpIosPerfMonitor
 
         private static bool IsHarmonyBundleRecord(JsonElement node, string candidateBundle)
         {
-            if (node.ValueKind != JsonValueKind.Object || !ValidBundle(candidateBundle)) return false;
+            if (node.ValueKind != JsonValueKind.Object || !ValidHarmonyApplicationBundle(candidateBundle)) return false;
             return HasJsonProperty(node, "versionCode", "versionName", "versionNumber", "version", "compatibleVersion",
                 "targetVersion", "hapModuleInfos", "moduleInfos", "applicationInfo", "appInfo", "abilityInfos",
                 "installTime", "updateTime", "userId", "bundleInfo", "label", "appName", "applicationName", "displayName")
@@ -1339,6 +1381,7 @@ namespace CSharpIosPerfMonitor
             List<ProcessInfo> processes = new List<ProcessInfo>();
             int pidIndex = -1;
             int commandIndex = -1;
+            int bundleIndex = -1;
             int userIndex = -1;
             string userFieldName = "";
             foreach (string raw in Lines(output))
@@ -1353,8 +1396,9 @@ namespace CSharpIosPerfMonitor
                     string keyedCommand = ExtractKeyValueField(line,
                         "cmd|cmdline|args|command|comm|exec(?:utable)?|process(?:Name)?|name|bundle[-_ ]?name|bundle(?:Id|_id)?|package[-_ ]?name|package(?:Id|_id)?");
                     string keyedName = ProcessNameFromCommand(keyedCommand);
+                    string keyedBundle = ExtractExplicitBundleField(line);
                     int keyedUser = ParseProcessUserId(line);
-                    if (!string.IsNullOrWhiteSpace(keyedName)) processes.Add(CreateProcess(keyedValue, keyedName, serial, keyedUser));
+                    if (!string.IsNullOrWhiteSpace(keyedName)) processes.Add(CreateProcess(keyedValue, keyedName, serial, keyedUser, keyedBundle));
                     continue;
                 }
                 string[] parts = Regex.Split(line, @"\s+");
@@ -1364,6 +1408,8 @@ namespace CSharpIosPerfMonitor
                     pidIndex = headerPid;
                     commandIndex = IndexOfAnyIgnoreCase(parts, "ARGS", "CMD", "CMDLINE", "COMMAND", "COMM", "EXEC", "EXECUTABLE", "PROCNAME", "NAME",
                         "BUNDLE", "BUNDLE_NAME", "BUNDLENAME", "BUNDLEID", "PACKAGE", "PACKAGE_NAME", "PACKAGENAME", "PACKAGEID");
+                    bundleIndex = IndexOfAnyIgnoreCase(parts, "BUNDLE", "BUNDLE_NAME", "BUNDLENAME", "BUNDLEID", "BUNDLE_ID",
+                        "PACKAGE", "PACKAGE_NAME", "PACKAGENAME", "PACKAGEID", "PACKAGE_ID", "APPLICATIONID", "APPLICATION_ID");
                     userIndex = IndexOfAnyIgnoreCase(parts, "UID", "USER", "USERID", "USER_ID");
                     userFieldName = userIndex >= 0 && userIndex < parts.Length ? parts[userIndex] : "";
                     continue;
@@ -1383,7 +1429,10 @@ namespace CSharpIosPerfMonitor
                 int userId = userIndex >= 0 && userIndex < parts.Length
                     ? ParseProcessUserValue(parts[userIndex], userFieldName)
                     : InferHeaderlessProcessUserId(parts, rowPidIndex, rowCommandIndex);
-                processes.Add(CreateProcess(pid, name, serial, userId));
+                string explicitBundle = bundleIndex >= 0 && bundleIndex < parts.Length
+                    ? NormalizeExplicitBundle(parts[bundleIndex])
+                    : "";
+                processes.Add(CreateProcess(pid, name, serial, userId, explicitBundle));
             }
             return processes
                 .GroupBy(delegate(ProcessInfo process) { return process.Pid.ToString(CultureInfo.InvariantCulture) + "|" + process.Name; })
@@ -1414,7 +1463,7 @@ namespace CSharpIosPerfMonitor
             foreach (ProcessInfo process in validProcesses)
             {
                 string processBundle = FirstNonEmpty(process.BundleId, process.OwnerBundleId);
-                if (!ValidBundle(processBundle))
+                if (!ValidHarmonyApplicationBundle(processBundle))
                 {
                     AppInfo processOnly = apps.FirstOrDefault(delegate(AppInfo app)
                     {
@@ -1613,7 +1662,7 @@ namespace CSharpIosPerfMonitor
                 {
                     using (JsonDocument document = JsonDocument.Parse(json))
                     {
-                        CollectLaunchEntryPoints(document.RootElement, "", false, false, entries);
+                        CollectLaunchEntryPoints(document.RootElement, "", false, false, false, entries);
                     }
                 }
                 catch (JsonException) { }
@@ -1644,7 +1693,7 @@ namespace CSharpIosPerfMonitor
             {
                 MatchCollection fields = Regex.Matches(
                     raw ?? "",
-                    @"(?i)(?:[""']?)(?<key>moduleName|module_name|module\s+name|mainModuleName|main_module_name|main\s+module\s+name|entryModuleName|entry_module_name|entry\s+module\s+name|entryModule|module|mainElementName|mainElement|mainAbility|mainAbilityName|entryAbility|entryAbilityName|abilityName|ability_name|ability\s+name|[A-Za-z][A-Za-z0-9_]*ExtensionAbilityName)(?:[""']?)\s*[:=]\s*[""']?(?<value>[A-Za-z][A-Za-z0-9_.$-]*)(?:[""']?)",
+                    @"(?i)(?:[""']?)(?<key>moduleName|module_name|module\s+name|mainModuleName|main_module_name|main\s+module\s+name|entryModuleName|entry_module_name|entry\s+module\s+name|entryModule|module|mainElementName|mainElement|mainAbility|mainAbilityName|entryAbility|entryAbilityName|abilityName|ability_name|ability\s+name|[A-Za-z][A-Za-z0-9_]*AbilityName)(?:[""']?)\s*[:=]\s*[""']?(?<value>[A-Za-z][A-Za-z0-9_.$-]*)(?:[""']?)",
                     RegexOptions.CultureInvariant);
                 foreach (Match field in fields)
                 {
@@ -1655,7 +1704,7 @@ namespace CSharpIosPerfMonitor
                         currentModule = value;
                         continue;
                     }
-                    AddLaunchEntry(entries, currentModule, value);
+                    AddLaunchEntry(entries, currentModule, value, IsUiAbilityField(key));
                 }
             }
         }
@@ -1671,6 +1720,7 @@ namespace CSharpIosPerfMonitor
         {
             string module = "";
             bool insideAbilities = false;
+            bool insideNonUiAbilities = false;
             int abilityIndent = -1;
             foreach (string raw in Lines(output))
             {
@@ -1686,7 +1736,10 @@ namespace CSharpIosPerfMonitor
                 {
                     module = moduleMatch.Groups[1].Value;
                     if (insideAbilities && abilityIndent >= 0 && indent <= abilityIndent)
+                    {
                         insideAbilities = false;
+                        insideNonUiAbilities = false;
+                    }
                 }
 
                 string collectionKey;
@@ -1695,18 +1748,23 @@ namespace CSharpIosPerfMonitor
                     && IsAbilityInfoCollection(collectionKey))
                 {
                     insideAbilities = true;
+                    insideNonUiAbilities = !IsUiAbilityField(collectionKey);
                     abilityIndent = indent;
                     continue;
                 }
 
                 string abilityValue;
+                bool abilityIsUi;
                 if (insideAbilities && indent <= abilityIndent
-                    && !TryParseAbilityNameField(trimmed, true, out abilityValue))
+                    && !TryParseAbilityNameField(trimmed, true, out abilityValue, out abilityIsUi))
+                {
                     insideAbilities = false;
+                    insideNonUiAbilities = false;
+                }
                 if (!insideAbilities) continue;
 
-                if (TryParseAbilityNameField(trimmed, true, out abilityValue))
-                    AddLaunchEntry(entries, module, abilityValue);
+                if (TryParseAbilityNameField(trimmed, true, out abilityValue, out abilityIsUi))
+                    AddLaunchEntry(entries, module, abilityValue, !insideNonUiAbilities && abilityIsUi);
             }
         }
 
@@ -1715,6 +1773,7 @@ namespace CSharpIosPerfMonitor
             string inheritedModule,
             bool insideAbilityInfo,
             bool allowScalarEntry,
+            bool insideNonUiAbilityInfo,
             IList<HarmonyLaunchEntryPoint> entries)
         {
             if (node.ValueKind == JsonValueKind.Object)
@@ -1729,27 +1788,40 @@ namespace CSharpIosPerfMonitor
                     JsonPropertyValue(node, "extensionAbilityName"), JsonPropertyValue(node, "serviceExtensionAbilityName"),
                     JsonPropertyValue(node, "formExtensionAbilityName"), JsonPropertyValue(node, "dataShareExtensionAbilityName"),
                     FindJsonAbilityName(node, insideAbilityInfo));
-                if (!string.IsNullOrWhiteSpace(ability)) AddLaunchEntry(entries, module, ability);
+                if (!string.IsNullOrWhiteSpace(ability))
+                    AddLaunchEntry(entries, module, ability, !insideNonUiAbilityInfo && IsUiAbilityObject(node, insideAbilityInfo));
                 foreach (JsonProperty property in node.EnumerateObject())
                 {
                     bool isAbilityCollection = IsAbilityInfoCollection(property.Name);
                     bool childIsAbilityInfo = insideAbilityInfo || isAbilityCollection;
+                    bool childIsNonUiAbilityInfo = insideNonUiAbilityInfo
+                        || (isAbilityCollection && !IsUiAbilityField(property.Name));
                     bool childAllowsScalarEntry = isAbilityCollection
                         && (property.Value.ValueKind == JsonValueKind.Array || property.Value.ValueKind == JsonValueKind.String);
                     if (childIsAbilityInfo && property.Value.ValueKind == JsonValueKind.Object && ValidEntryToken(property.Name))
-                        AddLaunchEntry(entries, module, property.Name);
-                    CollectLaunchEntryPoints(property.Value, module, childIsAbilityInfo, childAllowsScalarEntry, entries);
+                        AddLaunchEntry(entries, module, property.Name, !childIsNonUiAbilityInfo);
+                    CollectLaunchEntryPoints(property.Value, module, childIsAbilityInfo, childAllowsScalarEntry, childIsNonUiAbilityInfo, entries);
                 }
                 return;
             }
             if (node.ValueKind == JsonValueKind.Array)
             {
                 foreach (JsonElement value in node.EnumerateArray())
-                    CollectLaunchEntryPoints(value, inheritedModule, insideAbilityInfo, allowScalarEntry, entries);
+                    CollectLaunchEntryPoints(value, inheritedModule, insideAbilityInfo, allowScalarEntry, insideNonUiAbilityInfo, entries);
                 return;
             }
             if (node.ValueKind == JsonValueKind.String && insideAbilityInfo && allowScalarEntry)
-                AddLaunchEntry(entries, inheritedModule, node.GetString());
+                AddLaunchEntry(entries, inheritedModule, node.GetString(), !insideNonUiAbilityInfo);
+        }
+
+        private static bool IsUiAbilityObject(JsonElement node, bool insideAbilityInfo)
+        {
+            if (insideAbilityInfo && HasJsonProperty(node, "className", "serviceExtensionAbilityName", "formExtensionAbilityName",
+                "dataShareExtensionAbilityName", "extensionAbilityName")) return false;
+            if (HasJsonProperty(node, "mainElementName", "mainElement", "mainAbility", "mainAbilityName",
+                "entryAbility", "entryAbilityName", "abilityName", "ability_name")) return true;
+            return !HasJsonProperty(node, "className", "serviceAbilityName", "formAbilityName",
+                "dataShareAbilityName", "workSchedulerAbilityName");
         }
 
         private static bool IsAbilityInfoCollection(string propertyName)
@@ -1760,6 +1832,17 @@ namespace CSharpIosPerfMonitor
                 || normalized.EndsWith("ExtensionAbilityInfoList", StringComparison.OrdinalIgnoreCase)
                 || normalized.EndsWith("ExtensionAbilityList", StringComparison.OrdinalIgnoreCase)
                 || normalized.EndsWith("ExtensionAbilities", StringComparison.OrdinalIgnoreCase))
+                return true;
+            // Some Bundle Manager versions omit the `Extension` segment for
+            // service/form/data-share/work-scheduler collections. Treat the
+            // normalized Ability-shaped suffix as a collection marker so its
+            // className and vendor-specific *AbilityName fields are parsed
+            // with the same ownership boundary as standard AbilityInfo.
+            if (normalized.EndsWith("AbilityInfo", StringComparison.OrdinalIgnoreCase)
+                || normalized.EndsWith("AbilityInfos", StringComparison.OrdinalIgnoreCase)
+                || normalized.EndsWith("AbilityInfoList", StringComparison.OrdinalIgnoreCase)
+                || normalized.EndsWith("AbilityList", StringComparison.OrdinalIgnoreCase)
+                || normalized.EndsWith("Abilities", StringComparison.OrdinalIgnoreCase))
                 return true;
             return string.Equals(propertyName, "abilityInfos", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(propertyName, "abilityInfo", StringComparison.OrdinalIgnoreCase)
@@ -1809,7 +1892,8 @@ namespace CSharpIosPerfMonitor
         {
             string normalized = NormalizePropertyName(propertyName);
             if (allowGenericName && (string.Equals(normalized, "name", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(normalized, "className", StringComparison.OrdinalIgnoreCase))) return true;
+                || string.Equals(normalized, "className", StringComparison.OrdinalIgnoreCase)
+                || normalized.EndsWith("AbilityName", StringComparison.OrdinalIgnoreCase))) return true;
             return string.Equals(normalized, "mainElementName", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(normalized, "mainElement", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(normalized, "mainAbility", StringComparison.OrdinalIgnoreCase)
@@ -1897,17 +1981,35 @@ namespace CSharpIosPerfMonitor
             return new string((value ?? "").Where(char.IsLetterOrDigit).ToArray());
         }
 
-        private static void AddLaunchEntry(IList<HarmonyLaunchEntryPoint> entries, string module, string ability)
+        private static void AddLaunchEntry(IList<HarmonyLaunchEntryPoint> entries, string module, string ability, bool isUiEntry = true)
         {
             module = (module ?? "").Trim();
             ability = (ability ?? "").Trim();
             if (!ValidEntryToken(ability) || (!string.IsNullOrWhiteSpace(module) && !ValidEntryToken(module))) return;
-            if (entries.Any(delegate(HarmonyLaunchEntryPoint entry)
+            HarmonyLaunchEntryPoint existing = entries.FirstOrDefault(delegate(HarmonyLaunchEntryPoint entry)
             {
                 return string.Equals(entry.Module, module, StringComparison.OrdinalIgnoreCase)
                     && string.Equals(entry.Ability, ability, StringComparison.OrdinalIgnoreCase);
-            })) return;
-            entries.Add(new HarmonyLaunchEntryPoint { Module = module, Ability = ability });
+            });
+            if (existing != null)
+            {
+                existing.IsUiEntry = existing.IsUiEntry || isUiEntry;
+                return;
+            }
+            entries.Add(new HarmonyLaunchEntryPoint { Module = module, Ability = ability, IsUiEntry = isUiEntry });
+        }
+
+        private static bool IsUiAbilityField(string key)
+        {
+            string normalized = NormalizePropertyName(key);
+            if (normalized.IndexOf("extension", StringComparison.OrdinalIgnoreCase) >= 0
+                || normalized.IndexOf("service", StringComparison.OrdinalIgnoreCase) >= 0
+                || normalized.IndexOf("form", StringComparison.OrdinalIgnoreCase) >= 0
+                || normalized.IndexOf("datashare", StringComparison.OrdinalIgnoreCase) >= 0
+                || normalized.IndexOf("workscheduler", StringComparison.OrdinalIgnoreCase) >= 0
+                || string.Equals(normalized, "className", StringComparison.OrdinalIgnoreCase))
+                return false;
+            return true;
         }
 
         private static bool ValidEntryToken(string value)
@@ -2007,7 +2109,7 @@ namespace CSharpIosPerfMonitor
             IEnumerable<HarmonyLaunchEntryInfo> harmonyLaunchEntries = null)
         {
             bundle = (bundle ?? "").Trim().Trim('"', '\'', ',', ';');
-            if (!ValidBundle(bundle)) return null;
+            if (!ValidHarmonyApplicationBundle(bundle)) return null;
             AppInfo existing = apps.FirstOrDefault(delegate(AppInfo app)
             {
                 return app != null && string.Equals(app.BundleId, bundle, StringComparison.OrdinalIgnoreCase);
@@ -2019,7 +2121,8 @@ namespace CSharpIosPerfMonitor
                 if (!string.IsNullOrWhiteSpace(version) && string.IsNullOrWhiteSpace(existing.Version)) existing.Version = version.Trim();
                 if (string.IsNullOrWhiteSpace(existing.Reason) && !string.IsNullOrWhiteSpace(reason)) existing.Reason = reason;
                 if (hasLaunchEntry) existing.HasLaunchEntry = true;
-                if (!processOnly) existing.IsProcessOnly = false;
+                if (!processOnly && (existing.HarmonyLaunchEntries == null || existing.HarmonyLaunchEntries.Count == 0))
+                    existing.IsProcessOnly = false;
                 if (processOnly) existing.IsRunning = true;
                 if (existing.HarmonyUserId < 0 && harmonyUserId >= 0) existing.HarmonyUserId = harmonyUserId;
                 AddHarmonyUser(existing, harmonyUserId);
@@ -2116,7 +2219,12 @@ namespace CSharpIosPerfMonitor
                 .Where(delegate(HarmonyLaunchEntryInfo entry) { return entry != null; })
                 .Select(delegate(HarmonyLaunchEntryInfo entry)
                 {
-                    return new HarmonyLaunchEntryInfo { Module = entry.Module, Ability = entry.Ability };
+                    return new HarmonyLaunchEntryInfo
+                    {
+                        Module = entry.Module,
+                        Ability = entry.Ability,
+                        IsUiEntry = entry.IsUiEntry
+                    };
                 })
                 .ToList();
             return copy;
@@ -2131,7 +2239,12 @@ namespace CSharpIosPerfMonitor
                 })
                 .Select(delegate(HarmonyLaunchEntryPoint entry)
                 {
-                    return new HarmonyLaunchEntryInfo { Module = entry.Module ?? "", Ability = entry.Ability.Trim() };
+                    return new HarmonyLaunchEntryInfo
+                    {
+                        Module = entry.Module ?? "",
+                        Ability = entry.Ability.Trim(),
+                        IsUiEntry = entry.IsUiEntry
+                    };
                 })
                 .ToList();
         }
@@ -2143,18 +2256,34 @@ namespace CSharpIosPerfMonitor
             foreach (HarmonyLaunchEntryInfo entry in entries)
             {
                 if (entry == null || string.IsNullOrWhiteSpace(entry.Ability)) continue;
-                if (app.HarmonyLaunchEntries.Any(delegate(HarmonyLaunchEntryInfo current)
+                HarmonyLaunchEntryInfo existing = app.HarmonyLaunchEntries.FirstOrDefault(delegate(HarmonyLaunchEntryInfo current)
                 {
                     return string.Equals(current.Module ?? "", entry.Module ?? "", StringComparison.OrdinalIgnoreCase)
                         && string.Equals(current.Ability, entry.Ability, StringComparison.OrdinalIgnoreCase);
-                })) continue;
+                });
+                if (existing != null)
+                {
+                    existing.IsUiEntry = existing.IsUiEntry || entry.IsUiEntry;
+                    continue;
+                }
                 app.HarmonyLaunchEntries.Add(new HarmonyLaunchEntryInfo
                 {
                     Module = (entry.Module ?? "").Trim(),
-                    Ability = entry.Ability.Trim()
+                    Ability = entry.Ability.Trim(),
+                    IsUiEntry = entry.IsUiEntry
                 });
             }
-            if (app.HarmonyLaunchEntries.Count > 0) app.HasLaunchEntry = true;
+            bool hasUiEntry = app.HarmonyLaunchEntries.Any(delegate(HarmonyLaunchEntryInfo entry) { return entry.IsUiEntry; });
+            if (hasUiEntry)
+            {
+                app.HasLaunchEntry = true;
+                app.IsProcessOnly = false;
+            }
+            else if (app.HarmonyLaunchEntries.Count > 0)
+            {
+                app.HasLaunchEntry = false;
+                app.IsProcessOnly = true;
+            }
         }
 
         private static void AddHarmonyUser(AppInfo app, int userId)
@@ -2334,6 +2463,26 @@ namespace CSharpIosPerfMonitor
 
         private static bool ValidBundle(string value) { return Regex.IsMatch(value ?? "", @"^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$"); }
 
+        private static bool ValidHarmonyApplicationBundle(string value)
+        {
+            return Regex.IsMatch(value ?? "", @"^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*$");
+        }
+
+        private static string NormalizeExplicitBundle(string value)
+        {
+            string candidate = (value ?? "").Trim().Trim('"', '\'', ',', ';');
+            return ValidHarmonyApplicationBundle(candidate) ? candidate : "";
+        }
+
+        private static string ExtractExplicitBundleField(string line)
+        {
+            Match match = Regex.Match(
+                line ?? "",
+                @"(?i)(?:^|[\s,{])(?:[""']?)(?:bundle[-_ ]?name|bundle(?:id|_id)?|package[-_ ]?name|package(?:id|_id)?|application[-_ ]?id|app(?:id|_id|identifier))(?:[""']?)\s*[:=]\s*[""']?(?<value>[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*)",
+                RegexOptions.CultureInvariant);
+            return match.Success ? NormalizeExplicitBundle(match.Groups["value"].Value) : "";
+        }
+
         private static string ExtractTextField(string line, string fieldPattern)
         {
             if (string.IsNullOrWhiteSpace(fieldPattern)) return "";
@@ -2392,14 +2541,18 @@ namespace CSharpIosPerfMonitor
             return ParseHarmonyUserId(text);
         }
 
-        private static ProcessInfo CreateProcess(int pid, string name, string serial, int harmonyUserId = -1)
+        private static ProcessInfo CreateProcess(int pid, string name, string serial, int harmonyUserId = -1, string explicitBundle = "")
         {
             return new ProcessInfo
             {
                 Pid = pid,
                 Name = name,
                 DisplayName = name,
-                BundleId = BundleFromProcess(name),
+                // A single-segment Bundle is accepted only when HDC labels the
+                // field explicitly. Ordinary process names still use the
+                // dotted executable heuristic so `foundation` and similar
+                // system services do not become fake applications.
+                BundleId = ValidHarmonyApplicationBundle(explicitBundle) ? explicitBundle : BundleFromProcess(name),
                 DeviceUdid = serial ?? "",
                 Platform = "harmony",
                 HarmonyUserId = harmonyUserId,

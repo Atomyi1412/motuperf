@@ -103,6 +103,28 @@ namespace MoTuPerf.Platform.Tests
         }
 
         [Fact]
+        public void ParsesSingleSegmentHarmonyBundleOnlyFromApplicationMetadata()
+        {
+            var apps = HarmonyLookupService.ParseApps(
+                "bundleName: foundation\n"
+                + "versionName: 1.0\n"
+                + "{\"bundleName\":\"system_service\",\"versionCode\":2}\n");
+
+            Assert.Contains(apps, app => app.BundleId == "foundation" && app.Version == "1.0");
+            Assert.Contains(apps, app => app.BundleId == "system_service" && app.Version == "2");
+            Assert.DoesNotContain(apps, app => app.BundleId == "EntryAbility");
+            Assert.Empty(HarmonyLookupService.ParseApps("{\"name\":\"foundation\"}"));
+
+            var indentedApps = HarmonyLookupService.ParseApps(
+                "bundleInfos:\n"
+                + "  - name: system_service\n"
+                + "    versionName: 3.0\n");
+            var indented = Assert.Single(indentedApps);
+            Assert.Equal("system_service", indented.BundleId);
+            Assert.Equal("3.0", indented.Version);
+        }
+
+        [Fact]
         public void KeepsRealAbilityEntriesWithTheApplicationRecord()
         {
             var apps = HarmonyLookupService.ParseApps(
@@ -487,6 +509,20 @@ namespace MoTuPerf.Platform.Tests
         }
 
         [Fact]
+        public void KeepsSingleSegmentBundleOnlyWhenProcessOutputLabelsTheBundleField()
+        {
+            var explicitRows = HarmonyLookupService.ParseProcesses(
+                "PID BUNDLE_NAME USER\n"
+                + "701 foundation u0_a1\n", "device");
+            var ordinaryRows = HarmonyLookupService.ParseProcesses(
+                "PID NAME USER\n"
+                + "702 foundation u0_a1\n", "device");
+
+            Assert.Equal("foundation", Assert.Single(explicitRows).BundleId);
+            Assert.Empty(Assert.Single(ordinaryRows).BundleId);
+        }
+
+        [Fact]
         public void NormalizesHarmonyProcessIdentityBeforePidValidation()
         {
             var rows = HarmonyLookupService.ParseProcesses(
@@ -566,6 +602,76 @@ namespace MoTuPerf.Platform.Tests
             Assert.Contains(textEntries, entry => entry.Module == "entry" && entry.Ability == "EntryAbility");
             Assert.Contains(textEntries, entry => entry.Module == "entry" && entry.Ability == "SyncService");
             Assert.Contains(textEntries, entry => entry.Module == "entry" && entry.Ability == "ShareService");
+        }
+
+        [Fact]
+        public void ParsesNonExtensionServiceFormDataShareAndWorkerAbilityAliases()
+        {
+            string json = "{\"bundleName\":\"com.example.nonextension\",\"hapModuleInfos\":["
+                + "{\"moduleName\":\"entry\","
+                + "\"serviceAbilityInfos\":[{\"className\":\"SyncService\"}],"
+                + "\"formAbilityInfoList\":[{\"className\":\"HomeForm\"}],"
+                + "\"dataShareAbilityInfos\":[{\"className\":\"ShareService\"}],"
+                + "\"workSchedulerAbilities\":[{\"className\":\"WorkerService\"}]}]}";
+
+            List<HarmonyLaunchEntryPoint> jsonEntries = HarmonyLookupService.ParseLaunchEntryPoints(json);
+
+            Assert.Contains(jsonEntries, entry => entry.Module == "entry" && entry.Ability == "SyncService");
+            Assert.Contains(jsonEntries, entry => entry.Module == "entry" && entry.Ability == "HomeForm");
+            Assert.Contains(jsonEntries, entry => entry.Module == "entry" && entry.Ability == "ShareService");
+            Assert.Contains(jsonEntries, entry => entry.Module == "entry" && entry.Ability == "WorkerService");
+
+            List<HarmonyLaunchEntryPoint> textEntries = HarmonyLookupService.ParseLaunchEntryPoints(
+                "bundleName: com.example.nonextension\n"
+                + "moduleName: entry\n"
+                + "serviceAbilityInfos:\n"
+                + "  - className: SyncService\n"
+                + "formAbilityInfoList:\n"
+                + "  - className: HomeForm\n"
+                + "dataShareAbilityInfos:\n"
+                + "  - className: ShareService\n");
+
+            Assert.Contains(textEntries, entry => entry.Module == "entry" && entry.Ability == "SyncService");
+            Assert.Contains(textEntries, entry => entry.Module == "entry" && entry.Ability == "HomeForm");
+            Assert.Contains(textEntries, entry => entry.Module == "entry" && entry.Ability == "ShareService");
+        }
+
+        [Fact]
+        public void MarksServiceOnlyBundlesAsRuntimeProcessTargets()
+        {
+            var apps = HarmonyLookupService.ParseApps(
+                "{\"bundleName\":\"com.example.service\",\"hapModuleInfos\":[{"
+                + "\"moduleName\":\"entry\",\"serviceAbilityInfos\":[{\"className\":\"SyncService\"}],"
+                + "\"dataShareAbilityInfos\":[{\"className\":\"ShareService\"}]}]}\n");
+
+            AppInfo app = Assert.Single(apps);
+            Assert.True(app.IsProcessOnly);
+            Assert.False(app.HasLaunchEntry);
+            Assert.Equal("仅运行中可采集", app.LaunchAvailability);
+            Assert.Contains(app.HarmonyLaunchEntries, entry => !entry.IsUiEntry && entry.Ability == "SyncService");
+            Assert.Contains(app.HarmonyLaunchEntries, entry => !entry.IsUiEntry && entry.Ability == "ShareService");
+        }
+
+        [Fact]
+        public void KeepsApplicationIdentityWhenNonExtensionAbilityCollectionsContainClassNames()
+        {
+            var apps = HarmonyLookupService.ParseApps(
+                "{\"bundleName\":\"com.example.identity\",\"userId\":100,"
+                + "\"hapModuleInfos\":[{\"moduleName\":\"entry\","
+                + "\"serviceAbilityInfos\":[{\"className\":\"SyncService\"}],"
+                + "\"formAbilityInfoList\":[{\"className\":\"HomeForm\"}],"
+                + "\"dataShareAbilityInfos\":[{\"className\":\"ShareService\"}]}]}\n");
+
+            AppInfo app = Assert.Single(apps);
+            Assert.Equal("com.example.identity", app.BundleId);
+            Assert.Equal(100, app.HarmonyUserId);
+            Assert.Equal(new[] { 100 }, app.HarmonyUserIds);
+            Assert.Contains(app.HarmonyLaunchEntries, entry => entry.Module == "entry" && entry.Ability == "SyncService");
+            Assert.Contains(app.HarmonyLaunchEntries, entry => entry.Module == "entry" && entry.Ability == "HomeForm");
+            Assert.Contains(app.HarmonyLaunchEntries, entry => entry.Module == "entry" && entry.Ability == "ShareService");
+            Assert.DoesNotContain(apps, candidate => candidate.BundleId == "SyncService");
+            Assert.DoesNotContain(apps, candidate => candidate.BundleId == "HomeForm");
+            Assert.DoesNotContain(apps, candidate => candidate.BundleId == "ShareService");
         }
 
         [Fact]

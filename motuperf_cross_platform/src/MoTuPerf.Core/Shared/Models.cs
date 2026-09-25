@@ -137,10 +137,17 @@ namespace CSharpIosPerfMonitor
         {
             Module = "";
             Ability = "";
+            IsUiEntry = true;
         }
 
         public string Module { get; set; }
         public string Ability { get; set; }
+        /// <summary>
+        /// True when the entry is a user-facing UI/entry Ability. Service,
+        /// Form, DataShare, Worker and Extension entries remain available as
+        /// provenance but are not treated as launchable app entry points.
+        /// </summary>
+        public bool IsUiEntry { get; set; }
     }
 
     public sealed class AppInfo
