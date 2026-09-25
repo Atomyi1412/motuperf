@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Reflection;
 using System.Text;
 using CSharpIosPerfMonitor;
 
@@ -20,7 +21,7 @@ namespace MoTuPerf.Desktop
                 StringBuilder text = new StringBuilder();
                 text.AppendLine("Title: " + (title ?? ""));
                 text.AppendLine("Time: " + DateTime.Now.ToString("O"));
-                text.AppendLine("Version: v0.40.6");
+                text.AppendLine("Version: v" + ResolveVersion());
                 text.AppendLine("BaseDirectory: " + AppDomain.CurrentDomain.BaseDirectory);
                 text.AppendLine();
                 text.AppendLine(Convert.ToString(exception));
@@ -28,6 +29,20 @@ namespace MoTuPerf.Desktop
                 return path;
             }
             catch { return ""; }
+        }
+
+        private static string ResolveVersion()
+        {
+            Assembly assembly = typeof(DesktopCrashLogger).Assembly;
+            AssemblyInformationalVersionAttribute informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>();
+            string version = informational == null ? "" : informational.InformationalVersion;
+            if (string.IsNullOrWhiteSpace(version))
+            {
+                Version assemblyVersion = assembly.GetName().Version;
+                version = assemblyVersion == null ? "0.0.0" : assemblyVersion.ToString(3);
+            }
+            int suffix = version.IndexOf('+');
+            return (suffix >= 0 ? version.Substring(0, suffix) : version).TrimStart('v');
         }
     }
 }

@@ -220,7 +220,7 @@ namespace CSharpIosPerfMonitor
                     ProcessResult captured = await ProcessRunner.RunAsync(RuntimeTools.HdcExecutable,
                         HarmonyLookupService.TargetArgs(Udid, captureCommand), 15000, token);
                     lastResult = captured;
-                    if (captured.ExitCode != 0 || (captured.Stdout ?? "").Contains("[Fail]"))
+                    if (IsHarmonyCaptureFailure(captured))
                     {
                         TryDelete(path);
                         continue;
@@ -612,6 +612,13 @@ namespace CSharpIosPerfMonitor
                 new[] { "snapshot_display", "-f", remote ?? "" },
                 new[] { "screencap", "-p", remote ?? "" }
             };
+        }
+
+        internal static bool IsHarmonyCaptureFailure(ProcessResult result)
+        {
+            if (result == null || result.ExitCode != 0) return true;
+            string output = (result.Stdout ?? "") + "\n" + (result.Stderr ?? "");
+            return output.IndexOf("[Fail]", StringComparison.OrdinalIgnoreCase) >= 0;
         }
     }
 }

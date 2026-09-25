@@ -33,5 +33,21 @@ namespace MoTuPerf.Platform.Tests
             Assert.Equal(new[] { "snapshot_display", "-f", "/data/local/tmp/test.png" }, commands[0]);
             Assert.Equal(new[] { "screencap", "-p", "/data/local/tmp/test.png" }, commands[1]);
         }
+
+        [Theory]
+        [InlineData(1, "", "")]
+        [InlineData(0, "[Fail] snapshot failed", "")]
+        [InlineData(0, "", "[Fail] snapshot failed")]
+        public void RejectsHarmonyCaptureFailureFromExitCodeOrEitherOutput(int exitCode, string stdout, string stderr)
+        {
+            Assert.True(ScreenshotService.IsHarmonyCaptureFailure(new ProcessResult(exitCode, stdout, stderr)));
+        }
+
+        [Fact]
+        public void AcceptsHarmonyCaptureWhenExitCodeAndBothOutputsAreClean()
+        {
+            Assert.False(ScreenshotService.IsHarmonyCaptureFailure(
+                new ProcessResult(0, "snapshot saved", "")));
+        }
     }
 }
