@@ -1335,6 +1335,75 @@ namespace MoTuPerf.Platform.Tests
         }
 
         [Fact]
+        public void CarriesUniqueRunningProcessEvidenceToKnownAppRowsAndClearsAmbiguousBinding()
+        {
+            var uniqueApps = new List<AppInfo>
+            {
+                new AppInfo
+                {
+                    BundleId = "com.example.unique",
+                    Name = "Unique App",
+                    Platform = "harmony",
+                    HarmonyUserId = 100,
+                    HarmonyUserIds = new List<int> { 100 }
+                }
+            };
+            var uniqueProcess = new ProcessInfo
+            {
+                Pid = 1801,
+                Name = "com.example.unique",
+                BundleId = "com.example.unique",
+                Platform = "harmony",
+                HarmonyUserId = 100,
+                HarmonyStartTimeTicks = 9911
+            };
+
+            HarmonyLookupService.MergeProcessApps(uniqueApps, new[] { uniqueProcess });
+
+            AppInfo uniqueApp = Assert.Single(uniqueApps);
+            Assert.Equal(1801, uniqueApp.ProcessPid);
+            Assert.Equal("com.example.unique", uniqueApp.ProcessName);
+
+            var ambiguousApps = new List<AppInfo>
+            {
+                new AppInfo
+                {
+                    BundleId = "com.example.shared",
+                    Name = "Shared App",
+                    Platform = "harmony",
+                    HarmonyUserId = 100,
+                    HarmonyUserIds = new List<int> { 100 }
+                }
+            };
+            var ambiguousProcesses = new[]
+            {
+                new ProcessInfo
+                {
+                    Pid = 1802,
+                    Name = "com.example.shared:render",
+                    BundleId = "com.example.shared",
+                    Platform = "harmony",
+                    HarmonyUserId = 100
+                },
+                new ProcessInfo
+                {
+                    Pid = 1803,
+                    Name = "com.example.shared:worker",
+                    BundleId = "com.example.shared",
+                    Platform = "harmony",
+                    HarmonyUserId = -1
+                }
+            };
+
+            HarmonyLookupService.MergeProcessApps(ambiguousApps, ambiguousProcesses);
+
+            AppInfo ambiguousApp = Assert.Single(ambiguousApps);
+            Assert.Equal(0, ambiguousApp.ProcessPid);
+            Assert.Empty(ambiguousApp.ProcessName);
+            Assert.True(ambiguousApp.IsRunning);
+        }
+
+        [Fact]
         public void ClearsProcessOnlyPidWhenAnotherProcessAppearsForTheSameUser()
         {
             var apps = new List<AppInfo>

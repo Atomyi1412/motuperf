@@ -1566,13 +1566,21 @@ namespace CSharpIosPerfMonitor
                 if (existing != null)
                 {
                     existing.IsRunning = true;
-                    if (existing.IsProcessOnly
-                        && existing.ProcessPid > 0
-                        && existing.ProcessPid != process.Pid)
+                    if (HasUniqueProcessEvidence(existing, process, validProcesses))
                     {
-                        // A process-only row represents a real process only
-                        // while it is unique for this Bundle/profile. Once a
-                        // second PID appears, leave process choice explicit.
+                        // Carry the same process evidence into the app
+                        // projection when it identifies one concrete target.
+                        // This keeps app selection/restoration tied to the
+                        // snapshot that produced the row.
+                        existing.ProcessPid = process.Pid;
+                        existing.ProcessName = process.Name;
+                    }
+                    else
+                    {
+                        // A Bundle/profile may expose a main process together
+                        // with Worker/Render/Service processes. Once the
+                        // candidate is ambiguous, leave process choice
+                        // explicit instead of binding the first row observed.
                         existing.ProcessPid = 0;
                         existing.ProcessName = "";
                     }
@@ -1584,12 +1592,13 @@ namespace CSharpIosPerfMonitor
                 // Manager/package-manager output omitted it. A known user is
                 // retained on the new row so it can be selected and launched
                 // without falling back to another profile.
+                bool uniqueProcessEvidence = HasUniqueProcessEvidence(null, process, validProcesses);
                 apps.Add(new AppInfo
                 {
                     BundleId = processBundle,
                     Name = FirstNonEmpty(process.DisplayName, process.Name, processBundle),
-                    ProcessPid = process.Pid,
-                    ProcessName = process.Name,
+                    ProcessPid = uniqueProcessEvidence ? process.Pid : 0,
+                    ProcessName = uniqueProcessEvidence ? process.Name : "",
                     Platform = "harmony",
                     Recommended = process.ForegroundApplication,
                     Reason = "运行中的鸿蒙应用",
@@ -1599,6 +1608,30 @@ namespace CSharpIosPerfMonitor
                 });
                 AddHarmonyUser(apps[apps.Count - 1], process.HarmonyUserId);
             }
+        }
+
+        private static bool HasUniqueProcessEvidence(
+            AppInfo app,
+            ProcessInfo candidate,
+            IEnumerable<ProcessInfo> processes)
+        {
+            if (candidate == null) return false;
+            string bundle = FirstNonEmpty(candidate.BundleId, candidate.OwnerBundleId);
+            if (!ValidHarmonyApplicationBundle(bundle)) return false;
+
+            int targetUser = app != null ? app.HarmonyUserId : candidate.HarmonyUserId;
+            int matches = (processes ?? Enumerable.Empty<ProcessInfo>())
+                .Where(ProcessTargetMatcher.IsValidTarget)
+                .Count(delegate(ProcessInfo process)
+                {
+                    string processBundle = FirstNonEmpty(process.BundleId, process.OwnerBundleId);
+                    if (!string.Equals(processBundle, bundle, StringComparison.OrdinalIgnoreCase)) return false;
+                    if (targetUser < 0) return process.HarmonyUserId < 0;
+                    // An unknown-user row could belong to this profile. Keep
+                    // the app binding explicit until that ambiguity is gone.
+                    return process.HarmonyUserId < 0 || process.HarmonyUserId == targetUser;
+                });
+            return matches == 1;
         }
 
         internal static string DescribeDiscoveryException(Exception exception)

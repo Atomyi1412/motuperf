@@ -26,6 +26,13 @@
         <StackPanel Margin="22,10,18,12" Spacing="9">
            <Border Classes="helpSection">
              <StackPanel>
+               <TextBlock Text="v0.40.8" Classes="helpTitle" />
+               <TextBlock Text="2026-09-25" Classes="dialogHint" />
+               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 鸿蒙应用清单与进程列表合并时，唯一的 Bundle/用户进程会把真实 PID 和进程名同步到应用项，应用选择和恢复使用同一轮 HDC 快照中的身份证据。&#x0A;• 同一 Bundle/用户出现多个主进程、Worker、Render 或 Service，或存在未知用户进程时，应用项会清除自动 PID 绑定并要求显式选择，避免把第一个进程误当成采集目标。&#x0A;• 增加鸿蒙唯一进程绑定与多进程歧义回归测试。本版本只保留本地代码，未打包、未推送、未创建 Release，等待鸿蒙真机验收。" />
+             </StackPanel>
+           </Border>
+           <Border Classes="helpSection">
+             <StackPanel>
                <TextBlock Text="v0.40.7" Classes="helpTitle" />
                <TextBlock Text="2026-09-25" Classes="dialogHint" />
                <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 完善鸿蒙截图失败判定，同时检查 HDC 退出码、标准输出和错误输出中的 [Fail] 标记，避免失败命令被误当成有效截图。&#x0A;• 同步鸿蒙 Ability 启动边界说明：保留 UI 与非 UI 的真实入口，优先尝试 UI，非 UI 入口仅使用 HDC 实际返回值，不猜测入口或指标。&#x0A;• 增加鸿蒙截图 stderr 失败标记回归测试。本版本只保留本地代码，未打包、未推送、未创建 Release，等待鸿蒙真机验收。" />
@@ -36,13 +43,6 @@
                <TextBlock Text="v0.40.6" Classes="helpTitle" />
                <TextBlock Text="2026-09-25" Classes="dialogHint" />
                <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 鸿蒙应用即使只有 Service、Form、DataShare、WorkScheduler 或 Extension 等真实非 UI Ability，也会把 HDC 返回的 Module/Ability 作为启动候选，优先尝试 UI 入口，设备拒绝后再尝试非 UI 入口。&#x0A;• 启动入口仍严格使用真实 HDC 输出；设备拒绝后只允许回绑同 Bundle、同鸿蒙用户下的唯一真实 PID，多进程或用户身份不明确时继续要求手动选择，避免误采集。&#x0A;• 增加纯非 UI 入口启动成功、详情查询补充非 UI 入口以及失败回退边界测试；本版本只保留本地代码，未打包、未推送、未创建 Release，等待鸿蒙真机验收。" />
-             </StackPanel>
-           </Border>
-           <Border Classes="helpSection">
-             <StackPanel>
-               <TextBlock Text="v0.40.5" Classes="helpTitle" />
-               <TextBlock Text="2026-09-25" Classes="dialogHint" />
-               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复鸿蒙应用清单已成功读取、但所有进程查询命令失败时整轮目标被丢弃的问题；现在保留真实应用列表，并在选择页提示进程读取失败原因，具备真实启动入口的应用仍可继续尝试启动。&#x0A;• 进程列表已读到但可选的进程启动时间批次失败时，继续保留真实 PID，不生成占位进程，也不跨用户或跨 Bundle 绑定。&#x0A;• 增加鸿蒙应用成功/进程失败及应用与进程双失败的回归测试。本版本仅保留本地代码，未打包、未推送、未创建 Release，等待鸿蒙真机验收。" />
              </StackPanel>
            </Border>
            <Border Classes="legacyChangelogSection" IsVisible="False">
