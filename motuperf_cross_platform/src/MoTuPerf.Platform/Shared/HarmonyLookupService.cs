@@ -585,9 +585,21 @@ namespace CSharpIosPerfMonitor
         {
             if (app == null)
                 return Task.FromResult(new ProcessResult(1, "", "未选择有效的鸿蒙应用。"));
-            IEnumerable<int> selectedUsers = app.HarmonyUserId >= 0
+            IEnumerable<int> rawUsers = app.HarmonyUserId >= 0
                 ? new[] { app.HarmonyUserId }
-                : app.HarmonyUserIds;
+                : app.HarmonyUserIds ?? new List<int>();
+            List<int> selectedUsers = rawUsers
+                .Where(delegate(int userId) { return userId >= 0; })
+                .Distinct()
+                .OrderBy(delegate(int userId) { return userId; })
+                .ToList();
+            if (app.HarmonyUserId < 0 && selectedUsers.Count > 1)
+            {
+                return Task.FromResult(new ProcessResult(
+                    1,
+                    "",
+                    "鸿蒙应用的用户作用域不明确，请重新选择具体用户后再启动。"));
+            }
             return LaunchAppAsync(serial, app.BundleId, selectedUsers, app.HarmonyLaunchEntries, token);
         }
 
@@ -698,6 +710,7 @@ namespace CSharpIosPerfMonitor
 
         private async Task<ProcessResult> ReadLaunchDetailAsync(string serial, string bundleId, int userId, CancellationToken token)
         {
+            List<ProcessResult> scopedAttempts = new List<ProcessResult>();
             if (userId >= 0)
             {
                 string value = userId.ToString(CultureInfo.InvariantCulture);
@@ -708,10 +721,22 @@ namespace CSharpIosPerfMonitor
                 {
                     ProcessResult scoped = await RunShellAsync(serial, new[] { "bm", "dump", "-n", bundleId, option, value }, 12000, token).ConfigureAwait(false);
                     if (scoped == null || IsHdcFailure(scoped)) continue;
+                    scopedAttempts.Add(scoped);
                     string scopedOutput = (scoped.Stdout ?? "") + "\n" + (scoped.Stderr ?? "");
                     if (ParseLaunchEntryPoints(scopedOutput).Count > 0) return scoped;
                 }
+
+                // A scoped lookup that did not expose an entry is still a
+                // meaningful result for the selected profile. Never query
+                // the unscoped Bundle Manager for a secondary/work user: on
+                // some Harmony builds that command resolves the owner user's
+                // installation and can feed the wrong Ability into launch.
+                if (userId != 0)
+                    return CombineLaunchFailures(scopedAttempts);
             }
+
+            // User 0 is the device owner; an unscoped query is equivalent to
+            // that profile on implementations that do not support user flags.
             return await RunShellAsync(serial, new[] { "bm", "dump", "-n", bundleId }, 12000, token).ConfigureAwait(false);
         }
 
@@ -1495,7 +1520,7 @@ namespace CSharpIosPerfMonitor
         {
             if (exception is TimeoutException) return "HDC 响应超时，请检查 USB 连接、设备解锁状态和 HDC 调试授权后刷新。";
             if (exception is FileNotFoundException || exception is System.ComponentModel.Win32Exception)
-                return "未找到或无法启动 HDC。请安装官方鸿蒙 SDK 的 toolchains，将其目录加入 PATH，或将 MOTUPERF_HDC 设置为 hdc.exe 的完整路径，然后重启 MoTuPerf。";
+                return "未找到或无法启动 HDC。MoTuPerf 已自动检查安装包、PATH 和常见 DevEco/OpenHarmony SDK 目录；如果 SDK 安装在自定义位置，请将 MOTUPERF_HDC 设置为 hdc.exe 的完整路径，然后重启 MoTuPerf。";
             return "鸿蒙设备检测失败：" + Sanitize(exception == null ? "" : exception.Message, 240);
         }
 
@@ -1506,7 +1531,7 @@ namespace CSharpIosPerfMonitor
             if (lower.Contains("device not found") || lower.Contains("not connected"))
                 return "HDC 未连接到设备，请检查数据线、调试开关和设备端授权后刷新。";
             if (lower.Contains("command not found") || lower.Contains("is not recognized") || lower.Contains("no such file"))
-                return "未找到 HDC 运行组件，请安装官方鸿蒙 SDK 的 toolchains 并配置 PATH 或 MOTUPERF_HDC，然后重启 MoTuPerf。";
+                return "未找到 HDC 运行组件。MoTuPerf 已自动检查常见 SDK 目录；请安装官方鸿蒙 SDK 的 toolchains，或在自定义安装位置使用 MOTUPERF_HDC 指定 hdc.exe，然后重启 MoTuPerf。";
             if (lower.Contains("timeout")) return "HDC 响应超时，请检查 USB 连接和设备授权后刷新。";
             return "HDC 检测失败（退出码 " + (result == null ? -1 : result.ExitCode).ToString(CultureInfo.InvariantCulture) + "）。" + Sanitize(output, 240);
         }

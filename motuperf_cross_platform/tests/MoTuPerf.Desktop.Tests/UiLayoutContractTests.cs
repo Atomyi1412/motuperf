@@ -279,9 +279,13 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Contains("WaitForHarmonyProcessAsync", dialogCode);
             Assert.Contains("FindHarmonyProcessForBundle(loadedProcesses, _preferredAppBundleId, _preferredHarmonyUserId)", dialogCode);
             Assert.Contains("RefreshHarmonyProcessesAfterLaunchFailureAsync", dialogCode);
+            Assert.Contains("未使用旧进程，请刷新设备后重新选择", dialogCode);
+            Assert.Contains("暂未找到唯一匹配进程", dialogCode);
             Assert.Contains("APP 已启动，但暂未检测到匹配进程", dialogCode);
             Assert.Contains("应用列表已读取，进程列表暂不可用", dialogCode);
             Assert.Contains("SameAppSelection", dialogCode);
+            Assert.Contains("SameProcessSelection", dialogCode);
+            Assert.Contains("ProcessTargetMatcher.SameHarmonyProcessInstance", dialogCode);
             Assert.Contains("return bundleMatches.Count == 1 ? bundleMatches[0] : null;", dialogCode);
             Assert.Contains("SameAppSelection(app, selectedApp)", dialogCode);
             Assert.Contains("app.ProcessPid", dialogCode);

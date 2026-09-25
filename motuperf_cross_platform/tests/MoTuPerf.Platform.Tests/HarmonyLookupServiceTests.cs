@@ -1613,6 +1613,47 @@ namespace MoTuPerf.Platform.Tests
         }
 
         [Fact]
+        public async Task NeverReadsUnscopedNativeAbilityForSecondaryUserWhenScopedQueriesFail()
+        {
+            List<string> commands = new List<string>();
+
+            Task<ProcessResult> ExecuteFakeHdcAsync(
+                string serial,
+                string[] command,
+                int timeoutMs,
+                CancellationToken token)
+            {
+                string key = string.Join(" ", command ?? Array.Empty<string>());
+                commands.Add(key);
+                if (key.StartsWith("bm dump -n com.example.work ", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(1, "", "scoped Bundle Manager lookup rejected"));
+                if (key == "bm dump -n com.example.work")
+                    return Task.FromResult(new ProcessResult(0,
+                        "bundleName: com.example.work\n"
+                        + "hapModuleInfos:\n"
+                        + "  - moduleName: entry\n"
+                        + "    abilityInfos:\n"
+                        + "      - name: OwnerOnlyAbility\n", ""));
+                return Task.FromResult(new ProcessResult(1, "", "launch unavailable"));
+            }
+
+            var service = new HarmonyLookupService(ExecuteFakeHdcAsync);
+            ProcessResult result = await service.LaunchAppAsync(
+                "HARMONY-1",
+                "com.example.work",
+                new[] { 100 },
+                CancellationToken.None);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains(commands, command => command == "bm dump -n com.example.work -u 100");
+            Assert.Contains(commands, command => command == "bm dump -n com.example.work --user 100");
+            Assert.Contains(commands, command => command == "bm dump -n com.example.work -U 100");
+            Assert.Contains(commands, command => command == "bm dump -n com.example.work --user-id 100");
+            Assert.DoesNotContain(commands, command => command == "bm dump -n com.example.work");
+            Assert.DoesNotContain(commands, command => command.Contains("OwnerOnlyAbility", StringComparison.Ordinal));
+        }
+
+        [Fact]
         public async Task FallsBackToKnownAbilityWhenDeviceRejectsModuleArgument()
         {
             List<string> commands = new List<string>();
@@ -1961,6 +2002,34 @@ namespace MoTuPerf.Platform.Tests
             Assert.Equal(0, result.ExitCode);
             Assert.Contains("aa start -U 100 -b com.example.shared -m entry -a EntryAbility", commands);
             Assert.DoesNotContain(commands, command => command.Contains("-U 0", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public async Task RefusesToLaunchAnAppWithAmbiguousHarmonyUserScope()
+        {
+            List<string> commands = new List<string>();
+
+            Task<ProcessResult> ExecuteFakeHdcAsync(
+                string serial,
+                string[] command,
+                int timeoutMs,
+                CancellationToken token)
+            {
+                commands.Add(string.Join(" ", command ?? Array.Empty<string>()));
+                return Task.FromResult(new ProcessResult(1, "", "should not be called"));
+            }
+
+            var service = new HarmonyLookupService(ExecuteFakeHdcAsync);
+            ProcessResult result = await service.LaunchAppAsync("HARMONY-1", new AppInfo
+            {
+                BundleId = "com.example.shared",
+                Platform = "harmony",
+                HarmonyUserIds = new List<int> { 0, 100 }
+            }, CancellationToken.None);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("用户作用域不明确", result.Stderr);
+            Assert.Empty(commands);
         }
     }
 }

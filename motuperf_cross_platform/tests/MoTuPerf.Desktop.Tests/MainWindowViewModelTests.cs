@@ -394,6 +394,31 @@ namespace MoTuPerf.Desktop.Tests
         }
 
         [Fact]
+        public void HarmonyAppDoesNotBindUnknownProcessUserWhenProfilesAreAmbiguous()
+        {
+            ProcessInfo[] processes =
+            {
+                new ProcessInfo
+                {
+                    Pid = 1201,
+                    Name = "com.example.shared",
+                    BundleId = "com.example.shared",
+                    Platform = "harmony",
+                    HarmonyUserId = -1
+                }
+            };
+            AppInfo workApp = new AppInfo
+            {
+                BundleId = "com.example.shared",
+                Platform = "harmony",
+                HarmonyUserId = 100
+            };
+
+            Assert.Null(DevicePickerWindow.FindHarmonyProcessForApp(processes, workApp, false));
+            Assert.Equal(1201, DevicePickerWindow.FindHarmonyProcessForApp(processes, workApp, true).Pid);
+        }
+
+        [Fact]
         public void HarmonyAppRestoreDoesNotFallBackAcrossUsers()
         {
             var apps = new AppInfo[]

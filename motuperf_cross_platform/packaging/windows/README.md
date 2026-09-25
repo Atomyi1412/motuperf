@@ -13,4 +13,4 @@ powershell -ExecutionPolicy Bypass -File motuperf_cross_platform\packaging\windo
 
 自动更新优先使用发起更新的客户端安装目录，显式 `/D=` 参数优先于旧安装记录。隔离验证必须同时传入 `/TESTMODE` 和最后一个参数 `/D=绝对目录`，不写真实卸载记录或快捷方式。
 
-安装包包含 Windows x64 自包含 .NET、固定依赖的 Python/iOS 运行时、ADB 和采集脚本。鸿蒙 HDC 不在本安装包内捆绑；使用鸿蒙设备前请安装官方 HarmonyOS/OpenHarmony SDK 的 HDC，并配置 `PATH` 或 `MOTUPERF_HDC`。安装目录和卸载标识与 WPF `v0.4.65` 相互独立，不覆盖旧版安装记录。
+安装包包含 Windows x64 自包含 .NET、固定依赖的 Python/iOS 运行时、ADB 和采集脚本。鸿蒙 HDC 不在本安装包内捆绑；使用鸿蒙设备前请安装官方 HarmonyOS/OpenHarmony SDK 的 HDC。MoTuPerf 会自动检查 PATH 和常见 DevEco/OpenHarmony SDK 目录，自定义安装位置可通过 `MOTUPERF_HDC` 指定。安装目录和卸载标识与 WPF `v0.4.65` 相互独立，不覆盖旧版安装记录。

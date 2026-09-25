@@ -28,21 +28,21 @@
              <StackPanel>
                <TextBlock Text="v0.40.1" Classes="helpTitle" />
                <TextBlock Text="2026-09-25" Classes="dialogHint" />
-                <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 鸿蒙设备选择页改为使用同一轮 HDC 目标快照读取应用、进程和进程启动时钟，避免重复扫描造成列表来自不同时间点、刷新变慢或应用与进程不一致。&#xA;• 收紧 Android 兼容应用在工作资料/副用户下的 Launcher 解析：非主用户始终保留用户作用域，避免启动失败时误解析或启动到主用户。&#xA;• 增加统一目标快照、进程扫描次数、启动时钟和跨用户 Launcher 作用域回归测试；本轮只保留本地代码，不打包、不推送、不创建 Release。" />
+               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 鸿蒙设备选择页改为使用同一轮 HDC 目标快照读取应用、进程和进程启动时钟，避免重复扫描造成列表来自不同时间点、刷新变慢或应用与进程不一致。&#x0A;• 收紧 Android 兼容应用在工作资料/副用户下的 Launcher 解析：非主用户始终保留用户作用域，避免启动失败时误解析或启动到主用户。&#x0A;• 修复原生鸿蒙应用在副用户的所有带用户参数入口查询失败时仍可能无参数读取 Bundle Manager 的问题，非用户 0 不再执行无作用域入口查询。&#x0A;• 收紧鸿蒙多用户目标绑定：进程用户身份未知且同一 Bundle 存在多个用户时不再自动绑定；用户作用域不明确的应用也不会直接启动，避免采集或启动到错误用户。&#x0A;• HDC 定位增加常见 DevEco/OpenHarmony SDK 目录自动发现；自定义安装位置仍可通过 MOTUPERF_HDC 指定，减少首次使用鸿蒙设备时的环境配置。&#x0A;• 修复鸿蒙启动等待和启动失败刷新时应用/进程列表可能跨轮次不一致的问题；恢复选择会校验 PID、进程名、用户资料和启动时钟，刷新失败时不再复用旧进程。&#x0A;• 增加统一目标快照、进程扫描次数、启动时钟和跨用户 Launcher 作用域回归测试；本轮只保留本地代码，不打包、不推送、不创建 Release。" />
            </StackPanel>
          </Border>
            <Border Classes="helpSection">
              <StackPanel>
                <TextBlock Text="v0.40.0" Classes="helpTitle" />
                <TextBlock Text="2026-09-25" Classes="dialogHint" />
-               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 完善鸿蒙全类型目标闭环：原生、系统/预装、Android 兼容、Extension、未启动、多用户和进程-only 目标继续从真实 HDC 清单合并进入选择列表。&#xA;• 补齐 Service、Form、DataShare Extension 的单数、复数和 ...List 厂商别名解析；修正厂商把数字 UID 放在 USER 列时的用户资料映射，避免入口漏识别和跨用户误绑定。&#xA;• 将 Extension 发现改为通用后缀规则，覆盖输入法、无障碍、分享、文件分享、WorkScheduler 及厂商自定义扩展；包管理器补齐 --user、-u、-U、--user-id 作用域，进程查询补齐 UID/USER 与 ARGS/NAME/COMM/COMMAND/CMDLINE 组合，减少设备版本差异导致的应用漏列。&#xA;• 收紧 Android 兼容应用的多用户启动回退：工作资料或副用户的作用域启动失败时不再尝试无用户参数的 am start，避免误启动到默认用户；增加 Extension 别名和跨用户启动安全回归测试。&#xA;• 鸿蒙进程列表增加 Bundle、用户资料和运行能力说明；未知用户明确显示为未知，缺少 UI 入口的运行目标仍只按真实 PID 采集。鸿蒙仍不补造 FPS、FrameTime、Jank、BigJank 和 Thermal State；本版本只保留本地，等待鸿蒙真机验收确认前不推送、不打标签、不创建 Release。" />
+               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 完善鸿蒙全类型目标闭环：原生、系统/预装、Android 兼容、Extension、未启动、多用户和进程-only 目标继续从真实 HDC 清单合并进入选择列表。&#x0A;• 补齐 Service、Form、DataShare Extension 的单数、复数和 ...List 厂商别名解析；修正厂商把数字 UID 放在 USER 列时的用户资料映射，避免入口漏识别和跨用户误绑定。&#x0A;• 将 Extension 发现改为通用后缀规则，覆盖输入法、无障碍、分享、文件分享、WorkScheduler 及厂商自定义扩展；包管理器补齐 --user、-u、-U、--user-id 作用域，进程查询补齐 UID/USER 与 ARGS/NAME/COMM/COMMAND/CMDLINE 组合，减少设备版本差异导致的应用漏列。&#x0A;• 收紧 Android 兼容应用的多用户启动回退：工作资料或副用户的作用域启动失败时不再尝试无用户参数的 am start，避免误启动到默认用户；增加 Extension 别名和跨用户启动安全回归测试。&#x0A;• 鸿蒙进程列表增加 Bundle、用户资料和运行能力说明；未知用户明确显示为未知，缺少 UI 入口的运行目标仍只按真实 PID 采集。鸿蒙仍不补造 FPS、FrameTime、Jank、BigJank 和 Thermal State；本版本只保留本地，等待鸿蒙真机验收确认前不推送、不打标签、不创建 Release。" />
             </StackPanel>
           </Border>
            <Border Classes="helpSection">
              <StackPanel>
               <TextBlock Text="v0.39.0" Classes="helpTitle" />
               <TextBlock Text="2026-09-25" Classes="dialogHint" />
-               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 扩展鸿蒙进程发现命令，兼容 ARGS、NAME、COMM、COMMAND 和 CMDLINE 等厂商字段，减少因单一 ps 列不支持导致的应用和服务漏列。&#xA;• 扩展鸿蒙 Ability/Extension 入口字段解析，兼容服务、表单、数据共享等厂商别名；已发现入口启动失败时，继续使用同一 Ability 尝试不带模块参数的兼容写法，不猜测新的入口。&#xA;• 增加进程字段、Extension 列表和启动降级的回归测试。鸿蒙仍不补造没有可靠来源的 FPS、FrameTime、Jank、BigJank 和 Thermal State；本版本只保留本地，等待鸿蒙真机验收确认前不推送、不打标签、不创建 Release。" />
+               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 扩展鸿蒙进程发现命令，兼容 ARGS、NAME、COMM、COMMAND 和 CMDLINE 等厂商字段，减少因单一 ps 列不支持导致的应用和服务漏列。&#x0A;• 扩展鸿蒙 Ability/Extension 入口字段解析，兼容服务、表单、数据共享等厂商别名；已发现入口启动失败时，继续使用同一 Ability 尝试不带模块参数的兼容写法，不猜测新的入口。&#x0A;• 增加进程字段、Extension 列表和启动降级的回归测试。鸿蒙仍不补造没有可靠来源的 FPS、FrameTime、Jank、BigJank 和 Thermal State；本版本只保留本地，等待鸿蒙真机验收确认前不推送、不打标签、不创建 Release。" />
             </StackPanel>
           </Border>
         </StackPanel>

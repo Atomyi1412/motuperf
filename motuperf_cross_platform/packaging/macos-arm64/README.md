@@ -8,7 +8,7 @@
 - .NET 8 SDK。
 - arm64 Python 3。
 - Android platform-tools (`adb`)。
-- 如需连接鸿蒙设备，安装官方 HarmonyOS/OpenHarmony SDK 的 HDC，并配置 `PATH` 或 `MOTUPERF_HDC`；当前 DMG 不捆绑 HDC。
+- 如需连接鸿蒙设备，安装官方 HarmonyOS/OpenHarmony SDK 的 HDC；当前 DMG 不捆绑 HDC。MoTuPerf 会自动检查 PATH 和常见 DevEco/OpenHarmony SDK 目录，自定义安装位置可通过 `MOTUPERF_HDC` 指定。
 - Xcode Command Line Tools（用于原生 Python 依赖和签名工具）。
 
 ## 构建

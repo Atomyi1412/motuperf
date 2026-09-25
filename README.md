@@ -6,7 +6,7 @@ MoTuPerf 是一款面向 Android、iOS 和鸿蒙设备的性能采集工具，�
 
 - Windows x64：提供自包含安装包，内置采集所需的 Python、ADB 和脚本依赖。
 - macOS Apple Silicon：提供 `osx-arm64` DMG，暂不支持 Intel Mac；打开 DMG 后将应用拖入 Applications。
-- 鸿蒙设备：所有可由 HDC 读取到的原生应用、系统应用、Android 兼容应用和运行中应用都会合并进入应用/进程选择和启动流程；安装包暂不捆绑 HDC，需要安装 HarmonyOS/OpenHarmony SDK 并配置 `PATH` 或 `MOTUPERF_HDC`。
+- 鸿蒙设备：所有可由 HDC 读取到的原生应用、系统应用、Android 兼容应用和运行中应用都会合并进入应用/进程选择和启动流程；安装包暂不捆绑 HDC，需要安装 HarmonyOS/OpenHarmony SDK。MoTuPerf 会自动检查 PATH 和常见 DevEco/OpenHarmony SDK 目录，自定义安装位置可通过 `MOTUPERF_HDC` 指定。
 - 现场文件、日志和设备数据保存在用户配置的数据目录，不会上传到 GitHub。
 
 ## 获取与更新

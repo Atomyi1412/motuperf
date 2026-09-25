@@ -50,5 +50,55 @@ namespace MoTuPerf.Core.Tests
             Assert.False(CSharpIosPerfMonitor.ProcessTargetMatcher.IsValidTarget(new CSharpIosPerfMonitor.ProcessInfo { Pid = 6712 }));
             Assert.True(CSharpIosPerfMonitor.ProcessTargetMatcher.IsValidTarget(new CSharpIosPerfMonitor.ProcessInfo { Pid = 6712, Name = "WeChat" }));
         }
+
+        [Fact]
+        public void HarmonyProcessReuseRequiresTheSelectedIdentity()
+        {
+            var selected = new CSharpIosPerfMonitor.ProcessInfo
+            {
+                Pid = 701,
+                Name = "com.example.game",
+                BundleId = "com.example.game",
+                HarmonyUserId = 100,
+                HarmonyStartTimeTicks = 12345
+            };
+
+            Assert.True(CSharpIosPerfMonitor.ProcessTargetMatcher.SameHarmonyProcessInstance(
+                new CSharpIosPerfMonitor.ProcessInfo
+                {
+                    Pid = 701,
+                    Name = "com.example.game",
+                    BundleId = "com.example.game",
+                    HarmonyUserId = 100,
+                    HarmonyStartTimeTicks = 12345
+                }, selected));
+            Assert.False(CSharpIosPerfMonitor.ProcessTargetMatcher.SameHarmonyProcessInstance(
+                new CSharpIosPerfMonitor.ProcessInfo
+                {
+                    Pid = 701,
+                    Name = "com.example.game",
+                    BundleId = "com.example.game",
+                    HarmonyUserId = 100,
+                    HarmonyStartTimeTicks = 12346
+                }, selected));
+            Assert.False(CSharpIosPerfMonitor.ProcessTargetMatcher.SameHarmonyProcessInstance(
+                new CSharpIosPerfMonitor.ProcessInfo
+                {
+                    Pid = 701,
+                    Name = "com.example.game",
+                    BundleId = "com.example.game",
+                    HarmonyUserId = 0,
+                    HarmonyStartTimeTicks = 12345
+                }, selected));
+            Assert.False(CSharpIosPerfMonitor.ProcessTargetMatcher.SameHarmonyProcessInstance(
+                new CSharpIosPerfMonitor.ProcessInfo
+                {
+                    Pid = 701,
+                    Name = "com.example.game:render",
+                    BundleId = "com.example.game",
+                    HarmonyUserId = 100,
+                    HarmonyStartTimeTicks = 12345
+                }, selected));
+        }
     }
 }

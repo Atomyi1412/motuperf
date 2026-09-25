@@ -110,6 +110,32 @@ namespace CSharpIosPerfMonitor
                 StringComparison.Ordinal);
         }
 
+        public static bool SameHarmonyProcessInstance(ProcessInfo current, ProcessInfo selected)
+        {
+            if (current == null || selected == null || current.Pid != selected.Pid) return false;
+            if (selected.HarmonyStartTimeTicks > 0
+                && (current.HarmonyStartTimeTicks <= 0
+                    || current.HarmonyStartTimeTicks != selected.HarmonyStartTimeTicks))
+            {
+                return false;
+            }
+            if (selected.HarmonyUserId >= 0
+                && (current.HarmonyUserId < 0 || current.HarmonyUserId != selected.HarmonyUserId))
+            {
+                return false;
+            }
+            if (!string.IsNullOrWhiteSpace(selected.Name)
+                && !string.Equals(current.Name, selected.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+            string selectedBundle = FirstNonEmpty(selected.BundleId, selected.OwnerBundleId);
+            string currentBundle = FirstNonEmpty(current.BundleId, current.OwnerBundleId);
+            return string.IsNullOrWhiteSpace(selectedBundle)
+                || string.IsNullOrWhiteSpace(currentBundle)
+                || string.Equals(currentBundle, selectedBundle, StringComparison.OrdinalIgnoreCase);
+        }
+
         public static bool CanReuseAndroidSelectionForCapture(ProcessInfo process, string udid)
         {
             return IsValidTarget(process)
