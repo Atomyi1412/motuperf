@@ -438,18 +438,7 @@ namespace CSharpIosPerfMonitor
             List<ProcessInfo> allProcesses = new List<ProcessInfo>();
             bool commandSucceeded = false;
             string diagnostics = "";
-            string[][] commands = new[]
-            {
-                new[] { "ps", "-A", "-o", "PID,ARGS" },
-                new[] { "ps", "-A", "-o", "UID,PID,PPID,ARGS" },
-                new[] { "ps", "-A", "-o", "USER,PID,PPID,ARGS" },
-                new[] { "ps", "-A", "-o", "PID,UID,PPID,ARGS" },
-                new[] { "ps", "-A", "-o", "PID,USER,PPID,ARGS" },
-                new[] { "ps", "-ef" },
-                new[] { "ps", "-A" },
-                new[] { "ps" }
-            };
-            foreach (string[] command in commands)
+            foreach (string[] command in BuildProcessInventoryCommands())
             {
                 ProcessResult result;
                 try
@@ -478,6 +467,34 @@ namespace CSharpIosPerfMonitor
             if (processes.Count == 0 && !commandSucceeded)
                 throw new IOException("无法读取鸿蒙进程：" + Sanitize(diagnostics, 240));
             return processes;
+        }
+
+        internal static IReadOnlyList<string[]> BuildProcessInventoryCommands()
+        {
+            // Harmony vendors expose different process-name columns. Keep the
+            // command families explicit so a device that rejects ARGS still
+            // gets a complete NAME/COMM/CMDLINE inventory.
+            return new[]
+            {
+                new[] { "ps", "-A", "-o", "PID,ARGS" },
+                new[] { "ps", "-A", "-o", "UID,PID,PPID,ARGS" },
+                new[] { "ps", "-A", "-o", "USER,PID,PPID,ARGS" },
+                new[] { "ps", "-A", "-o", "PID,UID,PPID,ARGS" },
+                new[] { "ps", "-A", "-o", "PID,USER,PPID,ARGS" },
+                new[] { "ps", "-A", "-o", "PID,NAME" },
+                new[] { "ps", "-A", "-o", "UID,PID,PPID,NAME" },
+                new[] { "ps", "-A", "-o", "USER,PID,PPID,NAME" },
+                new[] { "ps", "-A", "-o", "PID,UID,PPID,NAME" },
+                new[] { "ps", "-A", "-o", "PID,USER,PPID,NAME" },
+                new[] { "ps", "-A", "-o", "PID,COMM" },
+                new[] { "ps", "-A", "-o", "UID,PID,PPID,COMM" },
+                new[] { "ps", "-A", "-o", "PID,COMMAND" },
+                new[] { "ps", "-A", "-o", "UID,PID,PPID,COMMAND" },
+                new[] { "ps", "-A", "-o", "PID,CMDLINE" },
+                new[] { "ps", "-ef" },
+                new[] { "ps", "-A" },
+                new[] { "ps" }
+            };
         }
 
         public Task<ProcessResult> LaunchAppAsync(string serial, string bundleId, CancellationToken token)
@@ -527,6 +544,7 @@ namespace CSharpIosPerfMonitor
                 .Select(delegate(IGrouping<string, HarmonyLaunchEntryInfo> group) { return group.First(); })
                 .ToList();
             List<ProcessResult> attempts = new List<ProcessResult>();
+            HashSet<string> abilities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (int userId in users)
             {
                 // Reuse the real entries discovered with the aggregate app
@@ -535,6 +553,7 @@ namespace CSharpIosPerfMonitor
                 // the per-bundle form.
                 foreach (HarmonyLaunchEntryInfo entry in knownEntries)
                 {
+                    abilities.Add(entry.Ability);
                     foreach (string[] startArgs in AbilityStartArgsVariants(bundleId, entry.Module, entry.Ability, userId))
                     {
                         ProcessResult result = await RunShellAsync(serial, startArgs, 15000, token).ConfigureAwait(false);
@@ -546,7 +565,6 @@ namespace CSharpIosPerfMonitor
                 ProcessResult detail = await ReadLaunchDetailAsync(serial, bundleId, userId, token).ConfigureAwait(false);
                 if (detail != null) attempts.Add(detail);
                 string detailOutput = detail == null ? "" : (detail.Stdout ?? "") + "\n" + (detail.Stderr ?? "");
-                HashSet<string> abilities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (HarmonyLaunchEntryPoint entry in ParseLaunchEntryPoints(detailOutput))
                 {
                     if (!string.IsNullOrWhiteSpace(entry.Ability)) abilities.Add(entry.Ability);
@@ -795,7 +813,7 @@ namespace CSharpIosPerfMonitor
         {
             return Regex.IsMatch(
                 value ?? "",
-                @"(?i)^(?:[-\s]*)?(?:abilityInfos|abilityInfo|abilities|entryAbilities|entryAbilityInfos|launchAbilityInfos|launchAbilityInfo|extensionAbilityInfos|extensionAbilityInfo|extensionAbilities|serviceExtensionAbilities|serviceExtensionAbilityInfos|formExtensionAbilities|dataShareExtensionAbilities)\s*[:=]",
+                @"(?i)^(?:[-\s]*)?(?:abilityInfos|abilityInfo|abilityInfoList|abilityList|abilities|entryAbilities|entryAbilityInfo|entryAbilityInfos|launchAbilityInfos|launchAbilityInfo|extensionAbilityInfos|extensionAbilityInfo|extensionAbilityInfoList|extensionAbilityList|extensionAbilities|serviceExtensionAbilities|serviceExtensionAbilityInfos|serviceExtensionAbilityInfoList|formExtensionAbilities|formExtensionAbilityInfoList|dataShareExtensionAbilities|dataShareExtensionAbilityInfoList)\s*[:=]",
                 RegexOptions.CultureInvariant);
         }
 
@@ -815,7 +833,7 @@ namespace CSharpIosPerfMonitor
 
                 Match abilityCollection = Regex.Match(
                     trimmed,
-                    @"(?i)^(?:[-\s]*)?(?:abilityInfos|abilityInfo|ability\s+infos|ability\s+info|abilities|entryAbilities|entryAbilityInfos|launchAbilityInfos|launchAbilityInfo|extensionAbilityInfos|extensionAbilityInfo|extensionAbilities|serviceExtensionAbilities|serviceExtensionAbilityInfos|formExtensionAbilities|dataShareExtensionAbilities)\s*[:=]\s*(?<value>.*)$",
+                    @"(?i)^(?:[-\s]*)?(?:abilityInfos|abilityInfo|abilityInfoList|abilityList|ability\s+infos|ability\s+info|abilities|entryAbilities|entryAbilityInfo|entryAbilityInfos|launchAbilityInfos|launchAbilityInfo|extensionAbilityInfos|extensionAbilityInfo|extensionAbilityInfoList|extensionAbilityList|extensionAbilities|serviceExtensionAbilities|serviceExtensionAbilityInfos|serviceExtensionAbilityInfoList|formExtensionAbilities|formExtensionAbilityInfoList|dataShareExtensionAbilities|dataShareExtensionAbilityInfoList)\s*[:=]\s*(?<value>.*)$",
                     RegexOptions.CultureInvariant);
                 if (abilityCollection.Success)
                 {
@@ -1199,13 +1217,13 @@ namespace CSharpIosPerfMonitor
             {
                 string line = raw.Trim();
                 if (line.Length == 0) continue;
-                Match keyedPid = Regex.Match(line, @"(?i)\bpid\s*[:=]\s*(?<pid>\d+)", RegexOptions.CultureInvariant);
+                    Match keyedPid = Regex.Match(line, @"(?i)\bpid\s*[:=]\s*(?<pid>\d+)", RegexOptions.CultureInvariant);
                 if (keyedPid.Success
                     && int.TryParse(keyedPid.Groups["pid"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int keyedValue)
                     && keyedValue > 0)
                 {
                     string keyedCommand = ExtractKeyValueField(line,
-                        "cmd|args|command|process(?:Name)?|name|bundle[-_ ]?name|bundle(?:Id|_id)?|package[-_ ]?name|package(?:Id|_id)?");
+                        "cmd|cmdline|args|command|comm|exec(?:utable)?|process(?:Name)?|name|bundle[-_ ]?name|bundle(?:Id|_id)?|package[-_ ]?name|package(?:Id|_id)?");
                     string keyedName = ProcessNameFromCommand(keyedCommand);
                     int keyedUser = ParseProcessUserId(line);
                     if (!string.IsNullOrWhiteSpace(keyedName)) processes.Add(CreateProcess(keyedValue, keyedName, serial, keyedUser));
@@ -1216,7 +1234,7 @@ namespace CSharpIosPerfMonitor
                 if (headerPid >= 0)
                 {
                     pidIndex = headerPid;
-                    commandIndex = IndexOfAnyIgnoreCase(parts, "ARGS", "CMD", "COMMAND", "NAME",
+                    commandIndex = IndexOfAnyIgnoreCase(parts, "ARGS", "CMD", "CMDLINE", "COMMAND", "COMM", "EXEC", "EXECUTABLE", "PROCNAME", "NAME",
                         "BUNDLE", "BUNDLE_NAME", "BUNDLENAME", "BUNDLEID", "PACKAGE", "PACKAGE_NAME", "PACKAGENAME", "PACKAGEID");
                     userIndex = IndexOfAnyIgnoreCase(parts, "UID", "USER", "USERID", "USER_ID");
                     userFieldName = userIndex >= 0 && userIndex < parts.Length ? parts[userIndex] : "";
@@ -1543,7 +1561,7 @@ namespace CSharpIosPerfMonitor
                 }
 
                 if (Regex.IsMatch(trimmed,
-                    @"(?i)^(?:[-\s]*)?(?:abilityInfos|abilityInfo|ability\s+infos|ability\s+info|abilities|entryAbilities|entryAbilityInfos|launchAbilityInfos|launchAbilityInfo|extensionAbilityInfos|extensionAbilityInfo|extensionAbilities|serviceExtensionAbilities|serviceExtensionAbilityInfos|formExtensionAbilities|dataShareExtensionAbilities)\s*[:=]",
+                    @"(?i)^(?:[-\s]*)?(?:abilityInfos|abilityInfo|abilityInfoList|abilityList|ability\s+infos|ability\s+info|abilities|entryAbilities|entryAbilityInfo|entryAbilityInfos|launchAbilityInfos|launchAbilityInfo|extensionAbilityInfos|extensionAbilityInfo|extensionAbilityInfoList|extensionAbilityList|extensionAbilities|serviceExtensionAbilities|serviceExtensionAbilityInfos|serviceExtensionAbilityInfoList|formExtensionAbilities|formExtensionAbilityInfoList|dataShareExtensionAbilities|dataShareExtensionAbilityInfoList)\s*[:=]",
                     RegexOptions.CultureInvariant))
                 {
                     insideAbilities = true;
@@ -1612,18 +1630,26 @@ namespace CSharpIosPerfMonitor
         {
             return string.Equals(propertyName, "abilityInfos", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(propertyName, "abilityInfo", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(propertyName, "abilityInfoList", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(propertyName, "abilityList", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(propertyName, "abilities", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(propertyName, "entryAbilities", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(propertyName, "entryAbilityInfo", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(propertyName, "entryAbilityInfos", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(propertyName, "launchAbilityInfos", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(propertyName, "launchAbilityInfo", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(propertyName, "extensionAbilityInfos", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(propertyName, "extensionAbilityInfo", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(propertyName, "extensionAbilityInfoList", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(propertyName, "extensionAbilityList", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(propertyName, "extensionAbilities", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(propertyName, "serviceExtensionAbilities", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(propertyName, "serviceExtensionAbilityInfos", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(propertyName, "serviceExtensionAbilityInfoList", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(propertyName, "formExtensionAbilities", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(propertyName, "dataShareExtensionAbilities", StringComparison.OrdinalIgnoreCase);
+                || string.Equals(propertyName, "formExtensionAbilityInfoList", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(propertyName, "dataShareExtensionAbilities", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(propertyName, "dataShareExtensionAbilityInfoList", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string JsonPropertyValue(JsonElement node, string name)

@@ -483,6 +483,32 @@ namespace MoTuPerf.Platform.Tests
         }
 
         [Fact]
+        public void ParsesVendorAbilityCollectionListAliasesWithoutPromotingAbilityNames()
+        {
+            string json = "{\"bundleName\":\"com.example.aliases\",\"hapModuleInfos\":["
+                + "{\"moduleName\":\"entry\",\"abilityInfoList\":[{\"name\":\"EntryAbility\"}],"
+                + "\"serviceExtensionAbilityInfoList\":[{\"serviceExtensionAbilityName\":\"SyncService\"}]}]}";
+            List<AppInfo> apps = HarmonyLookupService.ParseApps(json);
+            List<HarmonyLaunchEntryPoint> entries = HarmonyLookupService.ParseLaunchEntryPoints(json);
+
+            AppInfo app = Assert.Single(apps);
+            Assert.Equal("com.example.aliases", app.BundleId);
+            Assert.DoesNotContain(apps, candidate => candidate.BundleId == "com.example.aliases.EntryAbility");
+            Assert.Contains(entries, entry => entry.Module == "entry" && entry.Ability == "EntryAbility");
+            Assert.Contains(entries, entry => entry.Module == "entry" && entry.Ability == "SyncService");
+
+            List<HarmonyLaunchEntryPoint> textEntries = HarmonyLookupService.ParseLaunchEntryPoints(
+                "bundleName: com.example.aliases\n"
+                + "moduleName: entry\n"
+                + "abilityInfoList:\n"
+                + "  - name: EntryAbility\n"
+                + "serviceExtensionAbilityInfoList:\n"
+                + "  - serviceExtensionAbilityName: SyncService\n");
+            Assert.Contains(textEntries, entry => entry.Module == "entry" && entry.Ability == "EntryAbility");
+            Assert.Contains(textEntries, entry => entry.Module == "entry" && entry.Ability == "SyncService");
+        }
+
+        [Fact]
         public void ParsesIndentedBundleManagerAbilityInfoOutput()
         {
             string output = "bundleName: com.example.text\n"
@@ -749,6 +775,28 @@ namespace MoTuPerf.Platform.Tests
             Assert.Equal(2, rows.Count);
             Assert.Equal("com.example.native", rows.Single(row => row.Pid == 501).BundleId);
             Assert.Equal("com.example.compat", rows.Single(row => row.Pid == 502).BundleId);
+        }
+
+        [Fact]
+        public void SupportsVendorProcessNameColumnsWhenArgsIsUnavailable()
+        {
+            IReadOnlyList<string[]> commands = HarmonyLookupService.BuildProcessInventoryCommands();
+
+            Assert.Contains(commands, command => string.Join(" ", command) == "ps -A -o PID,NAME");
+            Assert.Contains(commands, command => string.Join(" ", command) == "ps -A -o UID,PID,PPID,NAME");
+            Assert.Contains(commands, command => string.Join(" ", command) == "ps -A -o PID,COMM");
+            Assert.Contains(commands, command => string.Join(" ", command) == "ps -A -o UID,PID,PPID,COMMAND");
+            Assert.Contains(commands, command => string.Join(" ", command) == "ps -A -o PID,CMDLINE");
+
+            List<ProcessInfo> rows = HarmonyLookupService.ParseProcesses(
+                "USER PID PPID NAME\n"
+                + "u100_a1 801 1 com.example.native\n"
+                + "u0_a2 802 1 com.example.native:worker\n",
+                "harmony");
+
+            Assert.Equal(new[] { "com.example.native", "com.example.native:worker" },
+                rows.OrderBy(row => row.Pid).Select(row => row.Name));
+            Assert.Equal(new[] { 100, 0 }, rows.OrderBy(row => row.Pid).Select(row => row.HarmonyUserId));
         }
 
         [Fact]
@@ -1385,6 +1433,49 @@ namespace MoTuPerf.Platform.Tests
             Assert.Contains("aa start -U 100 -b com.example.work -m entry -a WorkAbility", commands);
             Assert.Contains("aa start --user 100 -b com.example.work -m entry -a WorkAbility", commands);
             Assert.DoesNotContain("aa start -b com.example.work -m entry -a WorkAbility", commands);
+        }
+
+        [Fact]
+        public async Task FallsBackToKnownAbilityWhenDeviceRejectsModuleArgument()
+        {
+            List<string> commands = new List<string>();
+
+            Task<ProcessResult> ExecuteFakeHdcAsync(
+                string serial,
+                string[] command,
+                int timeoutMs,
+                CancellationToken token)
+            {
+                string key = string.Join(" ", command ?? Array.Empty<string>());
+                commands.Add(key);
+                if (key == "aa start -U 0 -b com.example.moduleless -m entry -a EntryAbility"
+                    || key == "aa start --user 0 -b com.example.moduleless -m entry -a EntryAbility"
+                    || key == "aa start -u 0 -b com.example.moduleless -m entry -a EntryAbility"
+                    || key == "aa start --user-id 0 -b com.example.moduleless -m entry -a EntryAbility")
+                    return Task.FromResult(new ProcessResult(1, "", "module option unsupported"));
+                if (key == "aa start -U 0 -b com.example.moduleless -a EntryAbility")
+                    return Task.FromResult(new ProcessResult(0, "Ability started", ""));
+                return Task.FromResult(new ProcessResult(1, "", "unsupported fake HDC command"));
+            }
+
+            var service = new HarmonyLookupService(ExecuteFakeHdcAsync);
+            ProcessResult result = await service.LaunchAppAsync(
+                "HARMONY-1",
+                new AppInfo
+                {
+                    BundleId = "com.example.moduleless",
+                    Platform = "harmony",
+                    HarmonyUserId = 0,
+                    HarmonyLaunchEntries = new List<HarmonyLaunchEntryInfo>
+                    {
+                        new HarmonyLaunchEntryInfo { Module = "entry", Ability = "EntryAbility" }
+                    }
+                },
+                CancellationToken.None);
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Contains("aa start -U 0 -b com.example.moduleless -m entry -a EntryAbility", commands);
+            Assert.Contains("aa start -U 0 -b com.example.moduleless -a EntryAbility", commands);
         }
 
         [Fact]
