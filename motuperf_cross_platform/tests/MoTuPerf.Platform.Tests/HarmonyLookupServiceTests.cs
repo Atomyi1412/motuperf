@@ -1481,7 +1481,7 @@ namespace MoTuPerf.Platform.Tests
         }
 
         [Fact]
-        public async Task FakeHdcMergesNativeSystemStoppedAndRunningOnlyApplications()
+        public async Task FakeHdcUnifiedInventoryMergesNativeSystemStoppedAndRunningOnlyApplications()
         {
             Task<ProcessResult> ExecuteFakeHdcAsync(
                 string serial,
@@ -1519,7 +1519,8 @@ namespace MoTuPerf.Platform.Tests
             }
 
             var service = new HarmonyLookupService(ExecuteFakeHdcAsync);
-            List<AppInfo> apps = await service.ListAppsAsync("HARMONY-1", CancellationToken.None);
+            HarmonyTargetInventory snapshot = await service.ListTargetsAsync("HARMONY-1", CancellationToken.None);
+            List<AppInfo> apps = snapshot.Apps;
 
             Assert.Contains(apps, app => app.BundleId == "com.example.native" && app.HasLaunchEntry);
             Assert.Contains(apps, app => app.BundleId == "com.example.compat");
@@ -1527,6 +1528,8 @@ namespace MoTuPerf.Platform.Tests
             Assert.Contains(apps, app => app.BundleId == "com.example.stopped");
             Assert.Contains(apps, app => app.BundleId == "com.example.running" && app.IsProcessOnly);
             Assert.DoesNotContain(apps, app => app.BundleId == "com.example.unlisted");
+            Assert.Contains(snapshot.Processes, process => process.BundleId == "com.example.native");
+            Assert.Contains(snapshot.Processes, process => process.BundleId == "com.example.running");
         }
 
         [Fact]
