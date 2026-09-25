@@ -1302,6 +1302,59 @@ namespace MoTuPerf.Platform.Tests
         }
 
         [Fact]
+        public async Task UnifiedTargetInventoryUsesOneProcessAndStartTimePass()
+        {
+            List<string> commands = new List<string>();
+
+            Task<ProcessResult> ExecuteFakeHdcAsync(
+                string serial,
+                string[] command,
+                int timeoutMs,
+                CancellationToken token)
+            {
+                string key = string.Join(" ", command ?? Array.Empty<string>());
+                commands.Add(key);
+                if (key == "pm list users")
+                    return Task.FromResult(new ProcessResult(0, "UserInfo{0:Owner:13} running\n", ""));
+                if (key == "cmd user list")
+                    return Task.FromResult(new ProcessResult(0, "", ""));
+                if (key.StartsWith("bm dump -a", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(0,
+                        "{\"bundleName\":\"com.example.snapshot\",\"versionName\":\"1.0\","
+                        + "\"hapModuleInfos\":[{\"moduleName\":\"entry\",\"mainElementName\":\"EntryAbility\"}]}\n", ""));
+                if (key.StartsWith("pm list packages", StringComparison.Ordinal)
+                    || key.StartsWith("cmd package list packages", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(0, "", ""));
+                if (key == "ps -A -o PID,ARGS")
+                    return Task.FromResult(new ProcessResult(0,
+                        "PID ARGS\n801 com.example.snapshot\n", ""));
+                if (key.StartsWith("ps ", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(0, "", ""));
+                if (key.StartsWith("sh -c ", StringComparison.Ordinal))
+                {
+                    string stat = "801 (com.example.snapshot) "
+                        + string.Join(" ", Enumerable.Repeat("0", 19))
+                        + " 12345\n";
+                    return Task.FromResult(new ProcessResult(0, stat, ""));
+                }
+                return Task.FromResult(new ProcessResult(0, "", ""));
+            }
+
+            var service = new HarmonyLookupService(ExecuteFakeHdcAsync);
+            HarmonyTargetInventory snapshot = await service.ListTargetsAsync("HARMONY-1", CancellationToken.None);
+
+            AppInfo app = Assert.Single(snapshot.Apps, candidate => candidate.BundleId == "com.example.snapshot");
+            ProcessInfo process = Assert.Single(snapshot.Processes);
+            Assert.True(app.IsRunning);
+            Assert.Equal(801, process.Pid);
+            Assert.Equal(12345, process.HarmonyStartTimeTicks);
+            Assert.Equal(HarmonyLookupService.BuildProcessInventoryCommands().Count,
+                commands.Count(command => string.Equals(command, "ps", StringComparison.Ordinal)
+                    || command.StartsWith("ps ", StringComparison.Ordinal)));
+            Assert.Equal(1, commands.Count(command => command.StartsWith("sh -c ", StringComparison.Ordinal)));
+        }
+
+        [Fact]
         public async Task FakeHdcKeepsSameBundleRowsAndPidsSeparatedByHarmonyUser()
         {
             Task<ProcessResult> ExecuteFakeHdcAsync(
@@ -1420,6 +1473,11 @@ namespace MoTuPerf.Platform.Tests
             Assert.NotEqual(0, result.ExitCode);
             Assert.Contains("am start --user 100 -n com.example.compat/com.example.compat.MainActivity", commands);
             Assert.DoesNotContain("am start -n com.example.compat/com.example.compat.MainActivity", commands);
+            Assert.DoesNotContain(commands, command => command.Contains("resolve-activity", StringComparison.OrdinalIgnoreCase)
+                && !command.Contains("--user", StringComparison.OrdinalIgnoreCase)
+                && !command.Contains("-u", StringComparison.OrdinalIgnoreCase)
+                && !command.Contains("-U", StringComparison.OrdinalIgnoreCase)
+                && !command.Contains("--user-id", StringComparison.OrdinalIgnoreCase));
         }
 
         [Fact]

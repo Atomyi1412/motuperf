@@ -62,6 +62,12 @@ namespace CSharpIosPerfMonitor
                 token);
         }
 
+        public Task<HarmonyTargetInventory> ListTargetsAsync(DeviceInfo device, CancellationToken token)
+        {
+            if (!IsHarmony(device)) return Task.FromResult<HarmonyTargetInventory>(null);
+            return _harmony.ListTargetsAsync(device == null ? "" : device.Udid, token);
+        }
+
         public Task<bool> IsAndroidHomeProcessAsync(DeviceInfo device, ProcessInfo process, CancellationToken token)
         {
             if (IsHarmony(device)) return Task.FromResult(false);

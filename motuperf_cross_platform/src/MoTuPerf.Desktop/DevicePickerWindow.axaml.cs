@@ -262,18 +262,39 @@ namespace MoTuPerf.Desktop
             ProcessList.ItemsSource = null;
             try
             {
-                Task<List<AppInfo>> appsTask = _lookup.ListAppsAsync(device, token);
-                Task<List<ProcessInfo>> processesTask = _lookup.ListProcessesAsync(device, token);
                 List<AppInfo> loadedApps = null;
                 List<ProcessInfo> loadedProcesses = null;
                 Exception appsError = null;
                 Exception processesError = null;
-                try { loadedApps = await appsTask; }
-                catch (OperationCanceledException) { throw; }
-                catch (Exception ex) { appsError = ex; }
-                try { loadedProcesses = await processesTask; }
-                catch (OperationCanceledException) { throw; }
-                catch (Exception ex) { processesError = ex; }
+                if (DeviceLookupService.IsHarmony(device))
+                {
+                    try
+                    {
+                        HarmonyTargetInventory snapshot = await _lookup.ListTargetsAsync(device, token);
+                        loadedApps = snapshot == null ? new List<AppInfo>() : snapshot.Apps;
+                        loadedProcesses = snapshot == null ? new List<ProcessInfo>() : snapshot.Processes;
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex)
+                    {
+                        // A Harmony snapshot is atomic from the picker's point
+                        // of view. Do not present a partial app/process pair
+                        // from different HDC rounds after a snapshot failure.
+                        appsError = ex;
+                        processesError = ex;
+                    }
+                }
+                else
+                {
+                    Task<List<AppInfo>> appsTask = _lookup.ListAppsAsync(device, token);
+                    Task<List<ProcessInfo>> processesTask = _lookup.ListProcessesAsync(device, token);
+                    try { loadedApps = await appsTask; }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex) { appsError = ex; }
+                    try { loadedProcesses = await processesTask; }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex) { processesError = ex; }
+                }
                 if (!IsCurrentLoad(generation, deviceUdid)) return;
                 loadedApps = loadedApps ?? new List<AppInfo>();
                 loadedProcesses = loadedProcesses ?? new List<ProcessInfo>();

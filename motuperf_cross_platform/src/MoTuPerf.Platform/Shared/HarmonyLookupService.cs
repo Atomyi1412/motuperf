@@ -23,6 +23,23 @@ namespace CSharpIosPerfMonitor
     }
 
     /// <summary>
+    /// Applications and processes collected from one HDC inventory pass. The
+    /// picker uses this snapshot so both lists describe the same device state
+    /// and share the same process start-time evidence.
+    /// </summary>
+    public sealed class HarmonyTargetInventory
+    {
+        public HarmonyTargetInventory()
+        {
+            Apps = new List<AppInfo>();
+            Processes = new List<ProcessInfo>();
+        }
+
+        public List<AppInfo> Apps { get; set; }
+        public List<ProcessInfo> Processes { get; set; }
+    }
+
+    /// <summary>
     /// Owns the HDC boundary for OpenHarmony/HarmonyOS devices. Harmony is kept
     /// as its own platform even when the selected application is an Android
     /// compatibility application.
@@ -157,6 +174,48 @@ namespace CSharpIosPerfMonitor
             catch { return null; }
         }
 
+        public async Task<HarmonyTargetInventory> ListTargetsAsync(string serial, CancellationToken token)
+        {
+            List<int> userIds;
+            try
+            {
+                userIds = await ReadHarmonyUserIdsAsync(serial, token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch { userIds = new List<int> { 0 }; }
+
+            List<AppInfo> apps = await ReadBundleManagerAppsAsync(serial, userIds, token).ConfigureAwait(false);
+            bool dumpFailed = apps.Count == 0;
+            HashSet<string> seen = new HashSet<string>(
+                apps.Select(delegate(AppInfo app) { return app.BundleId; }),
+                StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                // Keep the same package sources as ListAppsAsync. This pass is
+                // intentionally shared with process discovery below so the
+                // picker never combines two independent inventory snapshots.
+                foreach (HarmonyPackageRecord package in await ReadAndroidPackagesAsync(serial, userIds, token).ConfigureAwait(false))
+                    AddApp(apps, seen, package.BundleId, "Android 兼容应用或系统应用", harmonyUserId: package.UserId);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch { }
+
+            List<ProcessInfo> processes = await ReadProcessesWithStartTimesAsync(serial, token).ConfigureAwait(false);
+            MergeProcessApps(apps, processes);
+            if (apps.Count == 0 && dumpFailed)
+                throw new IOException("无法读取鸿蒙应用列表，请检查 HDC 授权，或在设备上打开应用后刷新进程。");
+
+            return new HarmonyTargetInventory
+            {
+                Apps = ExpandHarmonyUserInstances(apps)
+                    .OrderByDescending(delegate(AppInfo app) { return app.Recommended; })
+                    .ThenBy(delegate(AppInfo app) { return app.BundleId; })
+                    .ThenBy(delegate(AppInfo app) { return app.HarmonyUserId; })
+                    .ToList(),
+                Processes = processes
+            };
+        }
+
         public async Task<List<AppInfo>> ListAppsAsync(string serial, CancellationToken token)
         {
             List<int> userIds;
@@ -202,6 +261,11 @@ namespace CSharpIosPerfMonitor
         }
 
         public async Task<List<ProcessInfo>> ListProcessesAsync(string serial, CancellationToken token)
+        {
+            return await ReadProcessesWithStartTimesAsync(serial, token).ConfigureAwait(false);
+        }
+
+        private async Task<List<ProcessInfo>> ReadProcessesWithStartTimesAsync(string serial, CancellationToken token)
         {
             List<ProcessInfo> processes = await ReadProcessListAsync(serial, token).ConfigureAwait(false);
             if (processes.Count > 0)
@@ -730,8 +794,16 @@ namespace CSharpIosPerfMonitor
                     scoped.Insert(scoped.Count - 1, "--user");
                     scoped.Insert(scoped.Count - 1, userId.ToString(CultureInfo.InvariantCulture));
                     commands.Add(scoped.ToArray());
+                    if (userId == 0)
+                        commands.Add(baseCommand);
                 }
-                commands.Add(baseCommand);
+                else
+                {
+                    // An unknown user retains the legacy unscoped compatibility
+                    // query. A secondary/work profile must never resolve a
+                    // Launcher component from the owner user.
+                    commands.Add(baseCommand);
+                }
             }
             foreach (string[] command in commands)
             {
