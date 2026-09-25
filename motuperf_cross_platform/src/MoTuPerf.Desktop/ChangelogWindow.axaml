@@ -26,23 +26,23 @@
         <StackPanel Margin="22,10,18,12" Spacing="9">
            <Border Classes="helpSection">
              <StackPanel>
-               <TextBlock Text="v0.39.0" Classes="helpTitle" />
+               <TextBlock Text="v0.40.0" Classes="helpTitle" />
                <TextBlock Text="2026-09-25" Classes="dialogHint" />
-               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 扩展鸿蒙进程发现命令，兼容 ARGS、NAME、COMM、COMMAND 和 CMDLINE 等厂商字段，减少因单一 ps 列不支持导致的应用和服务漏列。&#xA;• 扩展鸿蒙 Ability/Extension 入口字段解析，兼容服务、表单、数据共享等厂商别名；已发现入口启动失败时，继续使用同一 Ability 尝试不带模块参数的兼容写法，不猜测新的入口。&#xA;• 增加进程字段、Extension 列表和启动降级的回归测试。鸿蒙仍不补造没有可靠来源的 FPS、FrameTime、Jank、BigJank 和 Thermal State；本版本只保留本地，等待鸿蒙真机验收确认前不推送、不打标签、不创建 Release。" />
+                <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 完善鸿蒙全类型目标闭环：原生、系统/预装、Android 兼容、Extension、未启动、多用户和进程-only 目标继续从真实 HDC 清单合并进入选择列表。&#xA;• 补齐 Service、Form、DataShare Extension 的单数、复数和 ...List 厂商别名解析；修正厂商把数字 UID 放在 USER 列时的用户资料映射，避免入口漏识别和跨用户误绑定。&#xA;• 将 Extension 发现改为通用后缀规则，覆盖输入法、无障碍、分享、文件分享、WorkScheduler 及厂商自定义扩展；包管理器补齐 --user、-u、-U、--user-id 作用域，进程查询补齐 UID/USER 与 ARGS/NAME/COMM/COMMAND/CMDLINE 组合，减少设备版本差异导致的应用漏列。&#xA;• 收紧 Android 兼容应用的多用户启动回退：工作资料或副用户的作用域启动失败时不再尝试无用户参数的 am start，避免误启动到默认用户；增加 Extension 别名和跨用户启动安全回归测试。&#xA;• 鸿蒙进程列表增加 Bundle、用户资料和运行能力说明；未知用户明确显示为未知，缺少 UI 入口的运行目标仍只按真实 PID 采集。鸿蒙仍不补造 FPS、FrameTime、Jank、BigJank 和 Thermal State；本版本只保留本地，等待鸿蒙真机验收确认前不推送、不打标签、不创建 Release。" />
            </StackPanel>
          </Border>
           <Border Classes="helpSection">
             <StackPanel>
-              <TextBlock Text="v0.38.18" Classes="helpTitle" />
+              <TextBlock Text="v0.39.0" Classes="helpTitle" />
               <TextBlock Text="2026-09-25" Classes="dialogHint" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复鸿蒙文本清单中重复出现 moduleName、entryModuleName 等模块别名时，Ability 按全局序号错误绑定到旧模块的问题；现在按字段在原始输出中的顺序维护当前模块，避免生成错误的启动候选。&#xA;• 增加重复模块别名与多模块 Ability 归属回归测试。本版本只保留本地，等待鸿蒙真机验收确认前不推送、不打标签、不创建 Release。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 扩展鸿蒙进程发现命令，兼容 ARGS、NAME、COMM、COMMAND 和 CMDLINE 等厂商字段，减少因单一 ps 列不支持导致的应用和服务漏列。&#xA;• 扩展鸿蒙 Ability/Extension 入口字段解析，兼容服务、表单、数据共享等厂商别名；已发现入口启动失败时，继续使用同一 Ability 尝试不带模块参数的兼容写法，不猜测新的入口。&#xA;• 增加进程字段、Extension 列表和启动降级的回归测试。鸿蒙仍不补造没有可靠来源的 FPS、FrameTime、Jank、BigJank 和 Thermal State；本版本只保留本地，等待鸿蒙真机验收确认前不推送、不打标签、不创建 Release。" />
             </StackPanel>
           </Border>
           <Border Classes="helpSection">
             <StackPanel>
-              <TextBlock Text="v0.38.17" Classes="helpTitle" />
+              <TextBlock Text="v0.38.18" Classes="helpTitle" />
                <TextBlock Text="2026-09-25" Classes="dialogHint" />
-               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复鸿蒙 Bundle Manager 仅返回 name/label 或嵌套数组记录时应用名称、版本和 Bundle 可能漏读的问题，扩大对厂商 JSON 结构的兼容范围。&#xA;• 修复无表头 ps 输出中 UID 在 PID 前、进程名没有点号时的解析问题，保留真实进程名和可确认的用户资料归属，避免把 UID 或状态字段当成进程名。&#xA;• 修复鸿蒙同 Bundle 多用户且用户信息未知时刷新回绑默认选择第一条的问题；无法确认目标用户时保持未选中，避免跨用户采集。&#xA;• 增加上述应用 JSON、无表头进程和多用户回绑的回归测试。本版本只保留本地，等待鸿蒙真机验收确认前不推送、不打标签、不创建 Release。" />
+               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复鸿蒙文本清单中重复出现 moduleName、entryModuleName 等模块别名时，Ability 按全局序号错误绑定到旧模块的问题；现在按字段在原始输出中的顺序维护当前模块，避免生成错误的启动候选。&#xA;• 增加重复模块别名与多模块 Ability 归属回归测试。本版本只保留本地，等待鸿蒙真机验收确认前不推送、不打标签、不创建 Release。" />
            </StackPanel>
           </Border>
         </StackPanel>

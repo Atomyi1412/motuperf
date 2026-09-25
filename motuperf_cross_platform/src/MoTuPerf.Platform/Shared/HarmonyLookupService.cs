@@ -314,15 +314,13 @@ namespace CSharpIosPerfMonitor
             {
                 new[] { "pm", "list", "packages", "-f" }
             };
-            foreach (int userId in users)
-                commands.Add(new[] { "pm", "list", "packages", "-f", "--user", userId.ToString(CultureInfo.InvariantCulture) });
+            AddUserScopedCommands(commands, new[] { "pm", "list", "packages", "-f" }, users);
 
             // A few compatibility containers expose package names but reject
             // the APK-path form. Keep this fallback broad as well; filtering
             // to third-party packages would hide valid launchable apps.
             commands.Add(new[] { "pm", "list", "packages" });
-            foreach (int userId in users)
-                commands.Add(new[] { "pm", "list", "packages", "--user", userId.ToString(CultureInfo.InvariantCulture) });
+            AddUserScopedCommands(commands, new[] { "pm", "list", "packages" }, users);
 
             // Android compatibility containers on some Harmony builds expose
             // the package-manager service through `cmd package` while the
@@ -330,12 +328,25 @@ namespace CSharpIosPerfMonitor
             // command families so an application is not hidden by a shell
             // compatibility difference.
             commands.Add(new[] { "cmd", "package", "list", "packages", "-f" });
-            foreach (int userId in users)
-                commands.Add(new[] { "cmd", "package", "list", "packages", "-f", "--user", userId.ToString(CultureInfo.InvariantCulture) });
+            AddUserScopedCommands(commands, new[] { "cmd", "package", "list", "packages", "-f" }, users);
             commands.Add(new[] { "cmd", "package", "list", "packages" });
-            foreach (int userId in users)
-                commands.Add(new[] { "cmd", "package", "list", "packages", "--user", userId.ToString(CultureInfo.InvariantCulture) });
+            AddUserScopedCommands(commands, new[] { "cmd", "package", "list", "packages" }, users);
             return commands;
+        }
+
+        private static void AddUserScopedCommands(IList<string[]> commands, string[] baseCommand, IEnumerable<int> userIds)
+        {
+            foreach (int userId in userIds ?? Enumerable.Empty<int>())
+            {
+                string value = userId.ToString(CultureInfo.InvariantCulture);
+                foreach (string option in new[] { "--user", "-u", "-U", "--user-id" })
+                {
+                    List<string> scoped = (baseCommand ?? Array.Empty<string>()).ToList();
+                    scoped.Add(option);
+                    scoped.Add(value);
+                    commands.Add(scoped.ToArray());
+                }
+            }
         }
 
         internal static int CommandUserId(IEnumerable<string> command)
@@ -471,30 +482,29 @@ namespace CSharpIosPerfMonitor
 
         internal static IReadOnlyList<string[]> BuildProcessInventoryCommands()
         {
-            // Harmony vendors expose different process-name columns. Keep the
-            // command families explicit so a device that rejects ARGS still
-            // gets a complete NAME/COMM/CMDLINE inventory.
-            return new[]
+            // Harmony vendors expose different process-name and identity
+            // columns. Query the complete bounded matrix so a device that
+            // rejects ARGS, UID, USER, NAME, or CMDLINE cannot hide a target.
+            List<string[]> commands = new List<string[]>();
+            string[] processFields = { "ARGS", "NAME", "COMM", "COMMAND", "CMDLINE" };
+            string[][] layouts =
             {
-                new[] { "ps", "-A", "-o", "PID,ARGS" },
-                new[] { "ps", "-A", "-o", "UID,PID,PPID,ARGS" },
-                new[] { "ps", "-A", "-o", "USER,PID,PPID,ARGS" },
-                new[] { "ps", "-A", "-o", "PID,UID,PPID,ARGS" },
-                new[] { "ps", "-A", "-o", "PID,USER,PPID,ARGS" },
-                new[] { "ps", "-A", "-o", "PID,NAME" },
-                new[] { "ps", "-A", "-o", "UID,PID,PPID,NAME" },
-                new[] { "ps", "-A", "-o", "USER,PID,PPID,NAME" },
-                new[] { "ps", "-A", "-o", "PID,UID,PPID,NAME" },
-                new[] { "ps", "-A", "-o", "PID,USER,PPID,NAME" },
-                new[] { "ps", "-A", "-o", "PID,COMM" },
-                new[] { "ps", "-A", "-o", "UID,PID,PPID,COMM" },
-                new[] { "ps", "-A", "-o", "PID,COMMAND" },
-                new[] { "ps", "-A", "-o", "UID,PID,PPID,COMMAND" },
-                new[] { "ps", "-A", "-o", "PID,CMDLINE" },
-                new[] { "ps", "-ef" },
-                new[] { "ps", "-A" },
-                new[] { "ps" }
+                new[] { "PID", "{0}" },
+                new[] { "UID", "PID", "PPID", "{0}" },
+                new[] { "USER", "PID", "PPID", "{0}" },
+                new[] { "PID", "UID", "PPID", "{0}" },
+                new[] { "PID", "USER", "PPID", "{0}" }
             };
+            foreach (string field in processFields)
+                foreach (string[] layout in layouts)
+                    commands.Add(new[] { "ps", "-A", "-o", string.Join(",", layout.Select(delegate(string part)
+                    {
+                        return part == "{0}" ? field : part;
+                    })) });
+            commands.Add(new[] { "ps", "-ef" });
+            commands.Add(new[] { "ps", "-A" });
+            commands.Add(new[] { "ps" });
+            return commands;
         }
 
         public Task<ProcessResult> LaunchAppAsync(string serial, string bundleId, CancellationToken token)
@@ -604,7 +614,7 @@ namespace CSharpIosPerfMonitor
                     ProcessResult componentStart = await RunShellAsync(serial, AndroidComponentStartArgs(component, userId), 15000, token).ConfigureAwait(false);
                     attempts.Add(componentStart);
                     if (IsSuccessfulCommand(componentStart)) return componentStart;
-                    if (userId >= 0)
+                    if (userId == 0)
                     {
                         componentStart = await RunShellAsync(serial, new[] { "am", "start", "-n", component }, 15000, token).ConfigureAwait(false);
                         attempts.Add(componentStart);
@@ -811,10 +821,32 @@ namespace CSharpIosPerfMonitor
 
         private static bool IsAbilityCollectionLine(string value)
         {
-            return Regex.IsMatch(
-                value ?? "",
-                @"(?i)^(?:[-\s]*)?(?:abilityInfos|abilityInfo|abilityInfoList|abilityList|abilities|entryAbilities|entryAbilityInfo|entryAbilityInfos|launchAbilityInfos|launchAbilityInfo|extensionAbilityInfos|extensionAbilityInfo|extensionAbilityInfoList|extensionAbilityList|extensionAbilities|serviceExtensionAbilities|serviceExtensionAbilityInfos|serviceExtensionAbilityInfoList|formExtensionAbilities|formExtensionAbilityInfoList|dataShareExtensionAbilities|dataShareExtensionAbilityInfoList)\s*[:=]",
+            string key;
+            string ignored;
+            return TryParseKeyValueField(value, out key, out ignored) && IsAbilityInfoCollection(key);
+        }
+
+        private static bool TryParseKeyValueField(string value, out string key, out string fieldValue)
+        {
+            Match match = Regex.Match(
+                (value ?? "").Trim(),
+                @"^(?:[-\s]*)?(?<key>[A-Za-z][A-Za-z0-9_ -]*)\s*[:=]\s*(?<value>.*)$",
                 RegexOptions.CultureInvariant);
+            key = match.Success ? match.Groups["key"].Value.Trim() : "";
+            fieldValue = match.Success ? match.Groups["value"].Value.Trim() : "";
+            return match.Success;
+        }
+
+        private static bool TryParseAbilityNameField(string value, bool allowGenericName, out string ability)
+        {
+            Match match = Regex.Match(
+                (value ?? "").Trim(),
+                @"^(?:[-\s]*)?(?<key>[A-Za-z][A-Za-z0-9_ -]*)\s*[:=]\s*['""]?(?<value>[A-Za-z][A-Za-z0-9_.$-]*)",
+                RegexOptions.CultureInvariant);
+            ability = "";
+            if (!match.Success || !IsAbilityNameProperty(match.Groups["key"].Value, allowGenericName)) return false;
+            ability = match.Groups["value"].Value.Trim();
+            return ValidEntryToken(ability);
         }
 
         private static void ParseNamedBundleLines(string output, IList<AppInfo> apps, ISet<string> seen)
@@ -831,15 +863,14 @@ namespace CSharpIosPerfMonitor
                 if (trimmed.Length == 0) continue;
                 int indent = line.Length - line.TrimStart().Length;
 
-                Match abilityCollection = Regex.Match(
-                    trimmed,
-                    @"(?i)^(?:[-\s]*)?(?:abilityInfos|abilityInfo|abilityInfoList|abilityList|ability\s+infos|ability\s+info|abilities|entryAbilities|entryAbilityInfo|entryAbilityInfos|launchAbilityInfos|launchAbilityInfo|extensionAbilityInfos|extensionAbilityInfo|extensionAbilityInfoList|extensionAbilityList|extensionAbilities|serviceExtensionAbilities|serviceExtensionAbilityInfos|serviceExtensionAbilityInfoList|formExtensionAbilities|formExtensionAbilityInfoList|dataShareExtensionAbilities|dataShareExtensionAbilityInfoList)\s*[:=]\s*(?<value>.*)$",
-                    RegexOptions.CultureInvariant);
-                if (abilityCollection.Success)
+                string collectionKey;
+                string collectionValue;
+                if (TryParseKeyValueField(trimmed, out collectionKey, out collectionValue)
+                    && IsAbilityInfoCollection(collectionKey))
                 {
                     insideAbilityCollection = true;
                     abilityIndent = indent;
-                    string inlineAbility = abilityCollection.Groups["value"].Value.Trim().Trim(',', '"', '\'');
+                    string inlineAbility = collectionValue.Trim().Trim(',', '"', '\'');
                     if (!string.IsNullOrWhiteSpace(bundle) && ValidEntryToken(inlineAbility))
                     {
                         AppInfo inlineApp = apps.FirstOrDefault(delegate(AppInfo app)
@@ -858,11 +889,9 @@ namespace CSharpIosPerfMonitor
                 {
                     if (indent > abilityIndent)
                     {
-                        Match ability = Regex.Match(
-                            trimmed,
-                            @"(?i)^(?:[-\s]*)?(?:name|abilityName|ability_name|ability\s+name|className|class_name|class\s+name|extensionAbilityName|serviceExtensionAbilityName|formExtensionAbilityName)\s*[:=]\s*['""]?(?<ability>[A-Za-z][A-Za-z0-9_.$-]*)",
-                            RegexOptions.CultureInvariant);
-                        if (ability.Success && !string.IsNullOrWhiteSpace(bundle))
+                        string abilityValue;
+                        if (TryParseAbilityNameField(trimmed, true, out abilityValue)
+                            && !string.IsNullOrWhiteSpace(bundle))
                         {
                             AppInfo owner = apps.FirstOrDefault(delegate(AppInfo app)
                             {
@@ -873,7 +902,7 @@ namespace CSharpIosPerfMonitor
                                 new HarmonyLaunchEntryInfo
                                 {
                                     Module = module,
-                                    Ability = ability.Groups["ability"].Value
+                                    Ability = abilityValue
                                 }
                             });
                         }
@@ -895,11 +924,9 @@ namespace CSharpIosPerfMonitor
                     continue;
                 }
 
-                Match directAbility = Regex.Match(
-                    trimmed,
-                    @"(?i)^(?:[-\s]*)?(?:mainElementName|mainElement|mainAbility|mainAbilityName|entryAbility|entryAbilityName|abilityName|ability_name|ability\s+name|extensionAbilityName|serviceExtensionAbilityName|formExtensionAbilityName)\s*[:=]\s*['""]?(?<ability>[A-Za-z][A-Za-z0-9_.$-]*)",
-                    RegexOptions.CultureInvariant);
-                if (directAbility.Success && !string.IsNullOrWhiteSpace(bundle))
+                string directAbilityValue;
+                if (TryParseAbilityNameField(trimmed, false, out directAbilityValue)
+                    && !string.IsNullOrWhiteSpace(bundle))
                 {
                     AppInfo owner = apps.FirstOrDefault(delegate(AppInfo app)
                     {
@@ -910,7 +937,7 @@ namespace CSharpIosPerfMonitor
                         new HarmonyLaunchEntryInfo
                         {
                             Module = module,
-                            Ability = directAbility.Groups["ability"].Value
+                            Ability = directAbilityValue
                         }
                     });
                     continue;
@@ -1034,7 +1061,11 @@ namespace CSharpIosPerfMonitor
             if (node.ValueKind != JsonValueKind.Object || !ValidBundle(candidateBundle)) return false;
             return HasJsonProperty(node, "versionCode", "versionName", "versionNumber", "version", "compatibleVersion",
                 "targetVersion", "hapModuleInfos", "moduleInfos", "applicationInfo", "appInfo", "abilityInfos",
-                "installTime", "updateTime", "userId", "bundleInfo", "label", "appName", "applicationName", "displayName");
+                "installTime", "updateTime", "userId", "bundleInfo", "label", "appName", "applicationName", "displayName")
+                || node.EnumerateObject().Any(delegate(JsonProperty property)
+                {
+                    return IsAbilityInfoCollection(property.Name);
+                });
         }
 
         private static bool HasJsonProperty(JsonElement node, params string[] names)
@@ -1423,7 +1454,7 @@ namespace CSharpIosPerfMonitor
         {
             Match textValue = Regex.Match(
                 output ?? "",
-                @"(?i)(?:[""']?)(?:mainElementName|mainElement|mainAbility|mainAbilityName|entryAbility|entryAbilityName|abilityName|ability_name|ability\s+name|extensionAbilityName|serviceExtensionAbilityName|formExtensionAbilityName)(?:[""']?)\s*[:=]\s*[""']?([A-Za-z][A-Za-z0-9_.$-]*)(?:[""']?)",
+                @"(?i)(?:[""']?)(?:mainElementName|mainElement|mainAbility|mainAbilityName|entryAbility|entryAbilityName|abilityName|ability_name|ability\s+name|[A-Za-z][A-Za-z0-9_]*ExtensionAbilityName)(?:[""']?)\s*[:=]\s*[""']?([A-Za-z][A-Za-z0-9_.$-]*)(?:[""']?)",
                 RegexOptions.CultureInvariant);
             if (textValue.Success) return textValue.Groups[1].Value.Trim();
             string json = ExtractJsonValue(output);
@@ -1455,11 +1486,12 @@ namespace CSharpIosPerfMonitor
         {
             if (node.ValueKind == JsonValueKind.Object)
             {
-                foreach (string key in new[] { "mainAbility", "mainElementName", "mainElement", "mainAbilityName", "entryAbility", "entryAbilityName", "abilityName", "extensionAbilityName", "serviceExtensionAbilityName", "formExtensionAbilityName" })
-                    foreach (JsonProperty property in node.EnumerateObject())
-                        if (string.Equals(property.Name, key, StringComparison.OrdinalIgnoreCase)
-                            && property.Value.ValueKind == JsonValueKind.String
-                            && !string.IsNullOrWhiteSpace(property.Value.GetString())) return property.Value.GetString();
+                foreach (JsonProperty property in node.EnumerateObject())
+                    if (IsAbilityNameProperty(property.Name, false))
+                    {
+                        string value = JsonScalarText(property.Value);
+                        if (!string.IsNullOrWhiteSpace(value)) return value;
+                    }
                 foreach (JsonProperty property in node.EnumerateObject())
                 {
                     string found = FindMainAbility(property.Value);
@@ -1515,7 +1547,7 @@ namespace CSharpIosPerfMonitor
             {
                 MatchCollection fields = Regex.Matches(
                     raw ?? "",
-                    @"(?i)(?:[""']?)(?<key>moduleName|module_name|module\s+name|mainModuleName|main_module_name|main\s+module\s+name|entryModuleName|entry_module_name|entry\s+module\s+name|entryModule|module|mainElementName|mainElement|mainAbility|mainAbilityName|entryAbility|entryAbilityName|abilityName|ability_name|ability\s+name|extensionAbilityName|serviceExtensionAbilityName|formExtensionAbilityName)(?:[""']?)\s*[:=]\s*[""']?(?<value>[A-Za-z][A-Za-z0-9_.$-]*)(?:[""']?)",
+                    @"(?i)(?:[""']?)(?<key>moduleName|module_name|module\s+name|mainModuleName|main_module_name|main\s+module\s+name|entryModuleName|entry_module_name|entry\s+module\s+name|entryModule|module|mainElementName|mainElement|mainAbility|mainAbilityName|entryAbility|entryAbilityName|abilityName|ability_name|ability\s+name|[A-Za-z][A-Za-z0-9_]*ExtensionAbilityName)(?:[""']?)\s*[:=]\s*[""']?(?<value>[A-Za-z][A-Za-z0-9_.$-]*)(?:[""']?)",
                     RegexOptions.CultureInvariant);
                 foreach (Match field in fields)
                 {
@@ -1560,26 +1592,24 @@ namespace CSharpIosPerfMonitor
                         insideAbilities = false;
                 }
 
-                if (Regex.IsMatch(trimmed,
-                    @"(?i)^(?:[-\s]*)?(?:abilityInfos|abilityInfo|abilityInfoList|abilityList|ability\s+infos|ability\s+info|abilities|entryAbilities|entryAbilityInfo|entryAbilityInfos|launchAbilityInfos|launchAbilityInfo|extensionAbilityInfos|extensionAbilityInfo|extensionAbilityInfoList|extensionAbilityList|extensionAbilities|serviceExtensionAbilities|serviceExtensionAbilityInfos|serviceExtensionAbilityInfoList|formExtensionAbilities|formExtensionAbilityInfoList|dataShareExtensionAbilities|dataShareExtensionAbilityInfoList)\s*[:=]",
-                    RegexOptions.CultureInvariant))
+                string collectionKey;
+                string collectionValue;
+                if (TryParseKeyValueField(trimmed, out collectionKey, out collectionValue)
+                    && IsAbilityInfoCollection(collectionKey))
                 {
                     insideAbilities = true;
                     abilityIndent = indent;
                     continue;
                 }
 
-                if (insideAbilities && indent <= abilityIndent &&
-                    !Regex.IsMatch(trimmed, @"^(?:[-\s]*)?(?:name|abilityName|ability_name|ability\s+name|className|class_name|class\s+name|extensionAbilityName|serviceExtensionAbilityName|formExtensionAbilityName)\s*[:=]", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+                string abilityValue;
+                if (insideAbilities && indent <= abilityIndent
+                    && !TryParseAbilityNameField(trimmed, true, out abilityValue))
                     insideAbilities = false;
                 if (!insideAbilities) continue;
 
-                Match abilityMatch = Regex.Match(
-                    trimmed,
-                    @"(?i)^(?:[-\s]*)?(?:name|abilityName|ability_name|ability\s+name|className|class_name|class\s+name|extensionAbilityName|serviceExtensionAbilityName|formExtensionAbilityName)\s*[:=]\s*['""]?([A-Za-z][A-Za-z0-9_.$-]*)",
-                    RegexOptions.CultureInvariant);
-                if (abilityMatch.Success)
-                    AddLaunchEntry(entries, module, abilityMatch.Groups[1].Value);
+                if (TryParseAbilityNameField(trimmed, true, out abilityValue))
+                    AddLaunchEntry(entries, module, abilityValue);
             }
         }
 
@@ -1600,9 +1630,8 @@ namespace CSharpIosPerfMonitor
                     JsonPropertyValue(node, "mainAbilityName"), JsonPropertyValue(node, "entryAbility"),
                     JsonPropertyValue(node, "entryAbilityName"), JsonPropertyValue(node, "abilityName"),
                     JsonPropertyValue(node, "extensionAbilityName"), JsonPropertyValue(node, "serviceExtensionAbilityName"),
-                    JsonPropertyValue(node, "formExtensionAbilityName"));
-                if (string.IsNullOrWhiteSpace(ability) && insideAbilityInfo)
-                    ability = FirstNonEmpty(JsonPropertyValue(node, "name"), JsonPropertyValue(node, "className"));
+                    JsonPropertyValue(node, "formExtensionAbilityName"), JsonPropertyValue(node, "dataShareExtensionAbilityName"),
+                    FindJsonAbilityName(node, insideAbilityInfo));
                 if (!string.IsNullOrWhiteSpace(ability)) AddLaunchEntry(entries, module, ability);
                 foreach (JsonProperty property in node.EnumerateObject())
                 {
@@ -1628,6 +1657,13 @@ namespace CSharpIosPerfMonitor
 
         private static bool IsAbilityInfoCollection(string propertyName)
         {
+            string normalized = NormalizePropertyName(propertyName);
+            if (normalized.EndsWith("ExtensionAbilityInfo", StringComparison.OrdinalIgnoreCase)
+                || normalized.EndsWith("ExtensionAbilityInfos", StringComparison.OrdinalIgnoreCase)
+                || normalized.EndsWith("ExtensionAbilityInfoList", StringComparison.OrdinalIgnoreCase)
+                || normalized.EndsWith("ExtensionAbilityList", StringComparison.OrdinalIgnoreCase)
+                || normalized.EndsWith("ExtensionAbilities", StringComparison.OrdinalIgnoreCase))
+                return true;
             return string.Equals(propertyName, "abilityInfos", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(propertyName, "abilityInfo", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(propertyName, "abilityInfoList", StringComparison.OrdinalIgnoreCase)
@@ -1644,12 +1680,47 @@ namespace CSharpIosPerfMonitor
                 || string.Equals(propertyName, "extensionAbilityList", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(propertyName, "extensionAbilities", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(propertyName, "serviceExtensionAbilities", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(propertyName, "serviceExtensionAbilityInfo", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(propertyName, "serviceExtensionAbilityInfos", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(propertyName, "serviceExtensionAbilityInfoList", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(propertyName, "serviceExtensionAbilityList", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(propertyName, "formExtensionAbilities", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(propertyName, "formExtensionAbilityInfo", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(propertyName, "formExtensionAbilityInfos", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(propertyName, "formExtensionAbilityInfoList", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(propertyName, "formExtensionAbilityList", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(propertyName, "dataShareExtensionAbilities", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(propertyName, "dataShareExtensionAbilityInfoList", StringComparison.OrdinalIgnoreCase);
+                || string.Equals(propertyName, "dataShareExtensionAbilityInfo", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(propertyName, "dataShareExtensionAbilityInfos", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(propertyName, "dataShareExtensionAbilityInfoList", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(propertyName, "dataShareExtensionAbilityList", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string FindJsonAbilityName(JsonElement node, bool allowGenericName)
+        {
+            if (node.ValueKind != JsonValueKind.Object) return "";
+            foreach (JsonProperty property in node.EnumerateObject())
+            {
+                if (!IsAbilityNameProperty(property.Name, allowGenericName)) continue;
+                string value = JsonScalarText(property.Value);
+                if (!string.IsNullOrWhiteSpace(value)) return value;
+            }
+            return "";
+        }
+
+        private static bool IsAbilityNameProperty(string propertyName, bool allowGenericName)
+        {
+            string normalized = NormalizePropertyName(propertyName);
+            if (allowGenericName && (string.Equals(normalized, "name", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "className", StringComparison.OrdinalIgnoreCase))) return true;
+            return string.Equals(normalized, "mainElementName", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "mainElement", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "mainAbility", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "mainAbilityName", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "entryAbility", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "entryAbilityName", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "abilityName", StringComparison.OrdinalIgnoreCase)
+                || normalized.EndsWith("ExtensionAbilityName", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string JsonPropertyValue(JsonElement node, string name)
@@ -2212,7 +2283,8 @@ namespace CSharpIosPerfMonitor
         private static int ParseProcessUserValue(string value, string fieldName)
         {
             string text = (value ?? "").Trim();
-            if (string.Equals(fieldName, "uid", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(fieldName, "uid", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(fieldName, "user", StringComparison.OrdinalIgnoreCase))
             {
                 Match profile = Regex.Match(text, @"(?i)^u(?<id>\d+)(?:_|$)", RegexOptions.CultureInvariant);
                 if (profile.Success && int.TryParse(profile.Groups["id"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int profileId))

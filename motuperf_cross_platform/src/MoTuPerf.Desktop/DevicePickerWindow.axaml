@@ -48,7 +48,7 @@
       </Grid>
     </DataTemplate>
     <DataTemplate x:Key="ProcessTemplate" x:DataType="model:ProcessInfo">
-      <Border Classes="processRow" MinHeight="26" Padding="6,1">
+      <Border Classes="processRow" MinHeight="26" Padding="6,3">
         <Grid ColumnDefinitions="34,64,*">
           <Border Width="22" Height="22" Background="{DynamicResource Theme.InputBackground}" CornerRadius="4" VerticalAlignment="Center" HorizontalAlignment="Center">
             <Grid>
@@ -61,12 +61,16 @@
                      VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
           <DockPanel Grid.Column="2" LastChildFill="True">
             <Border DockPanel.Dock="Right" Background="{DynamicResource Theme.Accent}" BorderBrush="{DynamicResource Theme.BorderStrong}" BorderThickness="1"
-                    CornerRadius="3" Padding="5,1" Margin="8,1,4,1" VerticalAlignment="Center"
+                    CornerRadius="3" Padding="5,1" Margin="8,1,4,1" VerticalAlignment="Top"
                     IsVisible="{Binding Recommended}">
               <TextBlock Text="推荐" Foreground="{DynamicResource Theme.TextOnAccent}" FontSize="11" FontWeight="SemiBold" />
             </Border>
-            <TextBlock Text="{Binding PickerName}" Foreground="{DynamicResource Theme.TextPrimary}" FontSize="16"
-                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            <StackPanel VerticalAlignment="Center">
+              <TextBlock Text="{Binding PickerName}" Foreground="{DynamicResource Theme.TextPrimary}" FontSize="14"
+                         TextTrimming="CharacterEllipsis" />
+              <TextBlock Text="{Binding PickerSubtitle}" Classes="dialogHint" FontSize="11"
+                         TextTrimming="CharacterEllipsis" />
+            </StackPanel>
           </DockPanel>
         </Grid>
       </Border>

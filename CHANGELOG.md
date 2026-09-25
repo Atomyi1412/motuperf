@@ -1,5 +1,13 @@
 # 更新日志
 
+## v0.40.0 - 2026-09-25
+
+- 完善鸿蒙全类型目标闭环：原生、系统/预装、Android 兼容、Extension、未启动、多用户和进程-only 目标继续从真实 HDC 清单合并进入选择列表。
+- 补齐 Service、Form、DataShare Extension 的单数、复数和 `...List` 厂商别名解析；修正厂商把数字 UID 放在 `USER` 列时的用户资料映射，避免入口漏识别和跨用户误绑定。
+- 将 Extension 发现改为通用后缀规则，覆盖输入法、无障碍、分享、文件分享、WorkScheduler 及厂商自定义扩展；包管理器补齐 `--user`、`-u`、`-U`、`--user-id` 作用域，进程查询补齐 UID/USER 与 ARGS/NAME/COMM/COMMAND/CMDLINE 组合，减少设备版本差异导致的应用漏列。
+- 收紧 Android 兼容应用的多用户启动回退：工作资料或副用户的作用域启动失败时不再尝试无用户参数的 `am start`，避免误启动到默认用户；增加 Extension 别名和跨用户启动安全回归测试。
+- 鸿蒙进程列表增加 Bundle、用户资料和运行能力说明；未知用户明确显示为未知，缺少 UI 入口的运行目标仍只按真实 PID 采集。鸿蒙仍不补造 FPS、FrameTime、Jank、BigJank 和 Thermal State；本版本只保留本地，等待鸿蒙真机验收确认前不推送、不打标签、不创建 Release。
+
 ## v0.39.0 - 2026-09-25
 
 - 扩展鸿蒙进程发现命令，兼容 `ARGS`、`NAME`、`COMM`、`COMMAND` 和 `CMDLINE` 等厂商字段，减少因单一 `ps` 列不支持导致的应用和服务漏列。

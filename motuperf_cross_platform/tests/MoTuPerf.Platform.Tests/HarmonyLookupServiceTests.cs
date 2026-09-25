@@ -343,6 +343,39 @@ namespace MoTuPerf.Platform.Tests
         }
 
         [Fact]
+        public void EnumeratesVendorSpecificExtensionAbilityCollectionsWithoutPromotingThemToBundles()
+        {
+            string json = "{\"name\":\"com.example.vendor.extensions\",\"hapModuleInfos\":["
+                + "{\"moduleName\":\"entry\","
+                + "\"inputMethodExtensionAbilityInfos\":[{\"inputMethodExtensionAbilityName\":\"KeyboardService\"}],"
+                + "\"accessibilityExtensionAbilityList\":[{\"name\":\"AssistService\"}],"
+                + "\"shareExtensionAbilities\":[\"ShareService\"],"
+                + "\"fileShareExtensionAbilityInfoList\":[{\"className\":\"FileShareService\"}],"
+                + "\"workSchedulerExtensionAbilityInfos\":[{\"workSchedulerExtensionAbilityName\":\"WorkerService\"}]}]}";
+
+            List<AppInfo> apps = HarmonyLookupService.ParseApps(json);
+            List<HarmonyLaunchEntryPoint> entries = HarmonyLookupService.ParseLaunchEntryPoints(json);
+
+            Assert.Single(apps);
+            Assert.Equal("com.example.vendor.extensions", apps[0].BundleId);
+            Assert.Contains(entries, entry => entry.Module == "entry" && entry.Ability == "KeyboardService");
+            Assert.Contains(entries, entry => entry.Module == "entry" && entry.Ability == "AssistService");
+            Assert.Contains(entries, entry => entry.Module == "entry" && entry.Ability == "ShareService");
+            Assert.Contains(entries, entry => entry.Module == "entry" && entry.Ability == "FileShareService");
+            Assert.Contains(entries, entry => entry.Module == "entry" && entry.Ability == "WorkerService");
+
+            List<HarmonyLaunchEntryPoint> textEntries = HarmonyLookupService.ParseLaunchEntryPoints(
+                "bundleName: com.example.vendor.text\n"
+                + "moduleName: entry\n"
+                + "inputMethodExtensionAbilityInfos:\n"
+                + "  - inputMethodExtensionAbilityName: KeyboardService\n"
+                + "accessibilityExtensionAbilityList:\n"
+                + "  - name: AssistService\n");
+            Assert.Contains(textEntries, entry => entry.Module == "entry" && entry.Ability == "KeyboardService");
+            Assert.Contains(textEntries, entry => entry.Module == "entry" && entry.Ability == "AssistService");
+        }
+
+        [Fact]
         public void ParsesAndroidCompatibilityLauncherComponent()
         {
             Assert.Equal("com.example.compat/com.example.compat.MainActivity",
@@ -358,6 +391,9 @@ namespace MoTuPerf.Platform.Tests
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "pm", "list", "packages", "-f" }));
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "pm", "list", "packages", "-f", "--user", "0" }));
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "pm", "list", "packages", "-f", "--user", "100" }));
+            Assert.Contains(commands, command => command.SequenceEqual(new[] { "pm", "list", "packages", "-f", "-u", "100" }));
+            Assert.Contains(commands, command => command.SequenceEqual(new[] { "pm", "list", "packages", "-f", "-U", "100" }));
+            Assert.Contains(commands, command => command.SequenceEqual(new[] { "pm", "list", "packages", "-f", "--user-id", "100" }));
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "pm", "list", "packages" }));
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "pm", "list", "packages", "--user", "0" }));
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "pm", "list", "packages", "--user", "100" }));
@@ -367,7 +403,10 @@ namespace MoTuPerf.Platform.Tests
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "cmd", "package", "list", "packages" }));
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "cmd", "package", "list", "packages", "--user", "0" }));
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "cmd", "package", "list", "packages", "--user", "100" }));
-            Assert.Equal(12, commands.Count);
+            Assert.Contains(commands, command => command.SequenceEqual(new[] { "cmd", "package", "list", "packages", "-u", "100" }));
+            Assert.Contains(commands, command => command.SequenceEqual(new[] { "cmd", "package", "list", "packages", "-U", "100" }));
+            Assert.Contains(commands, command => command.SequenceEqual(new[] { "cmd", "package", "list", "packages", "--user-id", "100" }));
+            Assert.Equal(36, commands.Count);
         }
 
         [Fact]
@@ -487,7 +526,16 @@ namespace MoTuPerf.Platform.Tests
         {
             string json = "{\"bundleName\":\"com.example.aliases\",\"hapModuleInfos\":["
                 + "{\"moduleName\":\"entry\",\"abilityInfoList\":[{\"name\":\"EntryAbility\"}],"
-                + "\"serviceExtensionAbilityInfoList\":[{\"serviceExtensionAbilityName\":\"SyncService\"}]}]}";
+                + "\"serviceExtensionAbilityInfoList\":[{\"serviceExtensionAbilityName\":\"SyncService\"}],"
+                + "\"serviceExtensionAbilityInfo\":[{\"serviceExtensionAbilityName\":\"SyncServiceInfo\"}],"
+                + "\"serviceExtensionAbilityList\":[{\"serviceExtensionAbilityName\":\"SyncServiceList\"}],"
+                + "\"formExtensionAbilityInfo\":[{\"formExtensionAbilityName\":\"FormInfo\"}],"
+                + "\"formExtensionAbilityInfos\":[{\"formExtensionAbilityName\":\"FormInfos\"}],"
+                + "\"formExtensionAbilityList\":[{\"formExtensionAbilityName\":\"FormList\"}],"
+                + "\"dataShareExtensionAbilityInfo\":[{\"dataShareExtensionAbilityName\":\"ShareInfo\"}],"
+                + "\"dataShareExtensionAbilityInfos\":[{\"dataShareExtensionAbilityName\":\"ShareInfos\"}],"
+                + "\"dataShareExtensionAbilityInfoList\":[{\"dataShareExtensionAbilityName\":\"ShareService\"}],"
+                + "\"dataShareExtensionAbilityList\":[{\"dataShareExtensionAbilityName\":\"ShareList\"}]}]}";
             List<AppInfo> apps = HarmonyLookupService.ParseApps(json);
             List<HarmonyLaunchEntryPoint> entries = HarmonyLookupService.ParseLaunchEntryPoints(json);
 
@@ -496,6 +544,15 @@ namespace MoTuPerf.Platform.Tests
             Assert.DoesNotContain(apps, candidate => candidate.BundleId == "com.example.aliases.EntryAbility");
             Assert.Contains(entries, entry => entry.Module == "entry" && entry.Ability == "EntryAbility");
             Assert.Contains(entries, entry => entry.Module == "entry" && entry.Ability == "SyncService");
+            Assert.Contains(entries, entry => entry.Module == "entry" && entry.Ability == "SyncServiceInfo");
+            Assert.Contains(entries, entry => entry.Module == "entry" && entry.Ability == "SyncServiceList");
+            Assert.Contains(entries, entry => entry.Module == "entry" && entry.Ability == "FormInfo");
+            Assert.Contains(entries, entry => entry.Module == "entry" && entry.Ability == "FormInfos");
+            Assert.Contains(entries, entry => entry.Module == "entry" && entry.Ability == "FormList");
+            Assert.Contains(entries, entry => entry.Module == "entry" && entry.Ability == "ShareInfo");
+            Assert.Contains(entries, entry => entry.Module == "entry" && entry.Ability == "ShareInfos");
+            Assert.Contains(entries, entry => entry.Module == "entry" && entry.Ability == "ShareService");
+            Assert.Contains(entries, entry => entry.Module == "entry" && entry.Ability == "ShareList");
 
             List<HarmonyLaunchEntryPoint> textEntries = HarmonyLookupService.ParseLaunchEntryPoints(
                 "bundleName: com.example.aliases\n"
@@ -503,9 +560,12 @@ namespace MoTuPerf.Platform.Tests
                 + "abilityInfoList:\n"
                 + "  - name: EntryAbility\n"
                 + "serviceExtensionAbilityInfoList:\n"
-                + "  - serviceExtensionAbilityName: SyncService\n");
+                + "  - serviceExtensionAbilityName: SyncService\n"
+                + "dataShareExtensionAbilityInfoList:\n"
+                + "  - dataShareExtensionAbilityName: ShareService\n");
             Assert.Contains(textEntries, entry => entry.Module == "entry" && entry.Ability == "EntryAbility");
             Assert.Contains(textEntries, entry => entry.Module == "entry" && entry.Ability == "SyncService");
+            Assert.Contains(textEntries, entry => entry.Module == "entry" && entry.Ability == "ShareService");
         }
 
         [Fact]
@@ -782,11 +842,15 @@ namespace MoTuPerf.Platform.Tests
         {
             IReadOnlyList<string[]> commands = HarmonyLookupService.BuildProcessInventoryCommands();
 
+            Assert.Equal(28, commands.Count);
             Assert.Contains(commands, command => string.Join(" ", command) == "ps -A -o PID,NAME");
             Assert.Contains(commands, command => string.Join(" ", command) == "ps -A -o UID,PID,PPID,NAME");
+            Assert.Contains(commands, command => string.Join(" ", command) == "ps -A -o USER,PID,PPID,COMM");
             Assert.Contains(commands, command => string.Join(" ", command) == "ps -A -o PID,COMM");
             Assert.Contains(commands, command => string.Join(" ", command) == "ps -A -o UID,PID,PPID,COMMAND");
+            Assert.Contains(commands, command => string.Join(" ", command) == "ps -A -o USER,PID,PPID,COMMAND");
             Assert.Contains(commands, command => string.Join(" ", command) == "ps -A -o PID,CMDLINE");
+            Assert.Contains(commands, command => string.Join(" ", command) == "ps -A -o PID,USER,PPID,CMDLINE");
 
             List<ProcessInfo> rows = HarmonyLookupService.ParseProcesses(
                 "USER PID PPID NAME\n"
@@ -797,6 +861,21 @@ namespace MoTuPerf.Platform.Tests
             Assert.Equal(new[] { "com.example.native", "com.example.native:worker" },
                 rows.OrderBy(row => row.Pid).Select(row => row.Name));
             Assert.Equal(new[] { 100, 0 }, rows.OrderBy(row => row.Pid).Select(row => row.HarmonyUserId));
+        }
+
+        [Fact]
+        public void MapsNumericUidWhenVendorUsesUserColumn()
+        {
+            List<ProcessInfo> rows = HarmonyLookupService.ParseProcesses(
+                "USER PID PPID NAME\n"
+                + "100000 901 1 foundation\n"
+                + "200000 902 1 com.example.work\n"
+                + "100 903 1 com.example.owner\n",
+                "harmony");
+
+            Assert.Equal(1, rows.Single(row => row.Pid == 901).HarmonyUserId);
+            Assert.Equal(2, rows.Single(row => row.Pid == 902).HarmonyUserId);
+            Assert.Equal(100, rows.Single(row => row.Pid == 903).HarmonyUserId);
         }
 
         [Fact]
@@ -1304,6 +1383,43 @@ namespace MoTuPerf.Platform.Tests
             Assert.Equal(0, result.ExitCode);
             Assert.Contains("cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER --user 0 com.example.compat", commands);
             Assert.Contains("am start --user 0 -n com.example.compat/com.example.compat.MainActivity", commands);
+        }
+
+        [Fact]
+        public async Task FakeHdcNeverStartsCompatibilityAppAcrossUsersAfterScopedLaunchFails()
+        {
+            List<string> commands = new List<string>();
+
+            Task<ProcessResult> ExecuteFakeHdcAsync(
+                string serial,
+                string[] command,
+                int timeoutMs,
+                CancellationToken token)
+            {
+                string key = string.Join(" ", command ?? Array.Empty<string>());
+                commands.Add(key);
+                if (key == "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER --user 100 com.example.compat")
+                    return Task.FromResult(new ProcessResult(0, "com.example.compat/.MainActivity\n", ""));
+                if (key == "am start -n com.example.compat/com.example.compat.MainActivity")
+                    return Task.FromResult(new ProcessResult(0, "Starting: Intent { ... }", ""));
+                if (key.StartsWith("am start --user 100 -n ", StringComparison.Ordinal)
+                    || key.StartsWith("am start --user 100 ", StringComparison.Ordinal)
+                    || key.StartsWith("monkey --user 100 ", StringComparison.Ordinal)
+                    || key.StartsWith("aa start ", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(1, "", "scoped launch rejected"));
+                return Task.FromResult(new ProcessResult(1, "", "unsupported fake HDC command"));
+            }
+
+            var service = new HarmonyLookupService(ExecuteFakeHdcAsync);
+            ProcessResult result = await service.LaunchAppAsync(
+                "HARMONY-1",
+                "com.example.compat",
+                new[] { 100 },
+                CancellationToken.None);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("am start --user 100 -n com.example.compat/com.example.compat.MainActivity", commands);
+            Assert.DoesNotContain("am start -n com.example.compat/com.example.compat.MainActivity", commands);
         }
 
         [Fact]

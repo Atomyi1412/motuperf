@@ -212,6 +212,7 @@ namespace CSharpIosPerfMonitor
                 if (!DevicePlatformNames.IsHarmony(Platform)) return "";
                 if (IsProcessOnly) return "仅运行中可采集";
                 if (HasLaunchEntry) return "有启动入口";
+                if (IsRunning) return "运行中，可直接选择进程";
                 return "可尝试启动";
             }
         }
@@ -222,9 +223,13 @@ namespace CSharpIosPerfMonitor
             {
                 if (!string.IsNullOrWhiteSpace(BundleId))
                 {
-                    return DevicePlatformNames.IsHarmony(Platform) && HarmonyUserId >= 0
-                        ? BundleId + " · 用户 " + HarmonyUserId.ToString(CultureInfo.InvariantCulture)
-                        : BundleId;
+                    if (DevicePlatformNames.IsHarmony(Platform))
+                    {
+                        return BundleId + " · " + (HarmonyUserId >= 0
+                            ? "用户 " + HarmonyUserId.ToString(CultureInfo.InvariantCulture)
+                            : "用户未知");
+                    }
+                    return BundleId;
                 }
                 return ProcessPid > 0 ? "PID " + ProcessPid.ToString(CultureInfo.InvariantCulture) : "";
             }
@@ -310,6 +315,21 @@ namespace CSharpIosPerfMonitor
         public string Reason { get; set; }
         public string IconKey { get; set; }
         public string IconPath { get; set; }
+
+        public string PickerSubtitle
+        {
+            get
+            {
+                if (!DevicePlatformNames.IsHarmony(Platform)) return "";
+                List<string> details = new List<string>();
+                details.Add(string.IsNullOrWhiteSpace(BundleId) ? "无 Bundle" : BundleId);
+                details.Add(HarmonyUserId >= 0
+                    ? "用户 " + HarmonyUserId.ToString(CultureInfo.InvariantCulture)
+                    : "用户未知");
+                details.Add(string.IsNullOrWhiteSpace(BundleId) ? "仅运行中可采集" : "运行中进程");
+                return string.Join(" · ", details);
+            }
+        }
 
         public string ListLabel
         {

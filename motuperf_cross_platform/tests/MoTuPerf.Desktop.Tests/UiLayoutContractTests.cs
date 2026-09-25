@@ -160,7 +160,7 @@ namespace MoTuPerf.Desktop.Tests
         }
 
         [Fact]
-        public void DevicePickerKeepsWpfReferenceGeometryAndCompactProcessTable()
+        public void DevicePickerKeepsWpfReferenceGeometryAndExplainsHarmonyProcessTargets()
         {
             XDocument dialog = LoadXaml("src", "MoTuPerf.Desktop", "DevicePickerWindow.axaml");
             XElement window = dialog.Root;
@@ -287,6 +287,8 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Contains("app.ProcessPid", dialogCode);
             Assert.Contains("TrySelectHarmonyRunningProcess", dialogCode);
             Assert.Contains("启动入口不可用，已切换到唯一匹配进程 PID", dialogCode);
+            Assert.Contains("PickerSubtitle", LoadText("src", "MoTuPerf.Desktop", "DevicePickerWindow.axaml"));
+            Assert.Contains("MinHeight=\"26\"", LoadText("src", "MoTuPerf.Desktop", "DevicePickerWindow.axaml"));
         }
 
         [Fact]
@@ -344,7 +346,7 @@ namespace MoTuPerf.Desktop.Tests
             string version = project.Descendants("Version").Single().Value;
             string[] components = version.Split('.');
 
-            Assert.Equal("0.39.0", version);
+            Assert.Equal("0.40.0", version);
             Assert.Equal(3, components.Length);
             Assert.All(components, component => Assert.True(int.TryParse(component, out _)));
             Assert.DoesNotContain("-", version);
@@ -489,9 +491,9 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Equal("更新日志", Attribute(changelog.Root, "Title"));
             Assert.Contains(changelog.Descendants(Avalonia + "Border"), border => Attribute(border, "Classes") == "secondaryWindowFrame");
             string changelogText = string.Join(" ", changelog.Descendants(Avalonia + "TextBlock").Select(element => Attribute(element, "Text")));
-            Assert.Contains("v0.39.0", changelogText);
+            Assert.Contains("v0.40.0", changelogText);
             Assert.Contains("v0.38.18", changelogText);
-            Assert.Contains("v0.38.17", changelogText);
+            Assert.DoesNotContain("v0.38.17", changelogText);
             Assert.DoesNotContain("v0.38.16", changelogText);
             Assert.DoesNotContain("v0.38.14", changelogText);
             Assert.DoesNotContain("v0.38.11", changelogText);
