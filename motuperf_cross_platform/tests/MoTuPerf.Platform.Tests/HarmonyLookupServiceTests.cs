@@ -647,9 +647,26 @@ namespace MoTuPerf.Platform.Tests
             AppInfo app = Assert.Single(apps);
             Assert.True(app.IsProcessOnly);
             Assert.False(app.HasLaunchEntry);
+            Assert.True(app.HasNonUiLaunchEntry);
+            Assert.False(app.CanAttemptLaunch);
             Assert.Equal("仅运行中可采集", app.LaunchAvailability);
             Assert.Contains(app.HarmonyLaunchEntries, entry => !entry.IsUiEntry && entry.Ability == "SyncService");
             Assert.Contains(app.HarmonyLaunchEntries, entry => !entry.IsUiEntry && entry.Ability == "ShareService");
+        }
+
+        [Fact]
+        public void KeepsUiLaunchableWhenTheBundleAlsoHasNonUiEntries()
+        {
+            var apps = HarmonyLookupService.ParseApps(
+                "{\"bundleName\":\"com.example.mixed\",\"hapModuleInfos\":[{"
+                + "\"moduleName\":\"entry\",\"abilityInfos\":[{\"name\":\"EntryAbility\"}],"
+                + "\"serviceAbilityInfos\":[{\"className\":\"SyncService\"}]}]}\n");
+
+            AppInfo app = Assert.Single(apps);
+            Assert.True(app.HasLaunchEntry);
+            Assert.False(app.HasNonUiLaunchEntry);
+            Assert.True(app.CanAttemptLaunch);
+            Assert.Equal("有启动入口", app.LaunchAvailability);
         }
 
         [Fact]
@@ -1003,14 +1020,20 @@ namespace MoTuPerf.Platform.Tests
         {
             var rows = HarmonyLookupService.ParseProcesses(
                 "pid=601,name=com.example.running:worker\n"
-                + "pid: 602, cmd: /system/bin/com.example.other --render\n", "device");
+                + "pid: 602, cmd: /system/bin/other_service --render\n", "device");
 
             Assert.Equal(new[] { 601, 602 }, rows.Select(row => row.Pid).OrderBy(pid => pid));
             Assert.Equal("com.example.running", rows.Single(row => row.Pid == 601).BundleId);
             var apps = new List<AppInfo>();
             HarmonyLookupService.MergeProcessApps(apps, rows);
-            Assert.All(apps, app => Assert.True(app.IsProcessOnly));
-            Assert.All(apps, app => Assert.Equal("仅运行中可采集", app.LaunchAvailability));
+            AppInfo bundledProcess = Assert.Single(apps, app => app.BundleId == "com.example.running");
+            Assert.True(bundledProcess.IsProcessOnly);
+            Assert.True(bundledProcess.CanAttemptLaunch);
+            Assert.Equal("可尝试启动", bundledProcess.LaunchAvailability);
+            AppInfo unbundledProcess = Assert.Single(apps, app => string.IsNullOrWhiteSpace(app.BundleId));
+            Assert.True(unbundledProcess.IsProcessOnly);
+            Assert.False(unbundledProcess.CanAttemptLaunch);
+            Assert.Equal("仅运行中可采集", unbundledProcess.LaunchAvailability);
         }
 
         [Fact]
@@ -1110,6 +1133,19 @@ namespace MoTuPerf.Platform.Tests
             Assert.Equal(200, rows.Single(row => row.Pid == 802).HarmonyUserId);
             Assert.Equal(3, rows.Single(row => row.Pid == 803).HarmonyUserId);
             Assert.Equal(400, rows.Single(row => row.Pid == 804).HarmonyUserId);
+        }
+
+        [Fact]
+        public void DoesNotTreatSystemUidAsHarmonyProfileButAcceptsExplicitUserId()
+        {
+            var rows = HarmonyLookupService.ParseProcesses(
+                "UID PID PPID ARGS\n"
+                + "2000 805 1 com.example.systemuid\n"
+                + "USER PID PPID ARGS\n"
+                + "100 806 1 com.example.work\n", "device");
+
+            Assert.Equal(-1, rows.Single(row => row.Pid == 805).HarmonyUserId);
+            Assert.Equal(100, rows.Single(row => row.Pid == 806).HarmonyUserId);
         }
 
         [Fact]
@@ -1542,6 +1578,43 @@ namespace MoTuPerf.Platform.Tests
             Assert.Equal(0, result.ExitCode);
             Assert.Contains("cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER --user 0 com.example.compat", commands);
             Assert.Contains("am start --user 0 -n com.example.compat/com.example.compat.MainActivity", commands);
+        }
+
+        [Fact]
+        public async Task FakeHdcAllowsBundleProcessOnlyTargetToTryPackageLaunch()
+        {
+            List<string> commands = new List<string>();
+
+            Task<ProcessResult> ExecuteFakeHdcAsync(
+                string serial,
+                string[] command,
+                int timeoutMs,
+                CancellationToken token)
+            {
+                string key = string.Join(" ", command ?? Array.Empty<string>());
+                commands.Add(key);
+                if (key.StartsWith("bm dump -n com.example.processonly", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(0, "bundleName: com.example.processonly\n", ""));
+                if (key.StartsWith("aa start ", StringComparison.Ordinal)
+                    || key.StartsWith("cmd package resolve-activity ", StringComparison.Ordinal)
+                    || key.StartsWith("pm resolve-activity ", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(1, "", "not supported"));
+                if (key == "am start --user 0 -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p com.example.processonly")
+                    return Task.FromResult(new ProcessResult(0, "Starting: Intent { ... }", ""));
+                return Task.FromResult(new ProcessResult(1, "", "unsupported fake HDC command"));
+            }
+
+            var service = new HarmonyLookupService(ExecuteFakeHdcAsync);
+            ProcessResult result = await service.LaunchAppAsync("HARMONY-1", new AppInfo
+            {
+                BundleId = "com.example.processonly",
+                Platform = "harmony",
+                IsProcessOnly = true,
+                HarmonyUserId = 0
+            }, CancellationToken.None);
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Contains("am start --user 0 -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p com.example.processonly", commands);
         }
 
         [Fact]

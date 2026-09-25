@@ -461,7 +461,7 @@ namespace MoTuPerf.Desktop
                 StatusText.Text = "请先选择设备和 APP";
                 return;
             }
-            if (app.IsProcessOnly && DeviceLookupService.IsHarmony(device))
+            if (app.IsProcessOnly && DeviceLookupService.IsHarmony(device) && !app.CanAttemptLaunch)
             {
                 if (!TrySelectHarmonyRunningProcess(device, app))
                     StatusText.Text = "该鸿蒙目标只有运行中进程，请在选择进程页手动选择真实 PID。";

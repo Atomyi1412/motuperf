@@ -206,6 +206,36 @@ namespace CSharpIosPerfMonitor
         public bool IsRunning { get; set; }
         public bool IsProcessOnly { get; set; }
         public bool HasLaunchEntry { get; set; }
+        /// <summary>
+        /// True when the inventory explicitly contained only non-UI
+        /// Service/Form/DataShare/WorkScheduler/Extension entries. A Bundle
+        /// with no entry evidence may still try package-level launch.
+        /// </summary>
+        public bool HasNonUiLaunchEntry { get; set; }
+
+        public bool CanAttemptLaunch
+        {
+            get
+            {
+                if (!DevicePlatformNames.IsHarmony(Platform)
+                    || string.IsNullOrWhiteSpace(BundleId)) return false;
+                if (HasNonUiLaunchEntry) return false;
+
+                // Older session files do not contain HasNonUiLaunchEntry.
+                // Reconstruct the pure non-UI boundary from the persisted
+                // entries so a Service/Form target cannot become launchable
+                // merely because it was saved by an older client.
+                bool hasUiEntry = false;
+                bool hasNonUiEntry = false;
+                foreach (HarmonyLaunchEntryInfo entry in HarmonyLaunchEntries ?? new List<HarmonyLaunchEntryInfo>())
+                {
+                    if (entry == null) continue;
+                    hasUiEntry = hasUiEntry || entry.IsUiEntry;
+                    hasNonUiEntry = hasNonUiEntry || !entry.IsUiEntry;
+                }
+                return hasUiEntry || !hasNonUiEntry;
+            }
+        }
 
         /// <summary>
         /// Harmony inventory can contain packages that are visible through a
@@ -217,7 +247,8 @@ namespace CSharpIosPerfMonitor
             get
             {
                 if (!DevicePlatformNames.IsHarmony(Platform)) return "";
-                if (IsProcessOnly) return "仅运行中可采集";
+                if (IsProcessOnly && !CanAttemptLaunch) return "仅运行中可采集";
+                if (IsProcessOnly && CanAttemptLaunch) return "可尝试启动";
                 if (HasLaunchEntry) return "有启动入口";
                 if (IsRunning) return "运行中，可直接选择进程";
                 return "可尝试启动";

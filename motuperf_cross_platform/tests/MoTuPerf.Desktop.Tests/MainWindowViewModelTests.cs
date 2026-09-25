@@ -211,7 +211,7 @@ namespace MoTuPerf.Desktop.Tests
 
             Assert.Single(apps);
             Assert.Equal("com.example.game", apps[0].BundleId);
-            Assert.Equal("仅运行中可采集", apps[0].LaunchAvailability);
+            Assert.Equal("可尝试启动", apps[0].LaunchAvailability);
             Assert.Equal(new[] { 100 }, apps[0].HarmonyUserIds);
             Assert.True(apps[0].Recommended);
             Assert.Equal(0, apps[0].ProcessPid);

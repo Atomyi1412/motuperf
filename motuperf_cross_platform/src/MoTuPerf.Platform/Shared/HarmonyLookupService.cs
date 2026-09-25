@@ -586,7 +586,7 @@ namespace CSharpIosPerfMonitor
         {
             if (app == null)
                 return Task.FromResult(new ProcessResult(1, "", "未选择有效的鸿蒙应用。"));
-            if (app.IsProcessOnly)
+            if (app.IsProcessOnly && !app.CanAttemptLaunch)
                 return Task.FromResult(new ProcessResult(1, "", "该鸿蒙目标没有独立启动入口，只能选择运行中的真实进程采集。"));
             IEnumerable<int> rawUsers = app.HarmonyUserId >= 0
                 ? new[] { app.HarmonyUserId }
@@ -2207,6 +2207,7 @@ namespace CSharpIosPerfMonitor
                 IsRunning = preserveLiveProcess && source.IsRunning,
                 IsProcessOnly = source.IsProcessOnly,
                 HasLaunchEntry = source.HasLaunchEntry,
+                HasNonUiLaunchEntry = source.HasNonUiLaunchEntry,
                 HarmonyUserId = source.HarmonyUserId
             };
             if (preserveLiveProcess)
@@ -2274,6 +2275,8 @@ namespace CSharpIosPerfMonitor
                 });
             }
             bool hasUiEntry = app.HarmonyLaunchEntries.Any(delegate(HarmonyLaunchEntryInfo entry) { return entry.IsUiEntry; });
+            bool hasNonUiEntry = app.HarmonyLaunchEntries.Any(delegate(HarmonyLaunchEntryInfo entry) { return !entry.IsUiEntry; });
+            app.HasNonUiLaunchEntry = hasNonUiEntry && !hasUiEntry;
             if (hasUiEntry)
             {
                 app.HasLaunchEntry = true;
@@ -2529,14 +2532,21 @@ namespace CSharpIosPerfMonitor
         private static int ParseProcessUserValue(string value, string fieldName)
         {
             string text = (value ?? "").Trim();
-            if (string.Equals(fieldName, "uid", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(fieldName, "user", StringComparison.OrdinalIgnoreCase))
+            bool isUid = string.Equals(fieldName, "uid", StringComparison.OrdinalIgnoreCase);
+            bool isUser = string.Equals(fieldName, "user", StringComparison.OrdinalIgnoreCase);
+            if (isUid || isUser)
             {
                 Match profile = Regex.Match(text, @"(?i)^u(?<id>\d+)(?:_|$)", RegexOptions.CultureInvariant);
                 if (profile.Success && int.TryParse(profile.Groups["id"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int profileId))
                     return profileId;
                 if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int uid) && uid >= 100000)
                     return uid / 100000;
+                // `UID` is commonly a Linux/system account (for example
+                // 2000=shell), not a Harmony profile. Only a USER column is
+                // allowed to interpret a small explicit integer as a profile.
+                if (isUid) return -1;
+                if (isUser && int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int userId) && userId >= 0)
+                    return userId;
             }
             return ParseHarmonyUserId(text);
         }
