@@ -273,6 +273,7 @@ namespace MoTuPerf.Desktop
                 List<ProcessInfo> loadedProcesses = null;
                 Exception appsError = null;
                 Exception processesError = null;
+                string harmonyProcessInventoryError = "";
                 if (DeviceLookupService.IsHarmony(device))
                 {
                     try
@@ -280,6 +281,7 @@ namespace MoTuPerf.Desktop
                         HarmonyTargetInventory snapshot = await _lookup.ListTargetsAsync(device, token);
                         loadedApps = snapshot == null ? new List<AppInfo>() : snapshot.Apps;
                         loadedProcesses = snapshot == null ? new List<ProcessInfo>() : snapshot.Processes;
+                        harmonyProcessInventoryError = snapshot == null ? "" : snapshot.ProcessInventoryError ?? "";
                     }
                     catch (OperationCanceledException) { throw; }
                     catch (Exception ex)
@@ -335,6 +337,7 @@ namespace MoTuPerf.Desktop
                     {
                         loadedApps = latest.Apps ?? new List<AppInfo>();
                         loadedProcesses = latest.Processes ?? new List<ProcessInfo>();
+                        harmonyProcessInventoryError = latest.ProcessInventoryError ?? "";
                     }
                 }
                 _apps.Clear();
@@ -379,9 +382,10 @@ namespace MoTuPerf.Desktop
                     ? "APP 已启动，但暂未检测到匹配进程，请稍后刷新进程列表。"
                     : appsError != null
                         ? "应用清单暂不可用，已保留真实进程列表，请直接选择目标 PID。"
-                        : processesError == null
+                        : processesError == null && string.IsNullOrWhiteSpace(harmonyProcessInventoryError)
                         ? _deviceCountStatus
-                        : "应用列表已读取，进程列表暂不可用，请刷新或检查 HDC 进程权限。";
+                        : "应用列表已读取，但进程列表暂不可用"
+                            + (string.IsNullOrWhiteSpace(harmonyProcessInventoryError) ? "，请刷新或检查 HDC 进程权限。" : "：" + harmonyProcessInventoryError + "。请刷新或检查 HDC 进程权限。");
                 _loadedDeviceUdid = deviceUdid;
                 _preferredAppBundleId = "";
                 _preferredHarmonyUserId = -1;

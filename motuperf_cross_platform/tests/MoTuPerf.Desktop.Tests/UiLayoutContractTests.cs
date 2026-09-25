@@ -282,7 +282,7 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Contains("未使用旧进程，请刷新设备后重新选择", dialogCode);
             Assert.Contains("暂未找到唯一匹配进程", dialogCode);
             Assert.Contains("APP 已启动，但暂未检测到匹配进程", dialogCode);
-            Assert.Contains("应用列表已读取，进程列表暂不可用", dialogCode);
+            Assert.Contains("应用列表已读取，但进程列表暂不可用", dialogCode);
             Assert.Contains("SameAppSelection", dialogCode);
             Assert.Contains("SameProcessSelection", dialogCode);
             Assert.Contains("ProcessTargetMatcher.SameHarmonyProcessInstance", dialogCode);
@@ -501,7 +501,7 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Equal("更新日志", Attribute(changelog.Root, "Title"));
             Assert.Contains(changelog.Descendants(Avalonia + "Border"), border => Attribute(border, "Classes") == "secondaryWindowFrame");
             string changelogText = string.Join(" ", changelog.Descendants(Avalonia + "TextBlock").Select(element => Attribute(element, "Text")));
-            Assert.Contains("v0.40.4", changelogText);
+            Assert.Contains("v0.40.5", changelogText);
             Assert.Contains("v0.40.3", changelogText);
             Assert.Contains("v0.40.2", changelogText);
             Assert.DoesNotContain("v0.38.17", changelogText);

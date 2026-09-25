@@ -34,10 +34,12 @@ namespace CSharpIosPerfMonitor
         {
             Apps = new List<AppInfo>();
             Processes = new List<ProcessInfo>();
+            ProcessInventoryError = "";
         }
 
         public List<AppInfo> Apps { get; set; }
         public List<ProcessInfo> Processes { get; set; }
+        public string ProcessInventoryError { get; set; }
     }
 
     /// <summary>
@@ -201,10 +203,26 @@ namespace CSharpIosPerfMonitor
             catch (OperationCanceledException) { throw; }
             catch { }
 
-            List<ProcessInfo> processes = await ReadProcessesWithStartTimesAsync(serial, token).ConfigureAwait(false);
+            List<ProcessInfo> processes = new List<ProcessInfo>();
+            string processInventoryError = "";
+            try
+            {
+                processes = await ReadProcessesWithStartTimesAsync(serial, token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception exception)
+            {
+                // The application inventory is an independent HDC evidence
+                // source. Keep it usable when every process view is blocked,
+                // but carry a bounded reason to the picker so the user knows
+                // why no PID can be selected yet.
+                processInventoryError = Sanitize(exception.Message, 240);
+            }
             MergeProcessApps(apps, processes);
             if (apps.Count == 0 && dumpFailed)
-                throw new IOException("无法读取鸿蒙应用列表，请检查 HDC 授权，或在设备上打开应用后刷新进程。");
+                throw new IOException(string.IsNullOrWhiteSpace(processInventoryError)
+                    ? "无法读取鸿蒙应用列表，请检查 HDC 授权，或在设备上打开应用后刷新进程。"
+                    : "无法读取鸿蒙应用和进程列表：" + processInventoryError);
 
             return new HarmonyTargetInventory
             {
@@ -213,7 +231,8 @@ namespace CSharpIosPerfMonitor
                     .ThenBy(delegate(AppInfo app) { return app.BundleId; })
                     .ThenBy(delegate(AppInfo app) { return app.HarmonyUserId; })
                     .ToList(),
-                Processes = processes
+                Processes = processes,
+                ProcessInventoryError = processInventoryError
             };
         }
 
@@ -274,7 +293,18 @@ namespace CSharpIosPerfMonitor
                 Dictionary<int, long> starts = new Dictionary<int, long>();
                 foreach (string[] command in BuildProcessStatCommands(processes.Select(p => p.Pid)))
                 {
-                    ProcessResult stats = await RunShellAsync(serial, command, 12000, token).ConfigureAwait(false);
+                    ProcessResult stats;
+                    try
+                    {
+                        stats = await RunShellAsync(serial, command, 12000, token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch
+                    {
+                        // The process rows are still valid evidence even if
+                        // this optional start-time batch is unavailable.
+                        continue;
+                    }
                     // Some vendor HDC builds return a non-zero code when one
                     // PID in the batch is unreadable, while still returning
                     // valid /proc/<pid>/stat rows for the other PIDs. Keep the

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -1709,6 +1710,69 @@ namespace MoTuPerf.Platform.Tests
             Assert.DoesNotContain(apps, app => app.BundleId == "com.example.unlisted");
             Assert.Contains(snapshot.Processes, process => process.BundleId == "com.example.native");
             Assert.Contains(snapshot.Processes, process => process.BundleId == "com.example.running");
+        }
+
+        [Fact]
+        public async Task FakeHdcKeepsApplicationsWhenEveryProcessInventoryCommandFails()
+        {
+            Task<ProcessResult> ExecuteFakeHdcAsync(
+                string serial,
+                string[] command,
+                int timeoutMs,
+                CancellationToken token)
+            {
+                string key = string.Join(" ", command ?? Array.Empty<string>());
+                if (key == "pm list users" || key == "cmd user list")
+                    return Task.FromResult(new ProcessResult(0, "UserInfo{0:Owner:13} running\n", ""));
+                if (key.StartsWith("bm dump -a", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(0,
+                        "{\"bundleName\":\"com.example.available\",\"hapModuleInfos\":[{\"moduleName\":\"entry\",\"mainElementName\":\"EntryAbility\"}]}\n",
+                        ""));
+                if (key.StartsWith("pm list packages", StringComparison.Ordinal)
+                    || key.StartsWith("cmd package list packages", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(0, "", ""));
+                if (key.StartsWith("ps", StringComparison.Ordinal))
+                    throw new IOException("permission denied while reading process table");
+                return Task.FromResult(new ProcessResult(0, "", ""));
+            }
+
+            HarmonyTargetInventory snapshot = await new HarmonyLookupService(ExecuteFakeHdcAsync)
+                .ListTargetsAsync("HARMONY-1", CancellationToken.None);
+
+            AppInfo app = Assert.Single(snapshot.Apps, candidate => candidate.BundleId == "com.example.available");
+            Assert.True(app.HasLaunchEntry);
+            Assert.Empty(snapshot.Processes);
+            Assert.Contains("无法读取鸿蒙进程", snapshot.ProcessInventoryError);
+        }
+
+        [Fact]
+        public async Task FakeHdcReportsCombinedFailureWhenApplicationsAndProcessesAreUnavailable()
+        {
+            Task<ProcessResult> ExecuteFakeHdcAsync(
+                string serial,
+                string[] command,
+                int timeoutMs,
+                CancellationToken token)
+            {
+                string key = string.Join(" ", command ?? Array.Empty<string>());
+                if (key == "pm list users" || key == "cmd user list")
+                    throw new IOException("HDC authorization unavailable");
+                if (key.StartsWith("bm dump -a", StringComparison.Ordinal)
+                    || key.StartsWith("pm list packages", StringComparison.Ordinal)
+                    || key.StartsWith("cmd package list packages", StringComparison.Ordinal)
+                    || key.StartsWith("ps", StringComparison.Ordinal))
+                    throw new IOException("HDC authorization unavailable");
+                return Task.FromResult(new ProcessResult(0, "", ""));
+            }
+
+            Exception error = await Assert.ThrowsAsync<IOException>(delegate
+            {
+                return new HarmonyLookupService(ExecuteFakeHdcAsync)
+                    .ListTargetsAsync("HARMONY-1", CancellationToken.None);
+            });
+
+            Assert.Contains("无法读取鸿蒙应用和进程列表", error.Message);
+            Assert.Contains("无法读取鸿蒙进程", error.Message);
         }
 
         [Fact]
