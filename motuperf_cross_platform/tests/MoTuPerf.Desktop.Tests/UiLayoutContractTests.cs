@@ -346,7 +346,13 @@ namespace MoTuPerf.Desktop.Tests
             string version = project.Descendants("Version").Single().Value;
             string[] components = version.Split('.');
 
-            Assert.Equal("0.40.0", version);
+            string projectRoot = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(
+                ResolvePath("src", "MoTuPerf.Desktop", "MoTuPerf.Desktop.csproj"))))!;
+            string changelog = File.ReadAllText(Path.Combine(projectRoot, "..", "CHANGELOG.md"));
+            string latestVersion = System.Text.RegularExpressions.Regex.Match(
+                changelog,
+                @"(?m)^## v(?<version>\d+\.\d+\.\d+)").Groups["version"].Value;
+            Assert.Equal(latestVersion, version);
             Assert.Equal(3, components.Length);
             Assert.All(components, component => Assert.True(int.TryParse(component, out _)));
             Assert.DoesNotContain("-", version);
@@ -491,8 +497,8 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Equal("更新日志", Attribute(changelog.Root, "Title"));
             Assert.Contains(changelog.Descendants(Avalonia + "Border"), border => Attribute(border, "Classes") == "secondaryWindowFrame");
             string changelogText = string.Join(" ", changelog.Descendants(Avalonia + "TextBlock").Select(element => Attribute(element, "Text")));
-            Assert.Contains("v0.40.0", changelogText);
-            Assert.Contains("v0.38.18", changelogText);
+            Assert.Contains("v0.40.1", changelogText);
+            Assert.Contains("v0.39.0", changelogText);
             Assert.DoesNotContain("v0.38.17", changelogText);
             Assert.DoesNotContain("v0.38.16", changelogText);
             Assert.DoesNotContain("v0.38.14", changelogText);
