@@ -638,7 +638,7 @@ namespace MoTuPerf.Platform.Tests
         }
 
         [Fact]
-        public void MarksServiceOnlyBundlesAsRuntimeProcessTargets()
+        public void KeepsServiceOnlyBundlesAsRealLaunchCandidates()
         {
             var apps = HarmonyLookupService.ParseApps(
                 "{\"bundleName\":\"com.example.service\",\"hapModuleInfos\":[{"
@@ -649,10 +649,121 @@ namespace MoTuPerf.Platform.Tests
             Assert.True(app.IsProcessOnly);
             Assert.False(app.HasLaunchEntry);
             Assert.True(app.HasNonUiLaunchEntry);
-            Assert.False(app.CanAttemptLaunch);
-            Assert.Equal("仅运行中可采集", app.LaunchAvailability);
+            Assert.True(app.CanAttemptLaunch);
+            Assert.Equal("可尝试启动", app.LaunchAvailability);
             Assert.Contains(app.HarmonyLaunchEntries, entry => !entry.IsUiEntry && entry.Ability == "SyncService");
             Assert.Contains(app.HarmonyLaunchEntries, entry => !entry.IsUiEntry && entry.Ability == "ShareService");
+        }
+
+        [Theory]
+        [InlineData("SyncService")]
+        [InlineData("HomeForm")]
+        [InlineData("ShareService")]
+        [InlineData("ShareExtension")]
+        public async Task LaunchesKnownNonUiEntryWhenDeviceAcceptsTheRealAbility(string ability)
+        {
+            List<string> commands = new List<string>();
+            Task<ProcessResult> ExecuteFakeHdcAsync(
+                string serial,
+                string[] command,
+                int timeoutMs,
+                CancellationToken token)
+            {
+                string key = string.Join(" ", command ?? new string[0]);
+                commands.Add(key);
+                if (key == "aa start -U 0 -b com.example.service -m entry -a " + ability)
+                    return Task.FromResult(new ProcessResult(0, "Ability started", ""));
+                return Task.FromResult(new ProcessResult(1, "", "unsupported fake HDC command"));
+            }
+
+            var service = new HarmonyLookupService(ExecuteFakeHdcAsync);
+            ProcessResult result = await service.LaunchAppAsync("HARMONY-1", new AppInfo
+            {
+                BundleId = "com.example.service",
+                Platform = "harmony",
+                HarmonyUserId = 0,
+                IsProcessOnly = true,
+                    HasNonUiLaunchEntry = true,
+                    HarmonyLaunchEntries = new List<HarmonyLaunchEntryInfo>
+                    {
+                        new HarmonyLaunchEntryInfo { Module = "entry", Ability = ability, IsUiEntry = false }
+                    }
+                }, CancellationToken.None);
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Contains("aa start -U 0 -b com.example.service -m entry -a " + ability, commands);
+            Assert.DoesNotContain(commands, command => command.Contains("am start", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public async Task KeepsNonUiLaunchFailureWhenEveryRealEntryIsRejected()
+        {
+            Task<ProcessResult> ExecuteFakeHdcAsync(
+                string serial,
+                string[] command,
+                int timeoutMs,
+                CancellationToken token)
+            {
+                string key = string.Join(" ", command ?? new string[0]);
+                if (key.StartsWith("aa start ", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(1, "", "permission denied for real ability"));
+                return Task.FromResult(new ProcessResult(1, "", "unsupported fake HDC command"));
+            }
+
+            var service = new HarmonyLookupService(ExecuteFakeHdcAsync);
+            ProcessResult result = await service.LaunchAppAsync("HARMONY-1", new AppInfo
+            {
+                BundleId = "com.example.service",
+                Platform = "harmony",
+                HarmonyUserId = 0,
+                IsProcessOnly = true,
+                HasNonUiLaunchEntry = true,
+                HarmonyLaunchEntries = new List<HarmonyLaunchEntryInfo>
+                {
+                    new HarmonyLaunchEntryInfo { Module = "entry", Ability = "SyncService", IsUiEntry = false }
+                }
+            }, CancellationToken.None);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("permission denied for real ability", result.Stderr);
+        }
+
+        [Fact]
+        public async Task TriesNonUiEntryFromBundleDetailAfterTheDeviceRejectsUiEntry()
+        {
+            List<string> commands = new List<string>();
+            Task<ProcessResult> ExecuteFakeHdcAsync(
+                string serial,
+                string[] command,
+                int timeoutMs,
+                CancellationToken token)
+            {
+                string key = string.Join(" ", command ?? new string[0]);
+                commands.Add(key);
+                if (key == "bm dump -n com.example.mixed -u 0")
+                    return Task.FromResult(new ProcessResult(0,
+                        "bundleName: com.example.mixed\n"
+                        + "moduleName: entry\n"
+                        + "abilityInfos:\n"
+                        + "  - name: EntryAbility\n"
+                        + "serviceAbilityInfos:\n"
+                        + "  - className: SyncService\n", ""));
+                if (key.StartsWith("bm dump -n com.example.mixed ", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(1, "", "unknown option"));
+                if (key == "bm dump -n com.example.mixed")
+                    return Task.FromResult(new ProcessResult(1, "", "unscoped lookup must not be used here"));
+                if (key == "aa start -U 0 -b com.example.mixed -m entry -a EntryAbility")
+                    return Task.FromResult(new ProcessResult(1, "", "ui entry rejected"));
+                if (key == "aa start -U 0 -b com.example.mixed -m entry -a SyncService")
+                    return Task.FromResult(new ProcessResult(0, "Ability started", ""));
+                return Task.FromResult(new ProcessResult(1, "", "unsupported fake HDC command"));
+            }
+
+            var service = new HarmonyLookupService(ExecuteFakeHdcAsync);
+            ProcessResult result = await service.LaunchAppAsync("HARMONY-1", "com.example.mixed", new[] { 0 }, CancellationToken.None);
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Contains("aa start -U 0 -b com.example.mixed -m entry -a SyncService", commands);
         }
 
         [Fact]

@@ -145,7 +145,8 @@ namespace CSharpIosPerfMonitor
         /// <summary>
         /// True when the entry is a user-facing UI/entry Ability. Service,
         /// Form, DataShare, Worker and Extension entries remain available as
-        /// provenance but are not treated as launchable app entry points.
+        /// real device launch candidates, but are still labeled as non-UI
+        /// provenance and are not presented as a UI entry point.
         /// </summary>
         public bool IsUiEntry { get; set; }
     }
@@ -208,8 +209,9 @@ namespace CSharpIosPerfMonitor
         public bool HasLaunchEntry { get; set; }
         /// <summary>
         /// True when the inventory explicitly contained only non-UI
-        /// Service/Form/DataShare/WorkScheduler/Extension entries. A Bundle
-        /// with no entry evidence may still try package-level launch.
+        /// Service/Form/DataShare/WorkScheduler/Extension entries. Those
+        /// entries are still tried verbatim by the device; this flag only
+        /// preserves the distinction from a user-facing UI entry.
         /// </summary>
         public bool HasNonUiLaunchEntry { get; set; }
 
@@ -219,12 +221,10 @@ namespace CSharpIosPerfMonitor
             {
                 if (!DevicePlatformNames.IsHarmony(Platform)
                     || string.IsNullOrWhiteSpace(BundleId)) return false;
-                if (HasNonUiLaunchEntry) return false;
-
                 // Older session files do not contain HasNonUiLaunchEntry.
-                // Reconstruct the pure non-UI boundary from the persisted
-                // entries so a Service/Form target cannot become launchable
-                // merely because it was saved by an older client.
+                // Reconstruct the real entry evidence from persisted entries
+                // so a discovered Service/Form/Extension can be attempted
+                // without inventing a UI Ability.
                 bool hasUiEntry = false;
                 bool hasNonUiEntry = false;
                 foreach (HarmonyLaunchEntryInfo entry in HarmonyLaunchEntries ?? new List<HarmonyLaunchEntryInfo>())
@@ -233,7 +233,8 @@ namespace CSharpIosPerfMonitor
                     hasUiEntry = hasUiEntry || entry.IsUiEntry;
                     hasNonUiEntry = hasNonUiEntry || !entry.IsUiEntry;
                 }
-                return hasUiEntry || !hasNonUiEntry;
+                if (hasUiEntry || hasNonUiEntry) return true;
+                return !HasNonUiLaunchEntry;
             }
         }
 

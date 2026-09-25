@@ -654,13 +654,17 @@ namespace CSharpIosPerfMonitor
             List<HarmonyLaunchEntryInfo> knownEntries = (harmonyLaunchEntries ?? Enumerable.Empty<HarmonyLaunchEntryInfo>())
                 .Where(delegate(HarmonyLaunchEntryInfo entry)
                 {
-                    return entry != null && entry.IsUiEntry && !string.IsNullOrWhiteSpace(entry.Ability);
+                    return entry != null && !string.IsNullOrWhiteSpace(entry.Ability);
                 })
                 .GroupBy(delegate(HarmonyLaunchEntryInfo entry)
                 {
                     return (entry.Module ?? "") + "|" + entry.Ability;
                 }, StringComparer.OrdinalIgnoreCase)
-                .Select(delegate(IGrouping<string, HarmonyLaunchEntryInfo> group) { return group.First(); })
+                .Select(delegate(IGrouping<string, HarmonyLaunchEntryInfo> group)
+                {
+                    return group.OrderByDescending(delegate(HarmonyLaunchEntryInfo entry) { return entry.IsUiEntry; }).First();
+                })
+                .OrderByDescending(delegate(HarmonyLaunchEntryInfo entry) { return entry.IsUiEntry; })
                 .ToList();
             List<ProcessResult> attempts = new List<ProcessResult>();
             HashSet<string> abilities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -684,10 +688,12 @@ namespace CSharpIosPerfMonitor
                 ProcessResult detail = await ReadLaunchDetailAsync(serial, bundleId, userId, token).ConfigureAwait(false);
                 if (detail != null) attempts.Add(detail);
                 string detailOutput = detail == null ? "" : (detail.Stdout ?? "") + "\n" + (detail.Stderr ?? "");
-                foreach (HarmonyLaunchEntryPoint entry in ParseLaunchEntryPoints(detailOutput))
+                foreach (HarmonyLaunchEntryPoint entry in ParseLaunchEntryPoints(detailOutput)
+                    .Where(delegate(HarmonyLaunchEntryPoint candidate) { return candidate != null && !string.IsNullOrWhiteSpace(candidate.Ability); })
+                    .OrderByDescending(delegate(HarmonyLaunchEntryPoint candidate) { return candidate.IsUiEntry; }))
                 {
-                    if (entry.IsUiEntry && !string.IsNullOrWhiteSpace(entry.Ability)) abilities.Add(entry.Ability);
-                    if (entry.IsUiEntry && !string.IsNullOrWhiteSpace(entry.Ability) && !string.IsNullOrWhiteSpace(entry.Module))
+                    abilities.Add(entry.Ability);
+                    if (!string.IsNullOrWhiteSpace(entry.Ability))
                     {
                         foreach (string[] startArgs in AbilityStartArgsVariants(bundleId, entry.Module, entry.Ability, userId))
                         {
