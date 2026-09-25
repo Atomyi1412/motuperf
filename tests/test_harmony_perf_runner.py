@@ -11,19 +11,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "csharp_perf_monito
 import harmony_perf_runner as runner
 
 
-def stat(start: int = 100, ticks: int = 30) -> str:
+def stat(start: int = 100, ticks: int = 30, comm: str = "game (main)") -> str:
     fields = ["S"] + ["0"] * 19
     fields[11], fields[12], fields[19] = str(ticks), "0", str(start)
-    return "42 (game (main)) " + " ".join(fields)
+    return f"42 ({comm}) " + " ".join(fields)
 
 
-def snapshot(start: int = 100, ticks: int = 30, cpu: str = "cpu0 100 0 0 100\ncpu1 100 0 0 100", pss: str = "Pss: 2048 kB", name: str = "com.example.game") -> str:
-    return (f"__MOTUPERF_STAT__\n{stat(start, ticks)}\n__MOTUPERF_NAME__\n{name}\x00--arg\n"
+def snapshot(start: int = 100, ticks: int = 30, cpu: str = "cpu0 100 0 0 100\ncpu1 100 0 0 100", pss: str = "Pss: 2048 kB", name: str = "com.example.game", comm: str = "game (main)") -> str:
+    return (f"__MOTUPERF_STAT__\n{stat(start, ticks, comm)}\n__MOTUPERF_NAME__\n{name}\x00--arg\n"
             f"__MOTUPERF_CPU__\n{cpu}\n__MOTUPERF_PSS__\n{pss}\n__MOTUPERF_STATUS__\nVmRSS: 4096 kB\n")
 
 
 def options(**overrides) -> argparse.Namespace:
     return argparse.Namespace(**({"pid": 42, "target_name": "com.example.game", "target_start_time_ticks": 100,
+                                 "target_bundle_id": "com.example.game", "target_user_id": 100, "serial": "harmony-1",
                                  "interval": 1, "no_cpu": False, "no_memory": False, "no_fps": False,
                                  "no_temperature": True, "no_thermal_state": False} | overrides))
 
@@ -69,7 +70,20 @@ class HarmonyRunnerTests(unittest.TestCase):
             with self.assertRaises(KeyboardInterrupt):
                 runner.collect(options(target_name="servicemanager", no_cpu=True, no_memory=True,
                                        no_fps=True, no_thermal_state=True), hdc)
-        self.assertIn(("target", {"pid": 42, "confirmed": True, "platform": "harmony"}), events)
+        target = next(data for kind, data in events if kind == "target" and data["confirmed"])
+        self.assertEqual(target["platform"], "harmony")
+        self.assertEqual(target["device_serial"], "harmony-1")
+        self.assertEqual(target["user_id"], 100)
+        self.assertEqual(target["bundle_id"], "com.example.game")
+
+    def test_long_comm_name_can_match_selected_truncated_process(self):
+        current = runner.parse_snapshot(snapshot(name="", comm="com.example.foo"), 42)
+
+        self.assertEqual(current.name_source, "comm")
+        self.assertTrue(runner.target_name_matches(current, "com.example.foo:worker"))
+        self.assertFalse(runner.target_name_matches(current, "com.example.fop:worker"))
+        self.assertFalse(runner.target_name_matches(
+            replace(current, name_source="cmdline"), "com.example.foo:worker"))
 
     def test_hidumper_uses_pid_row_not_device_total_and_requires_known_headers(self):
         text = "Total: 92.00%; User Space: 90.00%\nPID Total Usage User Space Kernel Space\n42 125.00% 120.00% 5.00%\n"
@@ -194,3 +208,25 @@ class HarmonyRunnerTests(unittest.TestCase):
         self.assertTrue(any(data["code"] == "harmony_frame_source_unavailable" for kind, data in events if kind == "status"))
         self.assertFalse(any(kind == "fps" for kind, _ in events))
         self.assertFalse(any(kind == "thermal_state" for kind, _ in events))
+
+    def test_metric_events_keep_harmony_target_provenance(self):
+        hdc = Mock()
+        hdc.shell.side_effect = [
+            snapshot(ticks=30),
+            stat(ticks=30),
+            snapshot(ticks=180, cpu="cpu0 180 0 0 120\ncpu1 170 0 0 130"),
+            stat(ticks=180),
+        ]
+        events = []
+        with patch.object(runner, "emit", side_effect=lambda kind, data: events.append((kind, data))), \
+             patch.object(runner.time, "sleep", side_effect=[None, KeyboardInterrupt]):
+            with self.assertRaises(KeyboardInterrupt):
+                runner.collect(options(), hdc)
+
+        for kind in ("cpu", "memory"):
+            payload = next(data for event_kind, data in events if event_kind == kind)
+            self.assertEqual(payload["platform"], "harmony")
+            self.assertEqual(payload["device_serial"], "harmony-1")
+            self.assertEqual(payload["bundle_id"], "com.example.game")
+            self.assertEqual(payload["user_id"], 100)
+            self.assertEqual(payload["target_start_time_ticks"], 100)

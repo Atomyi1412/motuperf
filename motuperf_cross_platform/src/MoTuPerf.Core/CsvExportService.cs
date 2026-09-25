@@ -70,7 +70,7 @@ namespace CSharpIosPerfMonitor
             builder.WriteLine("Device,OS,CPU,GPU,Resolution");
             builder.WriteLine(Line(DeviceName(document.Device), DeviceOs(document.Device), Value(document.Device?.CpuInfo), Value(document.Device?.GpuInfo), Value(document.Device?.Resolution)));
             builder.WriteLine("Stat");
-            builder.WriteLine("FPS(avg),FPS>=18(%),FPS>=25(%),FPS(var),FPS(std),FPS(drop),FPS(min),FPS(median),FPS(medRange+-20%)[%],Jank(/10min),BigJank(/10min),Stutter(%)," + memoryName + "(avg)[MB]," + memoryName + "(peak)[MB],AppCPU(raw avg)[%],AppCPU(raw<=60%)[%],AppCPU(raw<=80%)[%],TargetPid,App,Process,ScreenshotCount,FPSStatsSourceTier,FPSStatsSampleCount,FPSStatsExcludedSampleCount,FPSStatsObservationSec,JankStatsSampleCount,JankStatsExcludedSampleCount,JankStatsObservationSec");
+            builder.WriteLine("FPS(avg),FPS>=18(%),FPS>=25(%),FPS(var),FPS(std),FPS(drop),FPS(min),FPS(median),FPS(medRange+-20%)[%],Jank(/10min),BigJank(/10min),Stutter(%)," + memoryName + "(avg)[MB]," + memoryName + "(peak)[MB],AppCPU(raw avg)[%],AppCPU(raw<=60%)[%],AppCPU(raw<=80%)[%],Platform,DeviceSerial,TargetBundle,HarmonyUserId,HarmonyStartTimeTicks,TargetPid,App,Process,ScreenshotCount,FPSStatsSourceTier,FPSStatsSampleCount,FPSStatsExcludedSampleCount,FPSStatsObservationSec,JankStatsSampleCount,JankStatsExcludedSampleCount,JankStatsObservationSec");
             builder.WriteLine(Line(
                 fps.HasData ? Number(fps.Average) : "-", fps.HasData ? Number(fps.FpsGe18Percent) : "-", fps.HasData ? Number(fps.FpsGe25Percent) : "-",
                 fps.HasData ? Number(fps.Variance) : "-", fps.HasData ? Number(fps.StandardDeviation) : "-", fps.HasData ? Number(fps.DropPerHour) : "-",
@@ -80,6 +80,7 @@ namespace CSharpIosPerfMonitor
                 cpuSamples.Count > 0 ? Number(cpuSamples.Average(delegate(PerfSample sample) { return sample.CpuPercent; })) : "-",
                 cpuSamples.Count > 0 ? Number(cpuSamples.Count(delegate(PerfSample sample) { return sample.CpuPercent <= 60; }) * 100.0 / cpuSamples.Count) : "-",
                 cpuSamples.Count > 0 ? Number(cpuSamples.Count(delegate(PerfSample sample) { return sample.CpuPercent <= 80; }) * 100.0 / cpuSamples.Count) : "-",
+                DevicePlatform(document.Device), Value(document.Device?.Udid), TargetBundle(document), HarmonyUserId(document), HarmonyStartTimeTicks(document),
                 TargetPid(document, samples), AppName(document), ProcessName(document), screenshots.Count.ToString(CultureInfo.InvariantCulture),
                 fps.HasData ? fps.SourceTier : "-", fps.HasData ? fps.SampleCount.ToString(CultureInfo.InvariantCulture) : "-",
                 fps.HasData ? fps.ExcludedSampleCount.ToString(CultureInfo.InvariantCulture) : "-", fps.HasData ? Number(fps.TotalDurationSec) : "-",
@@ -298,13 +299,16 @@ namespace CSharpIosPerfMonitor
         private static SessionScreenshot NearestScreenshot(IEnumerable<SessionScreenshot> screenshots, double elapsed) { return (screenshots ?? Enumerable.Empty<SessionScreenshot>()).Where(delegate(SessionScreenshot item) { return item != null; }).OrderBy(delegate(SessionScreenshot item) { return Math.Abs(item.ElapsedSec - elapsed); }).FirstOrDefault(); }
         private static string Temperature(PerfSample sample) { return sample.HasTemperature && sample.TemperatureUpdated && sample.TemperatureCelsius != null ? string.Join(";", sample.TemperatureCelsius.OrderBy(delegate(KeyValuePair<string, double> pair) { return pair.Key; }, StringComparer.OrdinalIgnoreCase).Select(delegate(KeyValuePair<string, double> pair) { return pair.Key + "=" + pair.Value.ToString("0.000000", CultureInfo.InvariantCulture); })) : "-"; }
         private static string DeviceName(DeviceInfo device) { return device == null ? "-" : First(device.MarketName, device.Name, DevicePlatform(device) + " Device"); }
-        private static string DevicePlatform(DeviceInfo device) { return DevicePlatformNames.IsHarmony(device?.Platform) ? "HarmonyOS" : IsAndroid(device) ? "Android" : "iOS"; }
+        private static string DevicePlatform(DeviceInfo device) { return device == null ? "-" : DevicePlatformNames.IsHarmony(device.Platform) ? "HarmonyOS" : IsAndroid(device) ? "Android" : "iOS"; }
         private static string DeviceOs(DeviceInfo device) { string platform = DevicePlatform(device); return device == null || string.IsNullOrWhiteSpace(device.ProductVersion) ? platform : platform + " " + device.ProductVersion; }
         private static string MemoryMetricName(string metric, DeviceInfo device) { string label = MemoryMetricLabel(metric); return label == "-" ? (DevicePlatform(device) == "HarmonyOS" ? "Memory" : IsAndroid(device) ? "PSS" : "Footprint") : label; }
         private static bool IsAndroid(DeviceInfo device) { return device != null && string.Equals(device.Platform, "android", StringComparison.OrdinalIgnoreCase); }
         private static string MemoryMetricLabel(string metric) { string value = (metric ?? "").Trim().ToLowerInvariant(); if (value == "physical_footprint" || value == "footprint") return "Footprint"; if (value == "pss") return "PSS"; if (value == "rss") return "RSS"; return string.IsNullOrWhiteSpace(metric) ? "-" : metric; }
         private static string AppName(SessionDocument document) { return document.App == null ? Value(document.SelectedBundleId) : First(document.App.Name, document.App.BundleId) + " / " + document.App.BundleId; }
         private static string ProcessName(SessionDocument document) { return document.Process == null ? "-" : First(document.Process.Name, document.Process.DisplayName, "-") + " / pid " + document.Process.Pid; }
+        private static string TargetBundle(SessionDocument document) { return First(document.SelectedBundleId, document.App?.BundleId, document.Process?.BundleId, "-"); }
+        private static string HarmonyUserId(SessionDocument document) { return DevicePlatform(document.Device) == "HarmonyOS" && document.Process != null && document.Process.HarmonyUserId >= 0 ? document.Process.HarmonyUserId.ToString(CultureInfo.InvariantCulture) : "-"; }
+        private static string HarmonyStartTimeTicks(SessionDocument document) { return DevicePlatform(document.Device) == "HarmonyOS" && document.Process != null && document.Process.HarmonyStartTimeTicks > 0 ? document.Process.HarmonyStartTimeTicks.ToString(CultureInfo.InvariantCulture) : "-"; }
         private static string TargetPid(SessionDocument document, IList<PerfSample> samples) { if (document.Process != null && document.Process.Pid > 0) return document.Process.Pid.ToString(CultureInfo.InvariantCulture); return samples.Count == 0 ? "-" : samples[0].TargetPid.ToString(CultureInfo.InvariantCulture); }
         private static string ThermalStateName(PerfSample sample, DeviceInfo device)
         {

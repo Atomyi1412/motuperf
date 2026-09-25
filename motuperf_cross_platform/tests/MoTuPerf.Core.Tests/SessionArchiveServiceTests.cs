@@ -18,8 +18,10 @@ namespace MoTuPerf.Core.Tests
                 var document = new SessionDocument
                 {
                     Format = "motuperf-session", Version = 5,
-                    Device = new DeviceInfo { Platform = "harmony", Name = "Harmony test", ProductVersion = "6" },
-                    Process = new ProcessInfo { Platform = "harmony", Pid = 42, Name = "com.example.game", HarmonyStartTimeTicks = 100 }
+                    Device = new DeviceInfo { Platform = "harmony", Udid = "harmony-serial", Name = "Harmony test", ProductVersion = "6" },
+                    App = new AppInfo { Platform = "harmony", BundleId = "com.example.game", Name = "Game" },
+                    SelectedBundleId = "com.example.game",
+                    Process = new ProcessInfo { Platform = "harmony", Pid = 42, Name = "com.example.game", BundleId = "com.example.game", HarmonyUserId = 100, HarmonyStartTimeTicks = 100 }
                 };
                 document.Samples.Add(new PerfSample
                 {
@@ -35,6 +37,8 @@ namespace MoTuPerf.Core.Tests
                 SessionArchiveService.Save(archive, document);
                 var loaded = SessionArchiveService.Load(archive, Path.Combine(root, "opened"));
                 Assert.Equal("harmony", loaded.Device.Platform);
+                Assert.Equal("harmony-serial", loaded.Device.Udid);
+                Assert.Equal(100, loaded.Process.HarmonyUserId);
                 Assert.Equal(100, loaded.Process.HarmonyStartTimeTicks);
                 Assert.Equal(150, loaded.Samples[0].CpuPercent);
                 Assert.Equal("hdc-hidumper-mem", loaded.Samples[0].MemorySource);
@@ -47,6 +51,7 @@ namespace MoTuPerf.Core.Tests
                 Assert.Contains("HarmonyOS 6", csv);
                 Assert.Contains("hdc-proc-stat", csv);
                 Assert.Contains("hdc-hidumper-mem", csv);
+                Assert.Contains("HarmonyOS,harmony-serial,com.example.game,100,100,42", csv);
                 Assert.DoesNotContain("Footprint", csv);
             }
             finally { Directory.Delete(root, true); }

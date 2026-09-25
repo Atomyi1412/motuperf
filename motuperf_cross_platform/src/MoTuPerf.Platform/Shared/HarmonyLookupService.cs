@@ -393,8 +393,15 @@ namespace CSharpIosPerfMonitor
                     int userId = CommandUserId(command);
                     foreach (AppInfo app in ParseApps((result.Stdout ?? "") + "\n" + (result.Stderr ?? "")))
                     {
+                        // A Bundle Manager record can carry its own profile
+                        // identity. Prefer that evidence over the command
+                        // option: vendor builds sometimes echo a global
+                        // record while a scoped command is being used, and
+                        // assigning the option blindly would duplicate the
+                        // app into the wrong Harmony profile.
+                        int recordUserId = app.HarmonyUserId >= 0 ? app.HarmonyUserId : userId;
                         AppInfo merged = AddApp(apps, seen, app.BundleId, "Bundle Manager 应用", app.Name, app.Version, app.HasLaunchEntry,
-                            harmonyLaunchEntries: app.HarmonyLaunchEntries, harmonyUserId: userId);
+                            harmonyLaunchEntries: app.HarmonyLaunchEntries, harmonyUserId: recordUserId);
                         if (merged != null)
                             foreach (int appUserId in app.HarmonyUserIds ?? new List<int>())
                                 AddHarmonyUser(merged, appUserId);
@@ -739,6 +746,7 @@ namespace CSharpIosPerfMonitor
             int abilityIndent = -1;
             foreach (string raw in Lines(output))
             {
+                if (ExtractJsonValues((raw ?? "").Trim()).Count > 0) continue;
                 string line = raw.Trim().Trim('{', '}', ',', ' ', '\t');
                 int indent = raw.Length - raw.TrimStart().Length;
                 if (IsAbilityCollectionLine(line))
@@ -750,6 +758,10 @@ namespace CSharpIosPerfMonitor
                 if (insideAbilityCollection && indent <= abilityIndent)
                     insideAbilityCollection = false;
                 if (insideAbilityCollection) continue;
+                // Compact JSON was already parsed structurally above. Do not
+                // run the flat key/value fallback over the same line, where
+                // a nested Ability name could be mistaken for the app label.
+                if (ExtractJsonValues(line).Count > 0) continue;
                 Match keyed = Regex.Match(
                     line,
                     @"(?i)(?:[""']?)(?:bundleName|bundle_name|bundle\s+name|bundleId|bundle_id|bundle\s+id|bundle|packageName|package_name|packageId|package_id|package\s+name|package|modulePackage|module_package|module\s+package|applicationId|application_id|appId|app_id|appIdentifier|app_identifier)(?:[""']?)\s*[:=]\s*[""']?([A-Za-z][A-Za-z0-9_.]+)",
@@ -1004,7 +1016,7 @@ namespace CSharpIosPerfMonitor
             if (node.ValueKind != JsonValueKind.Object || !ValidBundle(candidateBundle)) return false;
             return HasJsonProperty(node, "versionCode", "versionName", "versionNumber", "version", "compatibleVersion",
                 "targetVersion", "hapModuleInfos", "moduleInfos", "applicationInfo", "appInfo", "abilityInfos",
-                "installTime", "updateTime", "userId", "bundleInfo");
+                "installTime", "updateTime", "userId", "bundleInfo", "label", "appName", "applicationName", "displayName");
         }
 
         private static bool HasJsonProperty(JsonElement node, params string[] names)
@@ -1224,7 +1236,7 @@ namespace CSharpIosPerfMonitor
                 if (string.IsNullOrWhiteSpace(name)) continue;
                 int userId = userIndex >= 0 && userIndex < parts.Length
                     ? ParseProcessUserValue(parts[userIndex], userFieldName)
-                    : -1;
+                    : InferHeaderlessProcessUserId(parts, rowPidIndex, rowCommandIndex);
                 processes.Add(CreateProcess(pid, name, serial, userId));
             }
             return processes
@@ -1280,7 +1292,8 @@ namespace CSharpIosPerfMonitor
                         Recommended = process.Recommended,
                         Reason = "运行中的鸿蒙进程 · PID " + process.Pid.ToString(CultureInfo.InvariantCulture),
                         IsRunning = true,
-                        IsProcessOnly = true
+                        IsProcessOnly = true,
+                        HarmonyUserId = process.HarmonyUserId
                     };
                     AddHarmonyUser(unknown, process.HarmonyUserId);
                     apps.Add(unknown);
@@ -1298,6 +1311,19 @@ namespace CSharpIosPerfMonitor
                     {
                         return app.HarmonyUserId == process.HarmonyUserId;
                     });
+                    if (existing == null
+                        && bundleMatches.Count == 1
+                        && bundleMatches[0].HarmonyUserId < 0
+                        && (bundleMatches[0].HarmonyUserIds == null || bundleMatches[0].HarmonyUserIds.Count == 0))
+                    {
+                        // An unscoped inventory row can still be bound safely
+                        // when the only live process supplies an explicit
+                        // profile. Complete that row instead of creating a
+                        // duplicate process-only application.
+                        existing = bundleMatches[0];
+                        existing.HarmonyUserId = process.HarmonyUserId;
+                        AddHarmonyUser(existing, process.HarmonyUserId);
+                    }
                 }
                 else if (bundleMatches.Count == 1)
                 {
@@ -1309,6 +1335,16 @@ namespace CSharpIosPerfMonitor
                 if (existing != null)
                 {
                     existing.IsRunning = true;
+                    if (existing.IsProcessOnly
+                        && existing.ProcessPid > 0
+                        && existing.ProcessPid != process.Pid)
+                    {
+                        // A process-only row represents a real process only
+                        // while it is unique for this Bundle/profile. Once a
+                        // second PID appears, leave process choice explicit.
+                        existing.ProcessPid = 0;
+                        existing.ProcessName = "";
+                    }
                     AddHarmonyUser(existing, process.HarmonyUserId);
                     continue;
                 }
@@ -1320,12 +1356,15 @@ namespace CSharpIosPerfMonitor
                 apps.Add(new AppInfo
                 {
                     BundleId = processBundle,
-                    Name = processBundle,
+                    Name = FirstNonEmpty(process.DisplayName, process.Name, processBundle),
+                    ProcessPid = process.Pid,
+                    ProcessName = process.Name,
                     Platform = "harmony",
                     Recommended = process.ForegroundApplication,
                     Reason = "运行中的鸿蒙应用",
                     IsRunning = true,
-                    IsProcessOnly = true
+                    IsProcessOnly = true,
+                    HarmonyUserId = process.HarmonyUserId
                 });
                 AddHarmonyUser(apps[apps.Count - 1], process.HarmonyUserId);
             }
@@ -1433,21 +1472,12 @@ namespace CSharpIosPerfMonitor
                 catch (JsonException) { }
             }
 
-            MatchCollection abilityMatches = Regex.Matches(
-                output ?? "",
-                @"(?i)(?:[""']?)(?:mainElementName|mainElement|mainAbility|mainAbilityName|entryAbility|entryAbilityName|abilityName|ability_name|ability\s+name|extensionAbilityName|serviceExtensionAbilityName|formExtensionAbilityName)(?:[""']?)\s*[:=]\s*[""']?([A-Za-z][A-Za-z0-9_.$-]*)",
-                RegexOptions.CultureInvariant);
-            MatchCollection moduleMatches = Regex.Matches(
-                output ?? "",
-                @"(?i)(?:[""']?)(?:moduleName|module_name|mainModuleName|main_module_name)(?:[""']?)\s*[:=]\s*[""']?([A-Za-z][A-Za-z0-9_.-]*)",
-                RegexOptions.CultureInvariant);
-            for (int i = 0; i < abilityMatches.Count; i++)
-            {
-                string module = moduleMatches.Count == 0
-                    ? ""
-                    : moduleMatches[Math.Min(i, moduleMatches.Count - 1)].Groups[1].Value;
-                AddLaunchEntry(entries, module, abilityMatches[i].Groups[1].Value);
-            }
+            // Text dumps can repeat the same module through aliases such as
+            // `moduleName` and `entryModuleName`. Pairing all module matches
+            // with all ability matches by global index attaches later
+            // abilities to an earlier module. Walk fields in source order and
+            // keep the most recent module for the following ability fields.
+            ParseFlatLaunchEntries(output, entries);
 
             // Some Harmony releases print bm dump as an indented key/value
             // document instead of JSON. In that form abilityInfos entries are
@@ -1458,6 +1488,36 @@ namespace CSharpIosPerfMonitor
             if (entries.Count == 0)
                 AddLaunchEntry(entries, ParseMainModule(output), ParseMainAbility(output));
             return entries;
+        }
+
+        private static void ParseFlatLaunchEntries(string output, IList<HarmonyLaunchEntryPoint> entries)
+        {
+            string currentModule = "";
+            foreach (string raw in Lines(output))
+            {
+                MatchCollection fields = Regex.Matches(
+                    raw ?? "",
+                    @"(?i)(?:[""']?)(?<key>moduleName|module_name|module\s+name|mainModuleName|main_module_name|main\s+module\s+name|entryModuleName|entry_module_name|entry\s+module\s+name|entryModule|module|mainElementName|mainElement|mainAbility|mainAbilityName|entryAbility|entryAbilityName|abilityName|ability_name|ability\s+name|extensionAbilityName|serviceExtensionAbilityName|formExtensionAbilityName)(?:[""']?)\s*[:=]\s*[""']?(?<value>[A-Za-z][A-Za-z0-9_.$-]*)(?:[""']?)",
+                    RegexOptions.CultureInvariant);
+                foreach (Match field in fields)
+                {
+                    string key = field.Groups["key"].Value;
+                    string value = field.Groups["value"].Value;
+                    if (IsLaunchModuleField(key))
+                    {
+                        currentModule = value;
+                        continue;
+                    }
+                    AddLaunchEntry(entries, currentModule, value);
+                }
+            }
+        }
+
+        private static bool IsLaunchModuleField(string key)
+        {
+            string normalized = NormalizePropertyName(key);
+            return normalized.IndexOf("module", StringComparison.OrdinalIgnoreCase) >= 0
+                && normalized.IndexOf("ability", StringComparison.OrdinalIgnoreCase) < 0;
         }
 
         private static void ParseIndentedLaunchEntries(string output, IList<HarmonyLaunchEntryPoint> entries)
@@ -1586,14 +1646,53 @@ namespace CSharpIosPerfMonitor
 
         private static string NestedJsonPropertyValue(JsonElement node, string container, params string[] names)
         {
-            foreach (JsonProperty property in node.EnumerateObject())
+            if (node.ValueKind == JsonValueKind.Object)
             {
-                if (!string.Equals(NormalizePropertyName(property.Name), NormalizePropertyName(container), StringComparison.OrdinalIgnoreCase)
-                    || property.Value.ValueKind != JsonValueKind.Object) continue;
-                foreach (string name in names ?? new string[0])
+                foreach (JsonProperty property in node.EnumerateObject())
                 {
-                    string value = JsonPropertyValue(property.Value, name);
-                    if (!string.IsNullOrWhiteSpace(value)) return value;
+                    if (IsAbilityInfoCollection(property.Name)) continue;
+                    if (string.Equals(NormalizePropertyName(property.Name), NormalizePropertyName(container), StringComparison.OrdinalIgnoreCase))
+                    {
+                        string value = FindNestedJsonScalar(property.Value, names);
+                        if (!string.IsNullOrWhiteSpace(value)) return value;
+                    }
+                    string nested = NestedJsonPropertyValue(property.Value, container, names);
+                    if (!string.IsNullOrWhiteSpace(nested)) return nested;
+                }
+            }
+            else if (node.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement value in node.EnumerateArray())
+                {
+                    string nested = NestedJsonPropertyValue(value, container, names);
+                    if (!string.IsNullOrWhiteSpace(nested)) return nested;
+                }
+            }
+            return "";
+        }
+
+        private static string FindNestedJsonScalar(JsonElement node, IEnumerable<string> names)
+        {
+            if (node.ValueKind == JsonValueKind.Object)
+            {
+                foreach (string name in names ?? Enumerable.Empty<string>())
+                {
+                    string direct = JsonPropertyValue(node, name);
+                    if (!string.IsNullOrWhiteSpace(direct)) return direct;
+                }
+                foreach (JsonProperty property in node.EnumerateObject())
+                {
+                    if (IsAbilityInfoCollection(property.Name)) continue;
+                    string nested = FindNestedJsonScalar(property.Value, names);
+                    if (!string.IsNullOrWhiteSpace(nested)) return nested;
+                }
+            }
+            else if (node.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement value in node.EnumerateArray())
+                {
+                    string nested = FindNestedJsonScalar(value, names);
+                    if (!string.IsNullOrWhiteSpace(nested)) return nested;
                 }
             }
             return "";
@@ -1783,7 +1882,7 @@ namespace CSharpIosPerfMonitor
                 // the first user returned by HDC.
                 foreach (int userId in users)
                 {
-                    AppInfo instance = CloneHarmonyApp(app);
+                    AppInfo instance = CloneHarmonyApp(app, userId);
                     instance.HarmonyUserId = userId;
                     instance.HarmonyUserIds = new List<int> { userId };
                     expanded.Add(instance);
@@ -1792,26 +1891,32 @@ namespace CSharpIosPerfMonitor
             return expanded;
         }
 
-        private static AppInfo CloneHarmonyApp(AppInfo source)
+        private static AppInfo CloneHarmonyApp(AppInfo source, int userId)
         {
+            bool preserveLiveProcess = source.HarmonyUserId == userId;
             AppInfo copy = new AppInfo
             {
                 BundleId = source.BundleId,
                 Name = source.Name,
                 Version = source.Version,
                 Platform = source.Platform,
-                Recommended = source.Recommended,
+                Recommended = preserveLiveProcess ? source.Recommended : false,
                 Reason = source.Reason,
                 IconKey = source.IconKey,
                 IconPath = source.IconPath,
                 ApkPath = source.ApkPath,
-                ProcessPid = source.ProcessPid,
-                ProcessName = source.ProcessName,
-                IsRunning = source.IsRunning,
+                ProcessPid = 0,
+                ProcessName = "",
+                IsRunning = preserveLiveProcess && source.IsRunning,
                 IsProcessOnly = source.IsProcessOnly,
                 HasLaunchEntry = source.HasLaunchEntry,
                 HarmonyUserId = source.HarmonyUserId
             };
+            if (preserveLiveProcess)
+            {
+                copy.ProcessPid = source.ProcessPid;
+                copy.ProcessName = source.ProcessName;
+            }
             copy.HarmonyUserIds = new List<int>(source.HarmonyUserIds ?? new List<int>());
             copy.HarmonyLaunchEntries = (source.HarmonyLaunchEntries ?? new List<HarmonyLaunchEntryInfo>())
                 .Where(delegate(HarmonyLaunchEntryInfo entry) { return entry != null; })
@@ -1967,12 +2072,43 @@ namespace CSharpIosPerfMonitor
             for (int i = Math.Max(0, start); i < (parts == null ? 0 : parts.Length); i++)
             {
                 string candidate = (parts[i] ?? "").Trim().Trim(',', ';', ':');
-                if (candidate.Length == 0 || candidate == "?" || candidate == "-") continue;
-                if (int.TryParse(candidate, NumberStyles.Integer, CultureInfo.InvariantCulture, out int _)) continue;
-                if (Regex.IsMatch(candidate, @"^\d{1,3}:\d{2}(?::\d{2})?$", RegexOptions.CultureInvariant)) continue;
+                if (IsProcessMetadataToken(candidate)) continue;
                 return i;
             }
             return -1;
+        }
+
+        private static int InferHeaderlessProcessUserId(string[] parts, int pidIndex, int commandIndex)
+        {
+            if (parts == null) return -1;
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (i == pidIndex || (commandIndex >= 0 && i >= commandIndex)) continue;
+                string candidate = (parts[i] ?? "").Trim().Trim(',', ';', ':');
+                if (!IsLikelyProcessUserToken(candidate)) continue;
+                return ParseProcessUserValue(candidate, "uid");
+            }
+            return -1;
+        }
+
+        private static bool IsProcessMetadataToken(string value)
+        {
+            string candidate = (value ?? "").Trim().Trim(',', ';', ':');
+            if (candidate.Length == 0 || candidate == "?" || candidate == "-") return true;
+            if (IsLikelyProcessUserToken(candidate)) return true;
+            if (int.TryParse(candidate, NumberStyles.Integer, CultureInfo.InvariantCulture, out int _)) return true;
+            if (Regex.IsMatch(candidate, @"^\d+(?:\.\d+)?%?$", RegexOptions.CultureInvariant)) return true;
+            if (Regex.IsMatch(candidate, @"^\d{1,3}:\d{2}(?::\d{2})?$", RegexOptions.CultureInvariant)) return true;
+            return Regex.IsMatch(candidate, @"^[RSDTtZWI]$", RegexOptions.CultureInvariant);
+        }
+
+        private static bool IsLikelyProcessUserToken(string value)
+        {
+            string candidate = (value ?? "").Trim();
+            if (Regex.IsMatch(candidate, @"(?i)^u\d+(?:_|$)", RegexOptions.CultureInvariant)) return true;
+            if (Regex.IsMatch(candidate, @"(?i)^(?:uid|user(?:id)?)\s*[:=]", RegexOptions.CultureInvariant)) return true;
+            return int.TryParse(candidate, NumberStyles.Integer, CultureInfo.InvariantCulture, out int numeric)
+                && numeric >= 100000;
         }
 
         private static string ProcessNameFromCommand(string command)

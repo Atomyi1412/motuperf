@@ -344,7 +344,7 @@ namespace MoTuPerf.Desktop.Tests
             string version = project.Descendants("Version").Single().Value;
             string[] components = version.Split('.');
 
-            Assert.Equal("0.38.13", version);
+            Assert.Equal("0.38.18", version);
             Assert.Equal(3, components.Length);
             Assert.All(components, component => Assert.True(int.TryParse(component, out _)));
             Assert.DoesNotContain("-", version);
@@ -357,6 +357,17 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Contains("MoTuPerf-v" + version + "-osx-arm64.dmg", macReadme);
             Assert.DoesNotContain("v" + version + "-", viewModel, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("preview", macBuild, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void HarmonyCaptureCarriesTargetIdentityToTheHdcRunner()
+        {
+            string viewModel = LoadText("src", "MoTuPerf.Desktop", "MainWindowViewModel.cs");
+            string collector = LoadText("src", "MoTuPerf.Platform", "Shared", "PerfCollector.cs");
+            Assert.Contains("TargetHarmonyUserId = process.HarmonyUserId", viewModel);
+            Assert.Contains("\"--target-bundle-id\"", collector);
+            Assert.Contains("\"--target-user-id\"", collector);
+            Assert.Contains("\"--target-start-time-ticks\"", collector);
         }
 
         [Fact]
@@ -478,9 +489,11 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Equal("更新日志", Attribute(changelog.Root, "Title"));
             Assert.Contains(changelog.Descendants(Avalonia + "Border"), border => Attribute(border, "Classes") == "secondaryWindowFrame");
             string changelogText = string.Join(" ", changelog.Descendants(Avalonia + "TextBlock").Select(element => Attribute(element, "Text")));
-            Assert.Contains("v0.38.13", changelogText);
-            Assert.Contains("v0.38.12", changelogText);
-            Assert.Contains("v0.38.11", changelogText);
+            Assert.Contains("v0.38.18", changelogText);
+            Assert.Contains("v0.38.17", changelogText);
+            Assert.Contains("v0.38.16", changelogText);
+            Assert.DoesNotContain("v0.38.14", changelogText);
+            Assert.DoesNotContain("v0.38.11", changelogText);
             Assert.DoesNotContain("v0.38.9", changelogText);
             Assert.DoesNotContain("v0.38.7", changelogText);
             Assert.DoesNotContain("v0.38.2", changelogText);

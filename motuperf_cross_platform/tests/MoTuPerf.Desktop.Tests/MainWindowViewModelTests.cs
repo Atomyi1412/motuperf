@@ -214,6 +214,8 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Equal("仅运行中可采集", apps[0].LaunchAvailability);
             Assert.Equal(new[] { 100 }, apps[0].HarmonyUserIds);
             Assert.True(apps[0].Recommended);
+            Assert.Equal(0, apps[0].ProcessPid);
+            Assert.Empty(apps[0].ProcessName);
         }
 
         [Fact]
@@ -244,6 +246,28 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Equal(2, apps.Count);
             Assert.Contains(apps, app => app.BundleId == "com.example.game" && app.HarmonyUserId == 0);
             Assert.Contains(apps, app => app.BundleId == "com.example.game" && app.HarmonyUserId == 100);
+        }
+
+        [Fact]
+        public void HarmonyProcessFallbackBindsPidOnlyWhenBundleProfileIsUnique()
+        {
+            List<AppInfo> apps = DevicePickerWindow.HarmonyAppsFromProcesses(new[]
+            {
+                new ProcessInfo
+                {
+                    Pid = 713,
+                    Name = "com.example.single",
+                    DisplayName = "Single App",
+                    BundleId = "com.example.single",
+                    Platform = "harmony",
+                    HarmonyUserId = 100
+                }
+            });
+
+            AppInfo app = Assert.Single(apps);
+            Assert.Equal(713, app.ProcessPid);
+            Assert.Equal("com.example.single", app.ProcessName);
+            Assert.Equal(100, app.HarmonyUserId);
         }
 
         [Fact]
@@ -367,6 +391,26 @@ namespace MoTuPerf.Desktop.Tests
 
             Assert.Equal(1101, DevicePickerWindow.FindHarmonyProcessForApp(processes, workApp).Pid);
             Assert.Null(DevicePickerWindow.FindHarmonyProcessForBundle(processes, "com.example.shared", 200));
+        }
+
+        [Fact]
+        public void HarmonyAppRestoreDoesNotFallBackAcrossUsers()
+        {
+            var apps = new AppInfo[]
+            {
+                new AppInfo { BundleId = "com.example.shared", HarmonyUserId = 0, Platform = "harmony" },
+                new AppInfo { BundleId = "com.example.shared", HarmonyUserId = 100, Platform = "harmony" }
+            };
+
+            Assert.Equal(100, DevicePickerWindow.FindHarmonyAppByBundle(apps, "com.example.shared", 100).HarmonyUserId);
+            Assert.Null(DevicePickerWindow.FindHarmonyAppByBundle(apps, "com.example.shared", 200));
+            Assert.Null(DevicePickerWindow.FindHarmonyAppByBundle(apps, "com.example.shared", -1));
+
+            var singleProfile = new[]
+            {
+                new AppInfo { BundleId = "com.example.single", HarmonyUserId = -1, Platform = "harmony" }
+            };
+            Assert.NotNull(DevicePickerWindow.FindHarmonyAppByBundle(singleProfile, "com.example.single", -1));
         }
 
         [Fact]

@@ -221,7 +221,7 @@ namespace CSharpIosPerfMonitor
             }
             string androidFpsTarget = string.IsNullOrWhiteSpace(config.TargetName) ? config.BundleId : config.TargetName;
             List<string> args = isHarmony
-                ? new List<string> { runner, "--hdc", transport, "--serial", config.Udid, "--pid", targetPid.ToString(CultureInfo.InvariantCulture), "--target-name", config.TargetName ?? "", "--target-start-time-ticks", config.TargetHarmonyStartTimeTicks.ToString(CultureInfo.InvariantCulture), "--interval", "1" }
+                ? new List<string> { runner, "--hdc", transport, "--serial", config.Udid, "--pid", targetPid.ToString(CultureInfo.InvariantCulture), "--target-name", config.TargetName ?? "", "--target-bundle-id", config.BundleId ?? "", "--target-user-id", config.TargetHarmonyUserId.ToString(CultureInfo.InvariantCulture), "--target-start-time-ticks", config.TargetHarmonyStartTimeTicks.ToString(CultureInfo.InvariantCulture), "--interval", "1" }
                 : isAndroid
                 ? new List<string> { runner, "--adb", RuntimeTools.AdbExecutable, "--serial", config.Udid, "--pid", targetPid.ToString(CultureInfo.InvariantCulture), "--package", androidFpsTarget, "--target-name", config.TargetName ?? "", "--target-start-time-ticks", config.TargetAndroidStartTimeTicks.ToString(CultureInfo.InvariantCulture), "--interval", "1" }
                 : new List<string>

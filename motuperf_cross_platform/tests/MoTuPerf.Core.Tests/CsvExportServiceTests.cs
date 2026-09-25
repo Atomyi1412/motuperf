@@ -116,6 +116,25 @@ namespace MoTuPerf.Core.Tests
         }
 
         [Fact]
+        public void HarmonyExportPreservesTargetProfileAndDeviceIdentity()
+        {
+            SessionDocument document = CreateDocument();
+            document.Device = new DeviceInfo { Platform = "harmony", Udid = "HARMONY-123", MarketName = "Harmony device" };
+            document.App = new AppInfo { Platform = "harmony", BundleId = "com.example.harmony", Name = "Harmony game" };
+            document.SelectedBundleId = "com.example.harmony";
+            document.Process = new ProcessInfo
+            {
+                Platform = "harmony", Pid = 808, Name = "com.example.harmony:main", BundleId = "com.example.harmony",
+                HarmonyUserId = 100, HarmonyStartTimeTicks = 3210
+            };
+
+            string csv = CsvExportService.Build(document);
+
+            Assert.Contains("Platform,DeviceSerial,TargetBundle,HarmonyUserId,HarmonyStartTimeTicks,TargetPid", csv);
+            Assert.Contains("HarmonyOS,HARMONY-123,com.example.harmony,100,3210,808", csv);
+        }
+
+        [Fact]
         public void RawDetailExportKeepsEveryOriginalTimestampAndRow()
         {
             SessionDocument document = CreateDocument();

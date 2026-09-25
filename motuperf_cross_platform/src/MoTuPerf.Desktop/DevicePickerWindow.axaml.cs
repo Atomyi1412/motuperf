@@ -303,12 +303,18 @@ namespace MoTuPerf.Desktop
                 _apps.AddRange(loadedApps);
                 _processes.Clear();
                 _processes.AddRange(loadedProcesses);
-                AppInfo selectedApp = FindAppByBundle(_preferredAppBundleId, _preferredHarmonyUserId)
-                    ?? FindInitialApp()
-                    ?? (previousApp == null ? null : _apps.FirstOrDefault(delegate(AppInfo app) { return SameAppSelection(app, previousApp); }))
-                    ?? _apps.FirstOrDefault(delegate(AppInfo app) { return app.Recommended; })
-                    ?? _apps.FirstOrDefault(delegate(AppInfo app) { return !string.IsNullOrWhiteSpace(app.BundleId); })
-                    ?? _apps.FirstOrDefault();
+                bool preserveHarmonyAppPreference = DeviceLookupService.IsHarmony(device)
+                    && !string.IsNullOrWhiteSpace(_preferredAppBundleId);
+                AppInfo selectedApp = FindAppByBundle(_preferredAppBundleId, _preferredHarmonyUserId);
+                if (!preserveHarmonyAppPreference)
+                {
+                    selectedApp = selectedApp
+                        ?? FindInitialApp()
+                        ?? (previousApp == null ? null : _apps.FirstOrDefault(delegate(AppInfo app) { return SameAppSelection(app, previousApp); }))
+                        ?? _apps.FirstOrDefault(delegate(AppInfo app) { return app.Recommended; })
+                        ?? _apps.FirstOrDefault(delegate(AppInfo app) { return !string.IsNullOrWhiteSpace(app.BundleId); })
+                        ?? _apps.FirstOrDefault();
+                }
                 ProcessInfo selectedProcess = FindProcessForApp(selectedApp);
                 if (selectedProcess == null && (!DeviceLookupService.IsHarmony(device) || selectedApp == null))
                 {
@@ -358,21 +364,39 @@ namespace MoTuPerf.Desktop
         {
             List<AppInfo> apps = new List<AppInfo>();
             HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (ProcessInfo process in processes ?? Enumerable.Empty<ProcessInfo>())
+            List<ProcessInfo> validProcesses = (processes ?? Enumerable.Empty<ProcessInfo>())
+                .Where(delegate(ProcessInfo process)
+                {
+                    return ProcessTargetMatcher.IsValidTarget(process)
+                        && DeviceLookupService.IsHarmony(process.Platform);
+                })
+                .ToList();
+            Dictionary<string, int> processCounts = validProcesses
+                .GroupBy(delegate(ProcessInfo process)
+                {
+                    string bundle = FirstNonEmpty(process.BundleId, process.OwnerBundleId);
+                    return string.IsNullOrWhiteSpace(bundle)
+                        ? "pid:" + process.Pid.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                        : "bundle:" + bundle + ":user:" + process.HarmonyUserId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                }, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    delegate(IGrouping<string, ProcessInfo> group) { return group.Key; },
+                    delegate(IGrouping<string, ProcessInfo> group) { return group.Count(); },
+                    StringComparer.OrdinalIgnoreCase);
+            foreach (ProcessInfo process in validProcesses)
             {
-                if (!ProcessTargetMatcher.IsValidTarget(process)
-                    || !DeviceLookupService.IsHarmony(process.Platform)) continue;
                 string bundle = FirstNonEmpty(process.BundleId, process.OwnerBundleId);
                 string key = string.IsNullOrWhiteSpace(bundle)
                     ? "pid:" + process.Pid.ToString(System.Globalization.CultureInfo.InvariantCulture)
                     : "bundle:" + bundle + ":user:" + process.HarmonyUserId.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 if (!seen.Add(key)) continue;
+                bool uniqueProcess = processCounts[key] == 1;
                 AppInfo app = new AppInfo
                 {
                     BundleId = bundle,
                     Name = FirstNonEmpty(process.DisplayName, process.Name, bundle),
-                    ProcessPid = string.IsNullOrWhiteSpace(bundle) ? process.Pid : 0,
-                    ProcessName = string.IsNullOrWhiteSpace(bundle) ? process.Name : "",
+                    ProcessPid = uniqueProcess ? process.Pid : 0,
+                    ProcessName = uniqueProcess ? process.Name : "",
                     Platform = "harmony",
                     Recommended = process.Recommended,
                     Reason = string.IsNullOrWhiteSpace(bundle)
@@ -648,17 +672,32 @@ namespace MoTuPerf.Desktop
 
         private AppInfo FindAppByBundle(string bundle, int harmonyUserId)
         {
+            return FindHarmonyAppByBundle(_apps, bundle, harmonyUserId);
+        }
+
+        internal static AppInfo FindHarmonyAppByBundle(
+            IEnumerable<AppInfo> apps,
+            string bundle,
+            int harmonyUserId)
+        {
             if (string.IsNullOrWhiteSpace(bundle)) return null;
-            List<AppInfo> matches = _apps.Where(delegate(AppInfo app)
-            {
-                return app != null && string.Equals(app.BundleId, bundle, StringComparison.OrdinalIgnoreCase);
-            }).ToList();
+            List<AppInfo> matches = (apps ?? Enumerable.Empty<AppInfo>())
+                .Where(delegate(AppInfo app)
+                {
+                    return app != null && string.Equals(app.BundleId, bundle, StringComparison.OrdinalIgnoreCase);
+                })
+                .ToList();
             if (harmonyUserId >= 0)
             {
-                AppInfo userMatch = matches.FirstOrDefault(delegate(AppInfo app) { return app.HarmonyUserId == harmonyUserId; });
-                if (userMatch != null) return userMatch;
+                // A requested profile is part of the target identity. If it
+                // is no longer present after refresh, leave the selection
+                // unresolved instead of silently switching profiles.
+                return matches.FirstOrDefault(delegate(AppInfo app) { return app.HarmonyUserId == harmonyUserId; });
             }
-            return matches.FirstOrDefault();
+            if (matches.Count == 1) return matches[0];
+            return matches.Any(delegate(AppInfo app) { return DeviceLookupService.IsHarmony(app.Platform); })
+                ? null
+                : matches.FirstOrDefault();
         }
 
         private ProcessInfo FindProcessForApp(AppInfo app)

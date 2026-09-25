@@ -63,6 +63,8 @@ namespace CSharpIosPerfMonitor
                 { "bundle_id", config == null ? "" : config.BundleId ?? "" },
                 { "target_name", config == null ? "" : config.TargetName ?? "" },
                 { "target_pid", config == null || !config.TargetPid.HasValue ? 0 : config.TargetPid.Value },
+                { "target_harmony_user_id", config == null ? -1 : config.TargetHarmonyUserId },
+                { "target_harmony_start_time_ticks", config == null ? 0 : config.TargetHarmonyStartTimeTicks },
                 { "target_owner_pid", config == null ? 0 : config.TargetOwnerPid },
                 { "runner", runner ?? "" },
                 { "runner_path", runnerPath ?? "" },

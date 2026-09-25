@@ -23,6 +23,7 @@ class ProcessSnapshot:
     memory_mb: float | None
     memory_metric: str
     memory_source: str = ""
+    name_source: str = "cmdline"
 
 
 class HdcFailure(RuntimeError):
@@ -98,11 +99,13 @@ def parse_snapshot(text: str, pid: int) -> ProcessSnapshot | None:
     stat_text = data.get("__MOTUPERF_STAT__", "")
     identity = proc_stat(stat_text, pid)
     name = data.get("__MOTUPERF_NAME__", "").split("\x00", 1)[0].strip()
+    name_source = "cmdline"
     if not name:
         # Some system or restricted processes expose an empty cmdline while
         # /proc/<pid>/stat remains readable. The comm field is still the
         # device-reported process identity and is safe for PID reuse checks.
         name = proc_stat_name(stat_text, pid)
+        name_source = "comm"
     if identity is None or not name:
         return None
     cores: list[tuple[int, int, int]] = []
@@ -130,7 +133,18 @@ def parse_snapshot(text: str, pid: int) -> ProcessSnapshot | None:
             memory, metric = int(match[1]) / 1024.0, label
             break
     source = "hdc-proc-smaps-rollup" if metric == "pss" else "hdc-proc-status" if metric else ""
-    return ProcessSnapshot(pid, name, identity[0], identity[1], tuple(sorted(cores)), memory, metric, source)
+    return ProcessSnapshot(pid, name, identity[0], identity[1], tuple(sorted(cores)), memory, metric, source, name_source)
+
+
+def target_name_matches(snapshot: ProcessSnapshot, expected: str) -> bool:
+    """Match a selected process without confusing a truncated comm for another PID."""
+    expected = (expected or "").strip()
+    if not expected or snapshot.name == expected:
+        return True
+    # Linux TASK_COMM_LEN exposes at most 15 visible characters. Only accept
+    # a prefix when cmdline was unavailable and the value has that exact
+    # truncation length; PID and start-time checks still guard the process.
+    return snapshot.name_source == "comm" and len(snapshot.name) == 15 and expected.startswith(snapshot.name)
 
 
 def parse_hidumper_cpu(text: str, pid: int) -> float | None:
@@ -205,6 +219,18 @@ def parse_temperatures(text: str) -> dict[str, float]:
     return result
 
 
+def provenance(args: argparse.Namespace, pid: int | None = None) -> dict[str, object]:
+    return {
+        "platform": "harmony",
+        "device_serial": args.serial,
+        "bundle_id": args.target_bundle_id,
+        "target_name": args.target_name,
+        "user_id": args.target_user_id,
+        "target_start_time_ticks": args.target_start_time_ticks,
+        "pid": args.pid if pid is None else pid,
+    }
+
+
 def collect(args: argparse.Namespace, hdc: Hdc) -> int:
     previous: ProcessSnapshot | None = None
     bound_start = args.target_start_time_ticks
@@ -215,7 +241,7 @@ def collect(args: argparse.Namespace, hdc: Hdc) -> int:
     def notice(code: str, message: str) -> None:
         if code not in notices:
             notices.add(code)
-            emit("status", {"code": code, "message": message, "platform": "harmony"})
+            emit("status", {**provenance(args), "code": code, "message": message})
 
     if not args.no_fps:
         notice("harmony_frame_source_unavailable", "鸿蒙：尚未验证目标应用的显示帧源，FPS、FrameTime、Jank/BigJank 暂不可用。")
@@ -229,7 +255,7 @@ def collect(args: argparse.Namespace, hdc: Hdc) -> int:
             if current is None:
                 # A successful shell with unreadable /proc is not proof of process exit.
                 raise HdcFailure("无法读取目标进程身份或 /proc 权限受限，请解锁并检查 HDC 调试授权")
-            if args.target_name and current.name != args.target_name:
+            if not target_name_matches(current, args.target_name):
                 raise TargetChanged("所选 PID 已属于其他进程，请重新选择。")
             if bound_start and current.start_ticks != bound_start:
                 raise TargetChanged("目标进程已退出或重启，请重新选择当前进程。")
@@ -262,33 +288,33 @@ def collect(args: argparse.Namespace, hdc: Hdc) -> int:
                 raise TargetChanged("采样期间 PID 被复用，本次数据已丢弃。")
             if not bound_start or previous is None:
                 bound_start = current.start_ticks
-                emit("target", {"pid": args.pid, "confirmed": True, "platform": "harmony"})
+                emit("target", {**provenance(args, args.pid), "confirmed": True})
             failures = 0
             if not args.no_cpu:
                 if cpu is not None:
-                    emit("cpu", cpu)
+                    emit("cpu", {**provenance(args, current.pid), **cpu})
                 else:
                     notice("harmony_cpu_unavailable", "鸿蒙：CPU 计数器不可读或已变化，等待有效计数区间。")
             previous = current
             if not args.no_memory:
                 if current.memory_mb is not None:
-                    emit("memory", {"value": current.memory_mb, "metric": current.memory_metric, "unit": "MB",
-                                    "pid": args.pid, "platform": "harmony", "scope": "process",
+                    emit("memory", {**provenance(args, args.pid), "value": current.memory_mb,
+                                    "metric": current.memory_metric, "unit": "MB", "scope": "process",
                                     "source": current.memory_source,
                                     "fallback": current.memory_metric == "rss"})
                 else:
                     notice("harmony_memory_unavailable", "鸿蒙：所选 PID 内存数据不可读，内存保持缺测。")
         except TargetChanged as exc:
-            emit("target", {"pid": args.pid, "confirmed": False})
-            emit("fatal", {"code": "harmony_target_changed", "message": str(exc)})
+            emit("target", {**provenance(args), "confirmed": False})
+            emit("fatal", {**provenance(args), "code": "harmony_target_changed", "message": str(exc)})
             return 2
         except HdcFailure as exc:
             previous = None
             failures += 1
-            emit("target", {"pid": args.pid, "confirmed": False})
-            emit("status", {"code": "harmony_probe_failed", "message": "鸿蒙采集连接或进程校验失败：" + str(exc)})
+            emit("target", {**provenance(args), "confirmed": False})
+            emit("status", {**provenance(args), "code": "harmony_probe_failed", "message": "鸿蒙采集连接或进程校验失败：" + str(exc)})
             if failures >= 3:
-                emit("fatal", {"code": "harmony_target_unavailable", "message": "连续三次无法校验鸿蒙设备/目标进程：" + str(exc)})
+                emit("fatal", {**provenance(args), "code": "harmony_target_unavailable", "message": "连续三次无法校验鸿蒙设备/目标进程：" + str(exc)})
                 return 2
         if failures == 0 and not args.no_temperature and time.monotonic() >= next_temperature:
             next_temperature = time.monotonic() + 5.0
@@ -298,7 +324,7 @@ def collect(args: argparse.Namespace, hdc: Hdc) -> int:
                                 "printf '|'; cat \"$z/temp\"; printf '\\n'; done", timeout=3.0)
                 values = parse_temperatures(raw)
                 if values:
-                    emit("temperature", {"values": values, "source": "hdc-sysfs-thermal-millidegrees", "scope": "device", "platform": "harmony"})
+                    emit("temperature", {**provenance(args), "values": values, "source": "hdc-sysfs-thermal-millidegrees", "scope": "device"})
                 else:
                     notice("harmony_temperature_unavailable", "鸿蒙：未读取到可用温度传感器，温度保持缺测。")
             except HdcFailure as exc:
@@ -312,6 +338,8 @@ def main() -> int:
     parser.add_argument("--serial", required=True)
     parser.add_argument("--pid", type=int, required=True)
     parser.add_argument("--target-name", default="")
+    parser.add_argument("--target-bundle-id", default="")
+    parser.add_argument("--target-user-id", type=int, default=-1)
     parser.add_argument("--target-start-time-ticks", type=int, default=0)
     parser.add_argument("--interval", type=float, default=1.0)
     for metric in ("fps", "cpu", "memory", "temperature", "thermal-state"):

@@ -213,6 +213,59 @@ namespace MoTuPerf.Platform.Tests
         }
 
         [Fact]
+        public async Task MergesEveryHarmonyInventorySourceIntoSelectableTargets()
+        {
+            Task<ProcessResult> ExecuteFakeHdcAsync(
+                string serial,
+                string[] command,
+                int timeoutMs,
+                CancellationToken token)
+            {
+                string key = string.Join(" ", command ?? Array.Empty<string>());
+                if (key == "pm list users" || key == "cmd user list")
+                    return Task.FromResult(new ProcessResult(0,
+                        "UserInfo{0:Owner:13} running\nUserInfo{100:Work:13} running\n", ""));
+                if (key == "bm dump -a")
+                    return Task.FromResult(new ProcessResult(0,
+                        "{\"bundleName\":\"com.example.native\",\"userId\":0,"
+                        + "\"versionName\":\"1.0\",\"hapModuleInfos\":[{\"moduleName\":\"entry\","
+                        + "\"mainElementName\":\"EntryAbility\"}]}\n", ""));
+                if (key.StartsWith("bm dump -a ", StringComparison.Ordinal))
+                {
+                    if (key.Contains(" 100", StringComparison.Ordinal))
+                        return Task.FromResult(new ProcessResult(0,
+                            "{\"bundleName\":\"com.example.stopped\",\"userId\":100,\"versionName\":\"2.0\"}\n", ""));
+                    return Task.FromResult(new ProcessResult(0, "", ""));
+                }
+                if (key.StartsWith("pm list packages", StringComparison.Ordinal)
+                    || key.StartsWith("cmd package list packages", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(0,
+                        "package:/system/app/com.example.system/base.apk\npackage:com.example.compat\n", ""));
+                if (key == "ps -A -o UID,PID,PPID,ARGS")
+                    return Task.FromResult(new ProcessResult(0,
+                        "UID PID PPID ARGS\n"
+                        + "u0 501 1 com.example.native\n"
+                        + "u100_a1 502 1 com.example.compat:render\n"
+                        + "u100_a2 503 1 foundation\n", ""));
+                if (key.StartsWith("ps", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(0,
+                        "PID ARGS\n501 com.example.native\n502 com.example.compat:render\n503 foundation\n", ""));
+                if (key.StartsWith("sh -c ", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(0, "", ""));
+                return Task.FromResult(new ProcessResult(0, "", ""));
+            }
+
+            var service = new HarmonyLookupService(ExecuteFakeHdcAsync);
+            List<AppInfo> apps = await service.ListAppsAsync("HARMONY-ALL", CancellationToken.None);
+
+            Assert.Contains(apps, app => app.BundleId == "com.example.native" && app.HarmonyUserId == 0);
+            Assert.Contains(apps, app => app.BundleId == "com.example.system");
+            Assert.Contains(apps, app => app.BundleId == "com.example.compat" && app.HarmonyUserId == 100);
+            Assert.Contains(apps, app => app.BundleId == "com.example.stopped" && app.HarmonyUserId == 100 && !app.IsRunning);
+            Assert.Contains(apps, app => string.IsNullOrWhiteSpace(app.BundleId) && app.ProcessPid == 503 && app.IsProcessOnly);
+        }
+
+        [Fact]
         public void ParsesBareCompatibilityPackagesAndDiagnosticsFromEitherStream()
         {
             Assert.Equal(new[] { "com.example.bare", "com.example.uid" }, HarmonyLookupService.ParseAndroidPackages(
@@ -492,6 +545,23 @@ namespace MoTuPerf.Platform.Tests
         }
 
         [Fact]
+        public void DoesNotPairFlatAbilityFieldsWithAnEarlierModuleWhenAliasesRepeat()
+        {
+            string output = "moduleName: entry\n"
+                + "entryModuleName: entry\n"
+                + "abilityName: EntryAbility\n"
+                + "moduleName: feature\n"
+                + "abilityName: FeatureAbility\n";
+
+            var entries = HarmonyLookupService.ParseLaunchEntryPoints(output);
+
+            Assert.Equal(2, entries.Count);
+            Assert.Contains(entries, entry => entry.Module == "entry" && entry.Ability == "EntryAbility");
+            Assert.Contains(entries, entry => entry.Module == "feature" && entry.Ability == "FeatureAbility");
+            Assert.DoesNotContain(entries, entry => entry.Module == "entry" && entry.Ability == "FeatureAbility");
+        }
+
+        [Fact]
         public void MergesProcessViewsByPidAndKeepsTheMostCompleteIdentity()
         {
             var first = HarmonyLookupService.ParseProcesses(
@@ -575,6 +645,32 @@ namespace MoTuPerf.Platform.Tests
         }
 
         [Fact]
+        public void ParsesBundleRecordsWithOnlyNameAndLabelAndNestedApplicationArrays()
+        {
+            var apps = HarmonyLookupService.ParseApps(
+                "{\"bundleInfo\":{\"name\":\"com.example.labelonly\",\"label\":\"Label Only\"}}\n"
+                + "{\"bundleName\":\"com.example.arrayinfo\",\"applicationInfo\":[{"
+                + "\"label\":\"Array App\",\"versionName\":\"4.2\"}]}\n");
+
+            AppInfo labelOnly = Assert.Single(apps, app => app.BundleId == "com.example.labelonly");
+            Assert.Equal("Label Only", labelOnly.Name);
+            AppInfo arrayInfo = Assert.Single(apps, app => app.BundleId == "com.example.arrayinfo");
+            Assert.Equal("Array App", arrayInfo.Name);
+            Assert.Equal("4.2", arrayInfo.Version);
+        }
+
+        [Fact]
+        public void DoesNotUseNestedAbilityNameAsApplicationDisplayName()
+        {
+            var apps = HarmonyLookupService.ParseApps(
+                "{\"bundleName\":\"com.example.abilityowner\",\"applicationInfo\":{"
+                + "\"abilityInfos\":[{\"name\":\"com.example.abilityowner.EntryAbility\"}]}}\n");
+
+            AppInfo app = Assert.Single(apps);
+            Assert.Equal("com.example.abilityowner", app.Name);
+        }
+
+        [Fact]
         public void TreatsEmbeddedNumericUidAsItsHarmonyProfile()
         {
             var apps = HarmonyLookupService.ParseApps(
@@ -653,6 +749,20 @@ namespace MoTuPerf.Platform.Tests
             Assert.Equal(2, rows.Count);
             Assert.Equal("com.example.native", rows.Single(row => row.Pid == 501).BundleId);
             Assert.Equal("com.example.compat", rows.Single(row => row.Pid == 502).BundleId);
+        }
+
+        [Fact]
+        public void ParsesHeaderlessPidFirstUserAndPlainProcessName()
+        {
+            var rows = HarmonyLookupService.ParseProcesses(
+                "801 u100_a1 1 worker_service --mode=render\n"
+                + "u200_a2 802 1 plain_service\n", "device");
+
+            Assert.Equal(2, rows.Count);
+            Assert.Equal("worker_service", rows.Single(row => row.Pid == 801).Name);
+            Assert.Equal(100, rows.Single(row => row.Pid == 801).HarmonyUserId);
+            Assert.Equal("plain_service", rows.Single(row => row.Pid == 802).Name);
+            Assert.Equal(200, rows.Single(row => row.Pid == 802).HarmonyUserId);
         }
 
         [Fact]
@@ -812,6 +922,76 @@ namespace MoTuPerf.Platform.Tests
             Assert.True(result.OwnershipVerified);
             Assert.True(result.ForegroundApplication);
             Assert.True(result.Recommended);
+        }
+
+        [Fact]
+        public void KeepsPidAndNameWhenKnownBundleOnlyAppearsForAnotherHarmonyUser()
+        {
+            var apps = new List<AppInfo>
+            {
+                new AppInfo
+                {
+                    BundleId = "com.example.shared",
+                    Name = "Shared App",
+                    Platform = "harmony",
+                    HarmonyUserId = 0,
+                    HarmonyUserIds = new List<int> { 0 }
+                }
+            };
+            var processes = HarmonyLookupService.ParseProcesses(
+                "UID PID PPID ARGS\n"
+                + "u100_a123 1702 1 com.example.shared:worker\n", "device");
+
+            HarmonyLookupService.MergeProcessApps(apps, processes);
+
+            AppInfo workProcess = Assert.Single(apps, app => app.HarmonyUserId == 100);
+            Assert.Equal("com.example.shared", workProcess.BundleId);
+            Assert.Equal(1702, workProcess.ProcessPid);
+            Assert.Equal("com.example.shared:worker", workProcess.ProcessName);
+            Assert.True(workProcess.IsRunning);
+            Assert.True(workProcess.IsProcessOnly);
+            Assert.Equal(new[] { 100 }, workProcess.HarmonyUserIds);
+        }
+
+        [Fact]
+        public void ClearsProcessOnlyPidWhenAnotherProcessAppearsForTheSameUser()
+        {
+            var apps = new List<AppInfo>
+            {
+                new AppInfo
+                {
+                    BundleId = "com.example.shared",
+                    Platform = "harmony",
+                    HarmonyUserId = 0,
+                    HarmonyUserIds = new List<int> { 0 }
+                }
+            };
+            ProcessInfo[] processes =
+            {
+                new ProcessInfo
+                {
+                    Pid = 1703,
+                    Name = "com.example.shared:render",
+                    BundleId = "com.example.shared",
+                    Platform = "harmony",
+                    HarmonyUserId = 100
+                },
+                new ProcessInfo
+                {
+                    Pid = 1704,
+                    Name = "com.example.shared:worker",
+                    BundleId = "com.example.shared",
+                    Platform = "harmony",
+                    HarmonyUserId = 100
+                }
+            };
+
+            HarmonyLookupService.MergeProcessApps(apps, processes);
+
+            AppInfo workProcess = Assert.Single(apps, app => app.HarmonyUserId == 100);
+            Assert.Equal(0, workProcess.ProcessPid);
+            Assert.Empty(workProcess.ProcessName);
+            Assert.True(workProcess.IsProcessOnly);
         }
 
         [Fact]
@@ -1388,6 +1568,93 @@ namespace MoTuPerf.Platform.Tests
             Assert.Contains(rows, row => row.TargetIdentifier == "com.example.shared · 用户 0");
             Assert.Contains(rows, row => row.TargetIdentifier == "com.example.shared · 用户 100");
             Assert.All(rows, row => Assert.Contains(row.HarmonyLaunchEntries, entry => entry.Ability == "EntryAbility"));
+        }
+
+        [Fact]
+        public void DoesNotCopyLiveProcessBindingToAnotherHarmonyUserInstance()
+        {
+            var source = new List<AppInfo>
+            {
+                new AppInfo
+                {
+                    BundleId = "com.example.shared",
+                    Platform = "harmony",
+                    HarmonyUserId = 0,
+                    HarmonyUserIds = new List<int> { 0, 100 },
+                    ProcessPid = 701,
+                    ProcessName = "com.example.shared",
+                    IsRunning = true,
+                    IsProcessOnly = true
+                }
+            };
+
+            List<AppInfo> rows = HarmonyLookupService.ExpandHarmonyUserInstances(source);
+
+            AppInfo owner = Assert.Single(rows, row => row.HarmonyUserId == 0);
+            AppInfo work = Assert.Single(rows, row => row.HarmonyUserId == 100);
+            Assert.Equal(701, owner.ProcessPid);
+            Assert.Equal("com.example.shared", owner.ProcessName);
+            Assert.Equal(0, work.ProcessPid);
+            Assert.Empty(work.ProcessName);
+            Assert.False(work.IsRunning);
+            Assert.True(work.IsProcessOnly);
+        }
+
+        [Fact]
+        public void BindsAnExplicitProcessUserToTheOnlyUnscopedBundleRow()
+        {
+            var apps = new List<AppInfo>
+            {
+                new AppInfo
+                {
+                    BundleId = "com.example.unscoped",
+                    Platform = "harmony",
+                    Name = "Unscoped App"
+                }
+            };
+            var processes = HarmonyLookupService.ParseProcesses(
+                "UID PID PPID ARGS\n"
+                + "u100_a1 801 1 com.example.unscoped\n", "device");
+
+            HarmonyLookupService.MergeProcessApps(apps, processes);
+
+            AppInfo app = Assert.Single(apps);
+            Assert.Equal(100, app.HarmonyUserId);
+            Assert.Equal(new[] { 100 }, app.HarmonyUserIds);
+            Assert.True(app.IsRunning);
+            Assert.False(app.IsProcessOnly);
+        }
+
+        [Fact]
+        public async Task PrefersEmbeddedBundleUserOverTheScopedCommandUser()
+        {
+            Task<ProcessResult> ExecuteFakeHdcAsync(
+                string serial,
+                string[] command,
+                int timeoutMs,
+                CancellationToken token)
+            {
+                string key = string.Join(" ", command ?? Array.Empty<string>());
+                if (key == "pm list users")
+                    return Task.FromResult(new ProcessResult(0,
+                        "UserInfo{0:Owner:13} running\nUserInfo{100:Work:13} running\n", ""));
+                if (key.StartsWith("bm dump -a", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(0,
+                        "{\"bundleName\":\"com.example.embeddeduser\",\"userId\":100}\n", ""));
+                if (key.StartsWith("pm list packages", StringComparison.Ordinal)
+                    || key.StartsWith("cmd package list packages", StringComparison.Ordinal)
+                    || key.StartsWith("ps", StringComparison.Ordinal)
+                    || key.StartsWith("sh -c ", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(0, "", ""));
+                return Task.FromResult(new ProcessResult(1, "", "unsupported fake HDC command"));
+            }
+
+            var service = new HarmonyLookupService(ExecuteFakeHdcAsync);
+            List<AppInfo> apps = await service.ListAppsAsync("HARMONY-1", CancellationToken.None);
+
+            AppInfo app = Assert.Single(apps, candidate => candidate.BundleId == "com.example.embeddeduser");
+            Assert.Equal(100, app.HarmonyUserId);
+            Assert.Equal(new[] { 100 }, app.HarmonyUserIds);
         }
 
         [Fact]

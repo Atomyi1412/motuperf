@@ -54,6 +54,8 @@ namespace MoTuPerf.Platform.Tests
                         BundleId = "com.example.game",
                         TargetName = "GameWebContent",
                         TargetPid = 42,
+                        TargetHarmonyUserId = 100,
+                        TargetHarmonyStartTimeTicks = 987654,
                         ScreenshotIntervalSec = 3
                     }, "pyidevice metrics runner", "pid_perf_runner.py");
                     log.WriteEvent("runner_fatal", "token=super-secret; device communication failed", "pid_lost");
@@ -67,6 +69,8 @@ namespace MoTuPerf.Platform.Tests
                 Assert.Equal("capture_started", start.RootElement.GetProperty("event").GetString());
                 Assert.Equal("1234...cdef", start.RootElement.GetProperty("fields").GetProperty("device").GetString());
                 Assert.Equal(3, start.RootElement.GetProperty("fields").GetProperty("screenshot_interval_sec").GetInt32());
+                Assert.Equal(100, start.RootElement.GetProperty("fields").GetProperty("target_harmony_user_id").GetInt32());
+                Assert.Equal(987654, start.RootElement.GetProperty("fields").GetProperty("target_harmony_start_time_ticks").GetInt64());
                 Assert.Equal("runner_fatal", fatal.RootElement.GetProperty("event").GetString());
                 string message = fatal.RootElement.GetProperty("fields").GetProperty("message").GetString();
                 Assert.Contains("token=[redacted]", message, StringComparison.Ordinal);
@@ -77,6 +81,14 @@ namespace MoTuPerf.Platform.Tests
             {
                 Directory.Delete(directory, true);
             }
+        }
+
+        [Fact]
+        public void UnspecifiedHarmonyUserIsRecordedAsUnknown()
+        {
+            CaptureConfig config = new CaptureConfig { Platform = "harmony" };
+
+            Assert.Equal(-1, config.TargetHarmonyUserId);
         }
 
         [Theory]

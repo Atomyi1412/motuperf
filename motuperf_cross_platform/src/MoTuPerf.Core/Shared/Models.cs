@@ -493,6 +493,7 @@ namespace CSharpIosPerfMonitor
             ProductVersion = "";
             ScreenshotIntervalSec = 3;
             TargetOwnerName = "";
+            TargetHarmonyUserId = -1;
             CollectFps = true;
             CollectMemory = true;
             CollectCpu = true;
@@ -508,6 +509,7 @@ namespace CSharpIosPerfMonitor
         public long TargetStartAbsTime { get; set; }
         public long TargetAndroidStartTimeTicks { get; set; }
         public long TargetHarmonyStartTimeTicks { get; set; }
+        public int TargetHarmonyUserId { get; set; }
         public long TargetCoalitionId { get; set; }
         public int TargetOwnerPid { get; set; }
         public string TargetOwnerName { get; set; }

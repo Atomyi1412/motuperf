@@ -26,23 +26,23 @@
         <StackPanel Margin="22,10,18,12" Spacing="9">
            <Border Classes="helpSection">
              <StackPanel>
-               <TextBlock Text="v0.38.13" Classes="helpTitle" />
+               <TextBlock Text="v0.38.18" Classes="helpTitle" />
                <TextBlock Text="2026-09-25" Classes="dialogHint" />
-               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 扩展鸿蒙进程读取，兼容 UID/USER + PID + PPID + ARGS 及 PID 在前的常见 ps 列组合，减少厂商输出差异造成的进程漏列。&#xA;• 修复同一 PID 合并多种 ps 视图时整条记录被覆盖的问题，Bundle、用户、启动时间、设备和进程归属等字段按值补全，保留最完整的真实身份。&#xA;• 增加用户字段列变体、字段级合并和命令回退回归测试。本版本只保留本地，等待鸿蒙真机逐类验收确认前不推送、不打标签、不创建 Release。" />
-           </StackPanel>
-          </Border>
-           <Border Classes="helpSection">
-             <StackPanel>
-               <TextBlock Text="v0.38.12" Classes="helpTitle" />
-               <TextBlock Text="2026-09-25" Classes="dialogHint" />
-               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复鸿蒙应用清单在合并运行进程时只按 Bundle ID 绑定的问题，同一应用在主用户、工作资料、访客或副用户下现在分别匹配真实 PID，避免跨用户误采集。&#xA;• 鸿蒙应用列表在合并进程前统一拆分用户实例；原生、系统/预装、Android 兼容和仅运行中的应用都保留真实应用或进程身份，缺少可靠入口时仍可手动选择进程采集。&#xA;• 增加同 Bundle 多用户进程绑定回归测试。本版本仅保留本地，等待鸿蒙真机逐类验收确认前不推送、不打标签、不创建 Release。" />
+               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复鸿蒙文本清单中重复出现 moduleName、entryModuleName 等模块别名时，Ability 按全局序号错误绑定到旧模块的问题；现在按字段在原始输出中的顺序维护当前模块，避免生成错误的启动候选。&#xA;• 增加重复模块别名与多模块 Ability 归属回归测试。本版本只保留本地，等待鸿蒙真机验收确认前不推送、不打标签、不创建 Release。" />
              </StackPanel>
            </Border>
            <Border Classes="helpSection">
              <StackPanel>
-               <TextBlock Text="v0.38.11" Classes="helpTitle" />
+               <TextBlock Text="v0.38.17" Classes="helpTitle" />
                <TextBlock Text="2026-09-25" Classes="dialogHint" />
-               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复鸿蒙同一 Bundle 在多个用户资料中被合并成一行的问题，用户 0、工作资料和副用户现在分别显示并按所选用户启动或绑定进程。&#xA;• 兼容 u100_a123 和数字 UID 等常见进程身份格式；合并多种 ps 输出时保留更完整的用户归属，避免把进程绑定到错误用户。&#xA;• 修复应用筛选和图标异步刷新后按 Bundle 错误回选的问题，当前应用会同时按 Bundle 和用户资料恢复。本版本仅保留本地，等待鸿蒙真机逐类验收确认前不推送、不打标签、不创建 Release。" />
+               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复鸿蒙 Bundle Manager 仅返回 name/label 或嵌套数组记录时应用名称、版本和 Bundle 可能漏读的问题，扩大对厂商 JSON 结构的兼容范围。&#xA;• 修复无表头 ps 输出中 UID 在 PID 前、进程名没有点号时的解析问题，保留真实进程名和可确认的用户资料归属，避免把 UID 或状态字段当成进程名。&#xA;• 修复鸿蒙同 Bundle 多用户且用户信息未知时刷新回绑默认选择第一条的问题；无法确认目标用户时保持未选中，避免跨用户采集。&#xA;• 增加上述应用 JSON、无表头进程和多用户回绑的回归测试。本版本只保留本地，等待鸿蒙真机验收确认前不推送、不打标签、不创建 Release。" />
+           </StackPanel>
+          </Border>
+           <Border Classes="helpSection">
+             <StackPanel>
+               <TextBlock Text="v0.38.16" Classes="helpTitle" />
+               <TextBlock Text="2026-09-25" Classes="dialogHint" />
+               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复鸿蒙部分系统进程没有 cmdline 时只能读取 15 字符 comm，导致长名称目标被误判为 PID 变化的问题；仅在明确的 comm 截断场景兼容匹配，仍保留 PID 和启动时钟校验。&#xA;• 增加全应用来源合并回归覆盖：原生应用、系统/预装应用、Android 兼容应用、未启动应用、运行中应用和无 Bundle 系统服务都能进入可选择目标。&#xA;• 补齐鸿蒙采集目标身份链路：将 HDC 序列号、Bundle、用户资料 ID、进程名、PID 和启动时钟传入 runner，并写入结构化诊断日志，便于定位跨用户或 PID 复用问题。&#xA;• CSV 汇总区新增平台、设备序列号、目标 Bundle、鸿蒙用户 ID 和启动时钟字段；现场文件继续保留完整设备与进程身份，便于复盘和对比测试。&#xA;• 未识别到鸿蒙用户资料时明确记录为未知，不再误记为用户 0。&#xA;• 增加鸿蒙目标 provenance、现场文件、CSV 和诊断日志回归测试；FPS、FrameTime、Jank、BigJank、Thermal State 在没有真实来源时仍保持缺测。本版本只保留本地，等待鸿蒙真机验收确认前不推送、不打标签、不创建 Release。" />
              </StackPanel>
            </Border>
         </StackPanel>
