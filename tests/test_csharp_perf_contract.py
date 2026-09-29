@@ -182,7 +182,7 @@ class CSharpPerfContractTests(unittest.TestCase):
         self.assertIn("public double FrameSourceElapsedSec { get; set; }", models)
         self.assertIn('Get(obj, "source_elapsed_sec")', collector)
         self.assertIn("ApplyFrameTimeline(frameSamples, now);", collector)
-        self.assertIn("receivedAt.AddSeconds(-latest.FrameSourceElapsedSec)", collector)
+        self.assertIn("received.AddSeconds(-latest.FrameSourceElapsedSec)", collector)
 
         self.assertIn("CachedIosProcessForCaptureStart(device, selected, bundleId)", main_window)
         self.assertIn("IosLookupService.UsesRsd(device.ProductVersion)", main_window)

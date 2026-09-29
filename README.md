@@ -1,12 +1,12 @@
 # MoTuPerf
 
-MoTuPerf 是一款面向 Android、iOS 和鸿蒙设备的性能采集工具，支持 FPS、FrameTime、Jank、BigJank、进程 CPU、内存、设备温度、Thermal Status/State、实时截图和现场文件保存。鸿蒙首版通过 HDC 提供设备、进程、CPU、内存、温度和截图能力，暂不提供帧指标与系统热状态。
+MoTuPerf 是一款面向 Android、iOS 和鸿蒙设备的性能采集工具，支持 FPS、FrameTime、Jank、BigJank、进程 CPU、内存、设备温度、Thermal Status/State、实时截图和现场文件保存。鸿蒙通过 HDC 提供设备、进程、CPU、内存、温度和截图能力；当能唯一确认所选 PID 对应的 RenderService Surface 时，还会提供 FPS、FrameTime、Jank 和 BigJank。鸿蒙系统热状态暂未接入可靠来源，保持缺测，不用默认值填充。
 
 当前跨平台桌面版使用 .NET 8 + Avalonia：
 
 - Windows x64：提供自包含安装包，内置采集所需的 Python、ADB 和脚本依赖。
 - macOS Apple Silicon：提供 `osx-arm64` DMG，暂不支持 Intel Mac；打开 DMG 后将应用拖入 Applications。
-- 鸿蒙设备：所有可由 HDC 读取到的原生应用、系统应用、Android 兼容应用和运行中应用都会合并进入应用/进程选择和启动流程；安装包暂不捆绑 HDC，需要安装 HarmonyOS/OpenHarmony SDK。MoTuPerf 会自动检查 PATH 和常见 DevEco/OpenHarmony SDK 目录，自定义安装位置可通过 `MOTUPERF_HDC` 指定。
+- 鸿蒙设备：所有可由 HDC 读取到的原生应用、系统应用、Android 兼容应用和运行中应用都会合并进入应用/进程选择和启动流程；安装包暂不捆绑 HDC。首次使用时，在设备选择页点击“下载鸿蒙连接工具”，进入华为官方下载中心后只下载 `Command Line Tools`，解压后在 MoTuPerf 向导中选择最外层的 `command-line-tools` 文件夹，工具会自动找到 `sdk/default/openharmony/toolchains/hdc.exe`（Windows）或对应的 `hdc`（macOS），记住位置并自动检测。MoTuPerf 也会自动检查 PATH 和常见 DevEco/OpenHarmony SDK 目录，熟悉命令行的用户可通过 `MOTUPERF_HDC` 指定完整路径。
 - 现场文件、日志和设备数据保存在用户配置的数据目录，不会上传到 GitHub。
 
 ## 获取与更新

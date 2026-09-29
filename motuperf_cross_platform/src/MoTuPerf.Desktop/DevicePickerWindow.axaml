@@ -22,7 +22,7 @@
       <TextBlock Text="{Binding PickerLabel}" Foreground="{DynamicResource Theme.TextPrimary}" TextTrimming="CharacterEllipsis" />
     </DataTemplate>
     <DataTemplate x:Key="AppTemplate" x:DataType="model:AppInfo">
-      <Grid ColumnDefinitions="34,*,Auto" MinHeight="38">
+      <Grid ColumnDefinitions="34,*,Auto" MinHeight="38" ClipToBounds="True">
         <Border Width="28" Height="28" Background="{DynamicResource Theme.InputBackground}" CornerRadius="4" VerticalAlignment="Center">
           <Grid>
             <Image Source="{Binding IconPath, Converter={StaticResource IconPathConverter}}" IsVisible="{Binding IconPath, Converter={StaticResource IconPathVisibilityConverter}}" Stretch="UniformToFill" Margin="2" />
@@ -30,25 +30,22 @@
                        HorizontalAlignment="Center" VerticalAlignment="Center" />
           </Grid>
         </Border>
-        <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">
+        <Grid Grid.Column="1" RowDefinitions="Auto,Auto" Margin="8,0,6,0" VerticalAlignment="Center" MinWidth="0">
           <TextBlock Text="{Binding Name}" Foreground="{DynamicResource Theme.TextPrimary}" FontSize="14" FontWeight="SemiBold"
-                     TextTrimming="CharacterEllipsis" />
-          <TextBlock Text="{Binding TargetIdentifier}" Classes="dialogHint" FontSize="11" TextTrimming="CharacterEllipsis" />
-        </StackPanel>
-        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                     TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+          <TextBlock Grid.Row="1" Text="{Binding PickerTargetIdentifier}" Classes="dialogHint" FontSize="11"
+                     TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PickerTargetIdentifier}" />
+        </Grid>
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" HorizontalAlignment="Right">
           <Border Background="{DynamicResource Theme.Accent}" BorderBrush="{DynamicResource Theme.BorderStrong}" BorderThickness="1"
                   CornerRadius="3" Padding="5,1" IsVisible="{Binding Recommended}">
             <TextBlock Text="推荐" Foreground="{DynamicResource Theme.TextOnAccent}" FontSize="11" FontWeight="SemiBold" />
-          </Border>
-          <Border Background="{DynamicResource Theme.DialogSurface}" BorderBrush="{DynamicResource Theme.DialogSeparator}" BorderThickness="1"
-                  CornerRadius="3" Padding="5,1" IsVisible="{Binding LaunchAvailability, Converter={StaticResource EmptyTextVisibilityConverter}, ConverterParameter=notEmpty}">
-            <TextBlock Text="{Binding LaunchAvailability}" Foreground="{DynamicResource Theme.TextMuted}" FontSize="11" />
           </Border>
         </StackPanel>
       </Grid>
     </DataTemplate>
     <DataTemplate x:Key="ProcessTemplate" x:DataType="model:ProcessInfo">
-      <Border Classes="processRow" MinHeight="26" Padding="6,3">
+      <Border Classes="processRow" MinHeight="26" Padding="6,3" ClipToBounds="True">
         <Grid ColumnDefinitions="34,64,*">
           <Border Width="22" Height="22" Background="{DynamicResource Theme.InputBackground}" CornerRadius="4" VerticalAlignment="Center" HorizontalAlignment="Center">
             <Grid>
@@ -65,12 +62,12 @@
                     IsVisible="{Binding Recommended}">
               <TextBlock Text="推荐" Foreground="{DynamicResource Theme.TextOnAccent}" FontSize="11" FontWeight="SemiBold" />
             </Border>
-            <StackPanel VerticalAlignment="Center">
+            <Grid RowDefinitions="Auto,Auto" VerticalAlignment="Center" MinWidth="0">
               <TextBlock Text="{Binding PickerName}" Foreground="{DynamicResource Theme.TextPrimary}" FontSize="14"
-                         TextTrimming="CharacterEllipsis" />
-              <TextBlock Text="{Binding PickerSubtitle}" Classes="dialogHint" FontSize="11"
-                         TextTrimming="CharacterEllipsis" />
-            </StackPanel>
+                         TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PickerName}" />
+              <TextBlock Grid.Row="1" Text="{Binding PickerSubtitle}" Classes="dialogHint" FontSize="11"
+                         TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PickerSubtitle}" />
+            </Grid>
           </DockPanel>
         </Grid>
       </Border>
@@ -100,32 +97,24 @@
                   ToolTip.Tip="刷新设备" HorizontalAlignment="Right" />
         </Grid>
         <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,0,0,6" Spacing="3">
-          <Grid ColumnDefinitions="*,Auto,Auto" Margin="112,0,0,0">
+          <Grid ColumnDefinitions="*,Auto" Margin="112,0,0,0">
             <TextBlock x:Name="DeviceCountText" Text="正在检测设备..." Classes="dialogHint"
                        TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,10,0" />
-            <Button Grid.Column="1" x:Name="DeviceDiagnosticsButton" Classes="smallDialogButton" Content="查看检测详情"
-                    Click="ShowDeviceDiagnostics" IsEnabled="False" Margin="0,0,6,0" />
-            <Button Grid.Column="2" x:Name="AppleDriverButton" Classes="driverDownloadButton" Content="下载苹果设备驱动"
-                    Click="DownloadAppleDriver" IsVisible="False" />
-          </Grid>
-          <Grid ColumnDefinitions="72,*" Margin="112,0,0,0">
-            <TextBlock Text="Android" Classes="devicePlatformLabel" />
-            <TextBlock Grid.Column="1" x:Name="AndroidStatusText" Classes="devicePlatformStatus" Text="检测中..." />
-          </Grid>
-          <Grid ColumnDefinitions="72,*" Margin="112,0,0,0">
-            <TextBlock Text="iOS" Classes="devicePlatformLabel" />
-            <TextBlock Grid.Column="1" x:Name="IosStatusText" Classes="devicePlatformStatus" Text="检测中..." />
-          </Grid>
-          <Grid ColumnDefinitions="72,*" Margin="112,0,0,0">
-            <TextBlock Text="鸿蒙" Classes="devicePlatformLabel" />
-            <TextBlock Grid.Column="1" x:Name="HarmonyStatusText" Classes="devicePlatformStatus" Text="检测中..." />
+            <StackPanel Grid.Column="1" Orientation="Vertical" HorizontalAlignment="Right" Spacing="4">
+              <Button x:Name="DeviceDiagnosticsButton" Classes="smallDialogButton" Content="查看检测详情"
+                      Click="ShowDeviceDiagnostics" IsEnabled="False" />
+              <Button x:Name="AppleDriverButton" Classes="driverDownloadButton" Content="下载苹果设备驱动"
+                      Click="DownloadAppleDriver" IsVisible="False" />
+              <Button x:Name="HarmonyHdcButton" Classes="driverDownloadButton" Content="下载鸿蒙连接工具"
+                      Click="OpenHarmonyHdcSetup" IsVisible="False" />
+            </StackPanel>
           </Grid>
         </StackPanel>
 
         <TextBlock Text="选择应用" Classes="dialogLabel" Grid.Row="2" />
         <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,48">
-          <Border x:Name="SelectedAppSummary" Height="36" Background="{DynamicResource Theme.DialogSurface}" BorderBrush="{DynamicResource Theme.BorderStrong}" BorderThickness="1"
-                  Padding="6,4,10,4">
+          <Border x:Name="SelectedAppSummary" Height="42" Background="{DynamicResource Theme.DialogSurface}" BorderBrush="{DynamicResource Theme.BorderStrong}" BorderThickness="1"
+                  Padding="6,3,10,3">
             <Grid ColumnDefinitions="32,*">
               <Border Width="26" Height="26" Background="{DynamicResource Theme.InputBackground}" CornerRadius="5" VerticalAlignment="Center">
                 <Grid>
@@ -134,24 +123,30 @@
                              HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Grid>
               </Border>
-              <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">
+              <Grid Grid.Column="1" RowDefinitions="Auto,Auto" Margin="8,0,0,0" VerticalAlignment="Center" MinWidth="0">
                 <TextBlock x:Name="SelectedAppName" Text="请选择 APP" Foreground="{DynamicResource Theme.TextPrimary}" FontSize="14"
                            FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                <TextBlock x:Name="SelectedAppBundle" Classes="dialogHint" FontSize="12" TextTrimming="CharacterEllipsis" />
-              </StackPanel>
+                <TextBlock Grid.Row="1" x:Name="SelectedAppBundle" Classes="dialogHint" FontSize="12"
+                           TextTrimming="CharacterEllipsis" />
+              </Grid>
             </Grid>
           </Border>
           <Button Grid.Column="1" Classes="iconDialogButton" Content="↻" Click="RefreshTargetLists"
                   ToolTip.Tip="刷新应用和进程" HorizontalAlignment="Right" />
         </Grid>
 
-        <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-          <Button x:Name="ProcessTab" Classes="dialogTab activeDialogTab"
-                  Click="ShowProcessTab"><TextBlock Text="选择进程" Classes="dialogTabText" /></Button>
-          <Button x:Name="LaunchTab" Classes="dialogTab" Click="ShowLaunchTab">
-            <TextBlock Text="启动 APP" Classes="dialogTabText" />
-          </Button>
-        </StackPanel>
+        <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+          <StackPanel Orientation="Horizontal">
+            <Button x:Name="ProcessTab" Classes="dialogTab activeDialogTab"
+                    Click="ShowProcessTab"><TextBlock Text="选择进程" Classes="dialogTabText" /></Button>
+            <Button x:Name="LaunchTab" Classes="dialogTab" Click="ShowLaunchTab">
+              <TextBlock Text="启动 APP" Classes="dialogTabText" />
+            </Button>
+          </StackPanel>
+          <CheckBox x:Name="HarmonyShowAllCheckBox" Grid.Column="1" Content="显示全部目标"
+                    Foreground="{DynamicResource Theme.TextMuted}" VerticalAlignment="Center"
+                    IsVisible="False" Click="HarmonyShowAllTargetsChanged" />
+        </Grid>
 
         <Grid Grid.Row="4" Grid.Column="1">
           <Grid x:Name="ProcessPanel" RowDefinitions="32,26,*">

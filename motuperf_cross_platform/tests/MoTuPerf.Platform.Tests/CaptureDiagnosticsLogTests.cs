@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Text.Json;
 using CSharpIosPerfMonitor;
 using Xunit;
@@ -9,6 +11,67 @@ namespace MoTuPerf.Platform.Tests
 {
     public sealed class CaptureDiagnosticsLogTests
     {
+        [Theory]
+        [InlineData("harmony", "harmony_hdc_timeout")]
+        [InlineData("harmony", "harmony_hdc_permission_denied")]
+        [InlineData("harmony", "")]
+        [InlineData("harmony", "   ")]
+        [InlineData("ios", "")]
+        [InlineData("android", "")]
+        public void RunnerReasonReachesLogWithoutChangingStopCode(string platform, string reason)
+        {
+            string directory = Directory.CreateTempSubdirectory("motuperf-runner-reason-").FullName;
+            string path = Path.Combine(directory, "capture.log");
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            try
+            {
+                using var log = new CaptureDiagnosticsLog(path, "reason-session");
+                using var collector = new PerfCollector();
+                typeof(PerfCollector).GetField("_captureGeneration", flags).SetValue(collector, 1);
+                typeof(PerfCollector).GetField("_diagnosticsLog", flags).SetValue(collector, log);
+                MethodInfo parse = typeof(PerfCollector).GetMethod("ParseLine", flags);
+                var messages = new List<string>();
+                var failures = new List<string>();
+                collector.Message += messages.Add;
+                collector.Failed += failures.Add;
+                void Send(string kind, object payload, int generation = 1) => parse.Invoke(collector,
+                    new object[] { kind + " " + JsonSerializer.Serialize(payload), generation, platform });
+
+                Send("status", new { code = "stale", message = "ignored" }, 0);
+                Send("status", new { code = "harmony_hdc_timeout", message = "采集失败（第 1/3 次）：HDC 超时" });
+                Assert.Empty(failures);
+                Send("status", new { code = "harmony_probe_recovered", message = "目标校验已恢复" });
+                var fatal = new Dictionary<string, object>
+                {
+                    ["code"] = "harmony_target_unavailable", ["message"] = "连续三次失败 token=secret-value"
+                };
+                if (reason.Length > 0) fatal["reason_code"] = reason;
+                Send("fatal", fatal);
+                Send("fatal", fatal); // Late output cannot stop the session twice.
+
+                Assert.Equal(2, messages.Count);
+                Assert.Contains("第 1/3 次", messages[0]);
+                Assert.Equal("目标校验已恢复", messages[1]);
+                Assert.Contains("连续三次失败", Assert.Single(failures));
+                var records = File.ReadAllLines(path).Select(line =>
+                {
+                    using JsonDocument doc = JsonDocument.Parse(line);
+                    return doc.RootElement.Clone();
+                }).ToArray();
+                JsonElement Event(string name) => Assert.Single(records, row => row.GetProperty("event").GetString() == name);
+                Assert.Equal("harmony_target_unavailable", Event("runner_fatal").GetProperty("fields").GetProperty("code").GetString());
+                Assert.Equal("harmony_target_unavailable", Event("capture_failure").GetProperty("fields").GetProperty("code").GetString());
+                Assert.Equal("harmony_target_unavailable", Event("capture_stopped").GetProperty("fields").GetProperty("reason").GetString());
+                if (!string.IsNullOrWhiteSpace(reason))
+                    Assert.Equal(reason, Event("runner_failure_reason").GetProperty("fields").GetProperty("code").GetString());
+                else
+                    Assert.DoesNotContain(records, row => row.GetProperty("event").GetString() == "runner_failure_reason");
+                Assert.DoesNotContain("secret-value", File.ReadAllText(path));
+                Assert.DoesNotContain("ignored", File.ReadAllText(path));
+            }
+            finally { Directory.Delete(directory, true); }
+        }
+
         [Fact]
         public void StopReportsTrueMetricFreshnessOnlyOnceAndTaskExitRemainsLoggable()
         {
@@ -56,6 +119,7 @@ namespace MoTuPerf.Platform.Tests
                         TargetPid = 42,
                         TargetHarmonyUserId = 100,
                         TargetHarmonyStartTimeTicks = 987654,
+                        TargetHarmonyNameIsComm = true,
                         ScreenshotIntervalSec = 3
                     }, "pyidevice metrics runner", "pid_perf_runner.py");
                     log.WriteEvent("runner_fatal", "token=super-secret; device communication failed", "pid_lost");
@@ -71,6 +135,7 @@ namespace MoTuPerf.Platform.Tests
                 Assert.Equal(3, start.RootElement.GetProperty("fields").GetProperty("screenshot_interval_sec").GetInt32());
                 Assert.Equal(100, start.RootElement.GetProperty("fields").GetProperty("target_harmony_user_id").GetInt32());
                 Assert.Equal(987654, start.RootElement.GetProperty("fields").GetProperty("target_harmony_start_time_ticks").GetInt64());
+                Assert.True(start.RootElement.GetProperty("fields").GetProperty("target_harmony_name_is_comm").GetBoolean());
                 Assert.Equal("runner_fatal", fatal.RootElement.GetProperty("event").GetString());
                 string message = fatal.RootElement.GetProperty("fields").GetProperty("message").GetString();
                 Assert.Contains("token=[redacted]", message, StringComparison.Ordinal);

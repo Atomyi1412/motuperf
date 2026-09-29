@@ -16,8 +16,9 @@ namespace MoTuPerf.Desktop
             string iosDiagnostic,
             bool appleDriverMissing,
             bool appleDriverActionAvailable,
-            bool isReady)
-            : this(overallStatus, androidSummary, iosSummary, "未发现设备", androidDiagnostic, iosDiagnostic, "本轮没有返回额外诊断。", appleDriverMissing, appleDriverActionAvailable, isReady)
+            bool isReady,
+            bool harmonyHdcActionAvailable = false)
+            : this(overallStatus, androidSummary, iosSummary, "未发现设备", androidDiagnostic, iosDiagnostic, "本轮没有返回额外诊断。", appleDriverMissing, appleDriverActionAvailable, isReady, harmonyHdcActionAvailable)
         {
         }
 
@@ -31,7 +32,8 @@ namespace MoTuPerf.Desktop
             string harmonyDiagnostic,
             bool appleDriverMissing,
             bool appleDriverActionAvailable,
-            bool isReady)
+            bool isReady,
+            bool harmonyHdcActionAvailable = false)
         {
             OverallStatus = overallStatus ?? "";
             AndroidSummary = androidSummary ?? "";
@@ -42,6 +44,7 @@ namespace MoTuPerf.Desktop
             HarmonyDiagnostic = harmonyDiagnostic ?? "";
             AppleDriverMissing = appleDriverMissing;
             AppleDriverActionAvailable = appleDriverActionAvailable;
+            HarmonyHdcActionAvailable = harmonyHdcActionAvailable;
             IsReady = isReady;
         }
 
@@ -54,6 +57,7 @@ namespace MoTuPerf.Desktop
         public string HarmonyDiagnostic { get; }
         public bool AppleDriverMissing { get; }
         public bool AppleDriverActionAvailable { get; }
+        public bool HarmonyHdcActionAvailable { get; }
         public bool IsReady { get; }
     }
 
@@ -91,7 +95,8 @@ namespace MoTuPerf.Desktop
                 EmptyDiagnostic(report.HarmonyDiagnostic),
                 report.AppleDriverMissing,
                 report.AppleDriverActionAvailable,
-                true);
+                true,
+                IsHarmonyHdcMissing(report.HarmonyDiagnostic));
         }
 
         public static DeviceDiagnosticsSnapshot Error(string overallStatus, string androidDiagnostic, string iosDiagnostic)
@@ -113,7 +118,7 @@ namespace MoTuPerf.Desktop
         {
             if (count > 0) return "已连接 " + count + " 台设备";
             if (driverMissing) return "缺少 Apple 设备驱动";
-            if (platform == "鸿蒙" && ContainsAny(diagnostic, "未找到 HDC", "未找到或无法启动 HDC")) return "需要安装 HDC";
+            if (platform == "鸿蒙" && ContainsAny(diagnostic, "未找到 HDC", "未找到或无法启动 HDC")) return "需要准备鸿蒙连接工具";
             if (ContainsAny(diagnostic, "unauthorized", "未授权", "授权", "信任", "锁屏", "开发者模式", "USB 调试"))
             {
                 return platform == "鸿蒙" ? "需要开启 HDC 调试并授权" : platform == "Android" ? "需要开启 USB 调试并授权" : "需要信任设备并解锁";
@@ -123,6 +128,14 @@ namespace MoTuPerf.Desktop
                 return "检测异常，可查看详情";
             }
             return "未发现设备";
+        }
+
+        internal static bool IsHarmonyHdcMissing(string diagnostic)
+        {
+            return ContainsAny(diagnostic,
+                "未找到 HDC",
+                "未找到或无法启动 HDC",
+                "未找到 HDC 运行组件");
         }
 
         private static string EmptyDiagnostic(string diagnostic)

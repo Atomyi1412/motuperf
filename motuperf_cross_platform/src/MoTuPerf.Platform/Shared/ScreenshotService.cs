@@ -13,6 +13,22 @@ using SkiaSharp;
 
 namespace CSharpIosPerfMonitor
 {
+    internal enum HarmonyScreenshotFailureKind
+    {
+        None,
+        HdcUnavailable,
+        HdcTimeout,
+        DeviceUnavailable,
+        AuthorizationRequired,
+        PermissionDenied,
+        UnsupportedCommand,
+        RemoteFileMissing,
+        EmptyImage,
+        InvalidImage,
+        BlackImage,
+        CommandFailed
+    }
+
     public sealed class ScreenshotService
     {
         private string _root;
@@ -100,7 +116,7 @@ namespace CSharpIosPerfMonitor
                 string path = "";
                 try
                 {
-                    path = Path.Combine(root, DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + index.ToString("00000") + ".png");
+                    path = CreateScreenshotPath(root, index);
                     ScreenshotOrientation orientation = ScreenshotOrientation.Unknown;
                     ProcessResult result;
                     if (DeviceLookupService.IsHarmony(Platform))
@@ -150,7 +166,19 @@ namespace CSharpIosPerfMonitor
                     TryDelete(path);
                     if (IsCurrentSession(generation) && !sessionToken.IsCancellationRequested)
                     {
-                        Raise(Failed, "Screenshot error: " + ex.Message);
+                        if (DeviceLookupService.IsHarmony(Platform))
+                        {
+                            HarmonyScreenshotFailureKind kind = ex is TimeoutException
+                                ? HarmonyScreenshotFailureKind.HdcTimeout
+                                : ex is FileNotFoundException
+                                    ? HarmonyScreenshotFailureKind.HdcUnavailable
+                                    : ClassifyHarmonyFailure(new ProcessResult(1, "", ex.Message), false, false, 0, false, false);
+                            Raise(Failed, "Screenshot error[" + HarmonyScreenshotFailureCode(kind) + "]: " + HarmonyScreenshotFailureMessage(kind));
+                        }
+                        else
+                        {
+                            Raise(Failed, "Screenshot error: " + ex.Message);
+                        }
                     }
                 }
                 finally
@@ -211,8 +239,12 @@ namespace CSharpIosPerfMonitor
 
         private async Task<ProcessResult> CaptureHarmonyAsync(string path, CancellationToken token)
         {
-            string remote = "/data/local/tmp/motuperf-" + Guid.NewGuid().ToString("N") + ".png";
+            // Harmony's snapshot_display validates the suffix and only accepts
+            // JPEG output on some vendor builds. Keep the local path stable;
+            // the image loader validates the file content rather than its name.
+            string remote = "/data/local/tmp/motuperf-" + Guid.NewGuid().ToString("N") + ".jpeg";
             ProcessResult lastResult = new ProcessResult(1, "", "鸿蒙截图命令尚未执行。");
+            HarmonyScreenshotFailureKind lastFailure = HarmonyScreenshotFailureKind.CommandFailed;
             try
             {
                 foreach (string[] captureCommand in HarmonyScreenshotCommands(remote))
@@ -220,23 +252,36 @@ namespace CSharpIosPerfMonitor
                     ProcessResult captured = await ProcessRunner.RunAsync(RuntimeTools.HdcExecutable,
                         HarmonyLookupService.TargetArgs(Udid, captureCommand), 15000, token);
                     lastResult = captured;
-                    if (IsHarmonyCaptureFailure(captured))
+                    lastFailure = ClassifyHarmonyFailure(captured, false, false, 0, false, false);
+                    if (lastFailure != HarmonyScreenshotFailureKind.None)
                     {
                         TryDelete(path);
                         continue;
                     }
 
+                    // A failed receive must never leave a previous capture at the
+                    // same path looking like a newly received screenshot.
+                    TryDelete(path);
                     ProcessResult received = await ProcessRunner.RunAsync(RuntimeTools.HdcExecutable,
                         new[] { "-t", Udid, "file", "recv", remote, path }, 15000, token);
                     lastResult = received;
-                    if (received.ExitCode == 0 && IsUsableAndroidPng(path)) return received;
+                    bool fileExists = File.Exists(path);
+                    long fileLength = 0;
+                    try { if (fileExists) fileLength = new FileInfo(path).Length; } catch { }
+                    bool validImage = fileExists && IsValidHarmonyImage(path);
+                    bool blackImage = validImage && IsNearSolidBlackImage(path);
+                    lastFailure = ClassifyHarmonyFailure(received, true, fileExists, fileLength, validImage, blackImage);
+                    if (lastFailure == HarmonyScreenshotFailureKind.None) return received;
                     TryDelete(path);
                 }
 
                 return new ProcessResult(
                     lastResult.ExitCode == 0 ? 1 : lastResult.ExitCode,
                     lastResult.Stdout,
-                    "鸿蒙截图失败：已尝试 snapshot_display 和 screencap -p。" + Clip(lastResult.Stderr + lastResult.Stdout));
+                    "鸿蒙截图失败[" + HarmonyScreenshotFailureCode(lastFailure) + "]："
+                    + HarmonyScreenshotFailureMessage(lastFailure)
+                    + " 已尝试 snapshot_display 和 screencap -p。最后输出："
+                    + Clip(lastResult.Stderr + lastResult.Stdout));
             }
             finally
             {
@@ -467,7 +512,41 @@ namespace CSharpIosPerfMonitor
             return AndroidLookupService.IsValidPng(path) && !IsNearSolidBlackPng(path);
         }
 
+        // Keep the Android-specific name as a source contract for existing
+        // checks; Harmony uses the same image-content test after receiving a
+        // JPEG even though its local capture path ends in .png.
         private static bool IsNearSolidBlackPng(string path)
+        {
+            return IsNearSolidBlackImage(path);
+        }
+
+        private static bool IsValidHarmonyImage(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            try
+            {
+#if WINDOWS
+                using (FileStream stream = File.OpenRead(path))
+                {
+                    BitmapDecoder decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+                    return decoder.Frames.Count > 0
+                        && decoder.Frames[0].PixelWidth > 0
+                        && decoder.Frames[0].PixelHeight > 0;
+                }
+#else
+                using (SKCodec codec = SKCodec.Create(path))
+                {
+                    return codec != null && codec.Info.Width > 0 && codec.Info.Height > 0;
+                }
+#endif
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool IsNearSolidBlackImage(string path)
         {
             try
             {
@@ -616,9 +695,102 @@ namespace CSharpIosPerfMonitor
 
         internal static bool IsHarmonyCaptureFailure(ProcessResult result)
         {
-            if (result == null || result.ExitCode != 0) return true;
-            string output = (result.Stdout ?? "") + "\n" + (result.Stderr ?? "");
-            return output.IndexOf("[Fail]", StringComparison.OrdinalIgnoreCase) >= 0;
+            return ClassifyHarmonyFailure(result, false, false, 0, false, false)
+                != HarmonyScreenshotFailureKind.None;
+        }
+
+        internal static string CreateScreenshotPath(string root, int index)
+        {
+            string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", System.Globalization.CultureInfo.InvariantCulture);
+            return Path.Combine(root ?? "", stamp + "-" + index.ToString("00000", System.Globalization.CultureInfo.InvariantCulture)
+                + "-" + Guid.NewGuid().ToString("N") + ".png");
+        }
+
+        internal static HarmonyScreenshotFailureKind ClassifyHarmonyFailure(
+            ProcessResult result,
+            bool receivingRemoteFile,
+            bool fileExists,
+            long fileLength,
+            bool validImage,
+            bool blackImage)
+        {
+            string output = (result == null ? "" : (result.Stdout ?? "") + "\n" + (result.Stderr ?? ""));
+            HarmonyScreenshotFailureKind outputFailure = ClassifyHarmonyOutput(output, receivingRemoteFile);
+            if (outputFailure != HarmonyScreenshotFailureKind.None) return outputFailure;
+            if (result == null || result.ExitCode != 0) return HarmonyScreenshotFailureKind.CommandFailed;
+            if (!receivingRemoteFile) return HarmonyScreenshotFailureKind.None;
+            if (!fileExists) return HarmonyScreenshotFailureKind.RemoteFileMissing;
+            if (fileLength <= 0) return HarmonyScreenshotFailureKind.EmptyImage;
+            if (!validImage) return HarmonyScreenshotFailureKind.InvalidImage;
+            if (blackImage) return HarmonyScreenshotFailureKind.BlackImage;
+            return HarmonyScreenshotFailureKind.None;
+        }
+
+        private static HarmonyScreenshotFailureKind ClassifyHarmonyOutput(string output, bool receivingRemoteFile)
+        {
+            string value = output ?? "";
+            if (Regex.IsMatch(value, @"(?i)(permission\s+denied|access\s+denied|not\s+permitted)", RegexOptions.CultureInvariant))
+                return HarmonyScreenshotFailureKind.PermissionDenied;
+            if (Regex.IsMatch(value, @"(?i)(unauthori[sz]ed|not\s+authori[sz]ed|auth(?:entication)?\s+(?:failed|required)|not\s+paired)", RegexOptions.CultureInvariant))
+                return HarmonyScreenshotFailureKind.AuthorizationRequired;
+            if (Regex.IsMatch(value, @"(?i)(?:device|target)\s+(?:not\s+found|not\s+founded|not\s+connected|offline)|no\s+(?:device|target)s?\b|unable\s+to\s+enumerate", RegexOptions.CultureInvariant))
+                return HarmonyScreenshotFailureKind.DeviceUnavailable;
+            if (receivingRemoteFile && Regex.IsMatch(value, @"(?i)(no\s+such\s+file|cannot\s+stat|file\s+not\s+found|remote\s+file|does\s+not\s+exist|not\s+exist)", RegexOptions.CultureInvariant))
+                return HarmonyScreenshotFailureKind.RemoteFileMissing;
+            if (!receivingRemoteFile && Regex.IsMatch(value, @"(?i)(no\s+such\s+file|cannot\s+stat|file\s+not\s+found|does\s+not\s+exist|not\s+exist)", RegexOptions.CultureInvariant))
+                return HarmonyScreenshotFailureKind.CommandFailed;
+            if (Regex.IsMatch(value, @"(?i)(command\s+not\s+found|unknown\s+command|unsupported|not\s+support|invalid\s+(?:option|command)|unrecognized\s+option)", RegexOptions.CultureInvariant))
+                return HarmonyScreenshotFailureKind.UnsupportedCommand;
+            if (Regex.IsMatch(value, @"(?i)(?:\[fail\]|snapshot\s+failed|capture\s+failed)", RegexOptions.CultureInvariant))
+                return HarmonyScreenshotFailureKind.CommandFailed;
+            return HarmonyScreenshotFailureKind.None;
+        }
+
+        private static string HarmonyScreenshotFailureCode(HarmonyScreenshotFailureKind kind)
+        {
+            switch (kind)
+            {
+                case HarmonyScreenshotFailureKind.HdcUnavailable: return "hdc_missing";
+                case HarmonyScreenshotFailureKind.HdcTimeout: return "hdc_timeout";
+                case HarmonyScreenshotFailureKind.DeviceUnavailable: return "device_unavailable";
+                case HarmonyScreenshotFailureKind.AuthorizationRequired: return "authorization_required";
+                case HarmonyScreenshotFailureKind.PermissionDenied: return "permission_denied";
+                case HarmonyScreenshotFailureKind.UnsupportedCommand: return "unsupported_command";
+                case HarmonyScreenshotFailureKind.RemoteFileMissing: return "remote_file_missing";
+                case HarmonyScreenshotFailureKind.EmptyImage: return "empty_image";
+                case HarmonyScreenshotFailureKind.InvalidImage: return "invalid_image";
+                case HarmonyScreenshotFailureKind.BlackImage: return "black_image";
+                default: return "command_failed";
+            }
+        }
+
+        private static string HarmonyScreenshotFailureMessage(HarmonyScreenshotFailureKind kind)
+        {
+            switch (kind)
+            {
+                case HarmonyScreenshotFailureKind.HdcUnavailable:
+                    return "未找到 HDC，请在设备选择页点击“下载鸿蒙连接工具”，只下载官方 Command Line Tools，解压后选择其中的 HDC 文件。";
+                case HarmonyScreenshotFailureKind.HdcTimeout:
+                    return "HDC 响应超时，请检查设备连接和调试授权。";
+                case HarmonyScreenshotFailureKind.DeviceUnavailable:
+                    return "设备未连接、离线或 HDC 未建立通信，请检查 USB 连接后重试。";
+                case HarmonyScreenshotFailureKind.AuthorizationRequired:
+                    return "设备未授权，请解锁设备并允许当前电脑进行调试。";
+                case HarmonyScreenshotFailureKind.PermissionDenied:
+                    return "设备拒绝截图权限，请确认开发者调试权限后重试。";
+                case HarmonyScreenshotFailureKind.UnsupportedCommand:
+                    return "设备不支持当前截图命令，已尝试兼容命令仍未成功。";
+                case HarmonyScreenshotFailureKind.RemoteFileMissing:
+                    return "设备端截图文件未生成或接收失败。";
+                case HarmonyScreenshotFailureKind.EmptyImage:
+                    return "设备端返回了空截图文件。";
+                case HarmonyScreenshotFailureKind.InvalidImage:
+                    return "收到的文件不是有效截图图像。";
+                case HarmonyScreenshotFailureKind.BlackImage:
+                    return "收到的截图为纯黑图，未将其作为有效截图。";
+                default:
+                    return "HDC 截图命令执行失败。";
+            }
         }
     }
 }

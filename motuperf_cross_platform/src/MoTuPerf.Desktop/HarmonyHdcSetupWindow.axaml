@@ -1,0 +1,89 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MoTuPerf.Desktop.HarmonyHdcSetupWindow"
+        Title="鸿蒙设备连接准备"
+        Width="650"
+        Height="620"
+        MinWidth="560"
+        MinHeight="440"
+        WindowDecorations="BorderOnly"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="0"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner">
+  <Border Classes="secondaryWindowFrame">
+    <Grid RowDefinitions="48,*,62" Background="{DynamicResource Theme.DialogBackground}">
+      <Border Grid.Row="0" Classes="dialogTitleBar" PointerPressed="DialogTitlePointerPressed">
+        <Grid ColumnDefinitions="*,46">
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="24,0,0,0">
+            <TextBlock Text="&#xE946;" Classes="symbol" Foreground="{DynamicResource Theme.Accent}" FontSize="17" Margin="0,0,10,0" />
+            <TextBlock Text="鸿蒙 HDC 获取与配置" Classes="sectionTitle" />
+          </StackPanel>
+          <Button Grid.Column="1" Classes="windowButton closeButton" Content="&#x00D7;" Click="CloseWindow" ToolTip.Tip="关闭" />
+        </Grid>
+      </Border>
+
+      <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="22,16,18,16" Spacing="10">
+          <Border Classes="diagnosticSummarySurface">
+            <StackPanel Spacing="6">
+              <TextBlock Text="鸿蒙设备只需要准备一个工具" Classes="diagnosticTitle" />
+              <TextBlock Text="只下载 Command Line Tools。页面上的 DevEco Studio、DevEco CodeGenie、ohpm-repo、DevEco Testing 等工具都不需要下载。" Classes="diagnosticBody" TextWrapping="Wrap" />
+              <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                <Button Classes="primaryToolbarButton" Content="打开官方下载中心" Click="OpenHdcDownload" />
+                <Button Classes="primaryToolbarButton" Content="选择 Command Line Tools 文件夹并检测" Click="SelectHdcDirectory" Width="270" />
+              </StackPanel>
+              <Button Classes="smallDialogButton" Content="高级：直接选择 HDC 文件" Click="SelectHdcFile" HorizontalAlignment="Left" />
+              <TextBlock x:Name="SelectedHdcPathText" Classes="dialogHint" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="diagnosticSection">
+            <StackPanel Spacing="5">
+              <TextBlock Text="按这 3 步操作" Classes="diagnosticTitle" />
+              <TextBlock Text="1. 点击“打开官方下载中心”。&#x0A;2. 在“所有工具”里只下载 Command Line Tools，下载与电脑系统匹配的版本。&#x0A;3. 下载完成后先解压，点击上方“选择 Command Line Tools 文件夹并检测”，选择最外层的 command-line-tools 文件夹即可。MoTuPerf 会自动找到里面的 HDC。" Classes="diagnosticBody" TextWrapping="Wrap" />
+              <TextBlock Text="选择完成后，MoTuPerf 会记住这个位置，不需要设置环境变量，也不需要把文件手动复制到软件目录。" Classes="dialogHint" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="diagnosticSection">
+            <StackPanel Spacing="5">
+              <TextBlock Text="设备端还需要做什么" Classes="diagnosticTitle" />
+              <TextBlock Text="保持设备解锁并连接 USB，在设备上允许开发者调试/HDC 调试授权。完成后点击底部“重新检测”。如果仍然没有设备，再查看检测详情中的具体原因。" Classes="diagnosticBody" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="diagnosticSection">
+            <StackPanel Spacing="5">
+              <TextBlock Text="官方地址（需要时再复制）" Classes="diagnosticTitle" />
+              <TextBox x:Name="HdcDownloadUrlText" IsReadOnly="True" Text="https://developer.huawei.com/consumer/cn/download/" TextWrapping="Wrap" Height="42" />
+              <TextBlock Text="这是华为官方页面。MoTuPerf 不会下载或执行来源不明的第三方二进制。" Classes="dialogHint" TextWrapping="Wrap" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Classes="smallDialogButton" Content="复制官方地址" Click="CopyHdcDownload" />
+                <Button Classes="smallDialogButton" Content="打开官方安装说明" Click="OpenHdcGuide" />
+              </StackPanel>
+              <TextBlock x:Name="ActionStatusText" Classes="dialogHint" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+
+          <Expander Header="高级设置（熟悉电脑操作时再使用）">
+            <Border Classes="diagnosticSection" Margin="0,6,0,0">
+              <StackPanel Spacing="5">
+                <TextBlock Text="如果电脑已经安装过鸿蒙 SDK" Classes="diagnosticTitle" />
+                <TextBlock Text="MoTuPerf 会自动检查常见安装位置。通常只需点击底部“重新检测”；只有自动找不到时，才需要选择最外层的 command-line-tools 文件夹。直接选择 HDC 文件和 MOTUPERF_HDC 完整路径仅供熟悉电脑操作的用户使用。" Classes="diagnosticBody" TextWrapping="Wrap" />
+              </StackPanel>
+            </Border>
+          </Expander>
+        </StackPanel>
+      </ScrollViewer>
+
+      <Border Grid.Row="2" Classes="dialogFooter">
+        <Grid ColumnDefinitions="*,Auto,Auto">
+          <TextBlock Text="完成下载、解压和授权后，点击“重新检测”" Classes="dialogHint" VerticalAlignment="Center" Margin="18,0,10,0" />
+          <Button Grid.Column="1" Classes="dialogFooterButton" Content="重新检测" Click="RequestDeviceRefresh" Width="104" Margin="0,0,6,0" />
+          <Button Grid.Column="2" Classes="primaryToolbarButton" Content="知道了" Click="CloseWindow" Width="104" Margin="0,0,18,0" />
+        </Grid>
+      </Border>
+    </Grid>
+  </Border>
+</Window>

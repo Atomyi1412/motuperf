@@ -41,9 +41,11 @@
           </Border>
           <Border Classes="diagnosticSection">
             <StackPanel Spacing="5">
-              <Grid ColumnDefinitions="*,Auto">
+              <Grid ColumnDefinitions="*,Auto,Auto">
                 <TextBlock Text="鸿蒙" Classes="diagnosticTitle" />
                 <TextBlock x:Name="HarmonySummaryText" Grid.Column="1" Classes="devicePlatformStatus" />
+                <Button x:Name="HarmonyHdcSetupButton" Grid.Column="2" Classes="smallDialogButton" Content="下载鸿蒙连接工具"
+                        Click="OpenHarmonyHdcSetup" IsVisible="False" Margin="8,0,0,0" />
               </Grid>
               <TextBlock x:Name="HarmonyDiagnosticText" Classes="diagnosticBody" TextWrapping="Wrap" />
             </StackPanel>

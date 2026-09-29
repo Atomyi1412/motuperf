@@ -11,8 +11,9 @@ namespace MoTuPerf.Desktop.Tests
         public void MissingHdcHasActionableSummaryAndPreservesDetail(string reason)
         {
             var snapshot = DeviceDiagnosticsFormatter.FromReport(new DeviceDiscoveryReport { HarmonyDiagnostic = reason });
-            Assert.Equal("需要安装 HDC", snapshot.HarmonySummary);
+            Assert.Equal("需要准备鸿蒙连接工具", snapshot.HarmonySummary);
             Assert.Equal(reason, snapshot.HarmonyDiagnostic);
+            Assert.True(snapshot.HarmonyHdcActionAvailable);
         }
 
         [Fact]
@@ -61,6 +62,26 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Equal("缺少 Apple 设备驱动", snapshot.IosSummary);
             Assert.True(snapshot.AppleDriverMissing);
             Assert.True(snapshot.AppleDriverActionAvailable);
+        }
+
+        [Fact]
+        public void HarmonyPermissionFailureDoesNotOfferHdcInstall()
+        {
+            var snapshot = DeviceDiagnosticsFormatter.FromReport(new DeviceDiscoveryReport
+            {
+                HarmonyDiagnostic = "设备未授权，请在设备上允许 HDC 调试。"
+            });
+
+            Assert.Equal("需要开启 HDC 调试并授权", snapshot.HarmonySummary);
+            Assert.False(snapshot.HarmonyHdcActionAvailable);
+        }
+
+        [Fact]
+        public void HarmonyHdcSetupKeepsOfficialDownloadAndGuideUrls()
+        {
+            Assert.StartsWith("https://", HarmonyHdcSetupWindow.HdcDownloadUrl);
+            Assert.Contains("developer.huawei.com", HarmonyHdcSetupWindow.HdcDownloadUrl);
+            Assert.Contains("developtools_hdc", HarmonyHdcSetupWindow.HdcGuideUrl);
         }
     }
 }

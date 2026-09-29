@@ -293,6 +293,29 @@ namespace MoTuPerf.Desktop.Tests
         }
 
         [Fact]
+        public void HarmonyProcessWithUnreadableNameUsesBundleAndPidInPicker()
+        {
+            var process = new ProcessInfo
+            {
+                Pid = 802,
+                Platform = "harmony",
+                BundleId = "com.example.game",
+                OwnerBundleId = "com.example.game",
+                OwnershipVerified = true,
+                HarmonyUserId = 100,
+                DisplayName = "com.example.game"
+            };
+
+            Assert.True(ProcessTargetMatcher.IsValidTarget(process));
+            Assert.Equal("com.example.game", process.PickerName);
+            Assert.Contains("进程名不可读", process.PickerSubtitle);
+            var app = Assert.Single(DevicePickerWindow.HarmonyAppsFromProcesses(new[] { process }));
+            Assert.Equal(802, app.ProcessPid);
+            Assert.Empty(app.ProcessName);
+            Assert.False(app.CanAttemptLaunch);
+        }
+
+        [Fact]
         public void HarmonyAppDoesNotAutoBindAmbiguousWorkerProcesses()
         {
             ProcessInfo[] processes =
@@ -394,7 +417,7 @@ namespace MoTuPerf.Desktop.Tests
         }
 
         [Fact]
-        public void HarmonyAppDoesNotBindUnknownProcessUserWhenProfilesAreAmbiguous()
+        public void HarmonyAppDoesNotBindUnknownProcessUserToASelectedProfile()
         {
             ProcessInfo[] processes =
             {
@@ -414,8 +437,111 @@ namespace MoTuPerf.Desktop.Tests
                 HarmonyUserId = 100
             };
 
-            Assert.Null(DevicePickerWindow.FindHarmonyProcessForApp(processes, workApp, false));
-            Assert.Equal(1201, DevicePickerWindow.FindHarmonyProcessForApp(processes, workApp, true).Pid);
+            Assert.Null(DevicePickerWindow.FindHarmonyProcessForApp(processes, workApp));
+        }
+
+        [Fact]
+        public void UnknownHarmonyProcessDoesNotSynchronizeToKnownProfileApp()
+        {
+            var apps = new[]
+            {
+                new AppInfo { BundleId = "com.example.shared", Platform = "harmony", HarmonyUserId = 100 }
+            };
+            var process = new ProcessInfo
+            {
+                Pid = 1202,
+                Name = "com.example.shared",
+                BundleId = "com.example.shared",
+                Platform = "harmony",
+                HarmonyUserId = -1
+            };
+
+            Assert.Null(DevicePickerWindow.FindHarmonyAppForProcess(apps, process));
+        }
+
+        [Theory]
+        [InlineData(100, -1, false)]
+        [InlineData(-1, 100, false)]
+        [InlineData(100, 0, false)]
+        [InlineData(100, 100, true)]
+        [InlineData(-1, -1, true)]
+        public void HarmonyPidShortcutRequiresTheSameProfileInBothDirections(int appUser, int processUser, bool expected)
+        {
+            var app = new AppInfo
+            {
+                BundleId = "com.example.shared", Platform = "harmony", HarmonyUserId = appUser,
+                ProcessPid = 501, ProcessName = "com.example.shared"
+            };
+            var process = new ProcessInfo
+            {
+                Pid = 501, Name = "com.example.shared", BundleId = "com.example.shared",
+                Platform = "harmony", HarmonyUserId = processUser
+            };
+            Assert.Equal(expected, DevicePickerWindow.FindHarmonyAppForProcess(new[] { app }, process) == app);
+            Assert.Equal(expected, DevicePickerWindow.FindHarmonyProcessForApp(new[] { process }, app) == process);
+            var restoredApp = new AppInfo
+            {
+                BundleId = app.BundleId, Platform = "harmony", HarmonyUserId = processUser,
+                ProcessPid = app.ProcessPid, ProcessName = app.ProcessName
+            };
+            Assert.Equal(expected, DevicePickerWindow.SameAppSelection(app, restoredApp));
+        }
+
+        [Fact]
+        public void HarmonyUnbundledProcessAndExactProfileRemainSelectable()
+        {
+            var process = new ProcessInfo { Pid = 501, Name = "foundation", Platform = "harmony", HarmonyUserId = 0 };
+            var app = Assert.Single(DevicePickerWindow.HarmonyAppsFromProcesses(new[] { process }));
+            Assert.Same(process, DevicePickerWindow.FindHarmonyProcessForApp(new[] { process }, app));
+            Assert.Same(app, DevicePickerWindow.FindHarmonyAppForProcess(new[] { app }, process));
+            process.Name = "different-service";
+            Assert.Null(DevicePickerWindow.FindHarmonyProcessForApp(new[] { process }, app));
+            Assert.Null(DevicePickerWindow.FindHarmonyAppForProcess(new[] { app }, process));
+        }
+
+        [Fact]
+        public void UnknownHarmonyAppCannotChooseAKnownUserEvenWhenRecommended()
+        {
+            var app = new AppInfo { BundleId = "com.example.shared", Platform = "harmony" };
+            var known = new ProcessInfo
+            {
+                Pid = 501, Name = app.BundleId, BundleId = app.BundleId, Platform = "harmony",
+                HarmonyUserId = 100, Recommended = true
+            };
+            var unknown = new ProcessInfo
+            {
+                Pid = 502, Name = app.BundleId + ":worker", BundleId = app.BundleId, Platform = "harmony"
+            };
+            Assert.Null(DevicePickerWindow.FindHarmonyProcessForApp(new[] { known }, app));
+            Assert.Same(unknown, DevicePickerWindow.FindHarmonyProcessForApp(new[] { known, unknown }, app));
+            var knownApp = new AppInfo { BundleId = app.BundleId, Platform = "harmony", HarmonyUserId = 100 };
+            Assert.Null(DevicePickerWindow.FindHarmonyAppByBundle(new[] { knownApp }, app.BundleId, -1));
+            Assert.Same(app, DevicePickerWindow.FindHarmonyAppByBundle(new[] { knownApp, app }, app.BundleId, -1));
+            Assert.Same(knownApp, DevicePickerWindow.FindHarmonyAppForProcess(new[] { app, knownApp }, known));
+        }
+
+        [Fact]
+        public void HarmonyViewPreservesManualWorkerAndRejectsPidReuse()
+        {
+            var app = new AppInfo { BundleId = "com.example.shared", Platform = "harmony", HarmonyUserId = 100 };
+            var main = new ProcessInfo
+            {
+                Pid = 501, Name = app.BundleId, BundleId = app.BundleId, Platform = "harmony", HarmonyUserId = 100
+            };
+            var worker = new ProcessInfo
+            {
+                Pid = 502, Name = app.BundleId + ":worker", BundleId = app.BundleId, Platform = "harmony",
+                HarmonyUserId = 100, HarmonyStartTimeTicks = 42
+            };
+            Assert.Same(worker, DevicePickerWindow.SelectHarmonyProcessForView(new[] { main, worker }, worker, app));
+            Assert.Same(main, DevicePickerWindow.SelectHarmonyProcessForView(new[] { main, worker }, null, app));
+            Assert.Null(DevicePickerWindow.SelectHarmonyProcessForView(new ProcessInfo[0], worker, app));
+            var reused = new ProcessInfo
+            {
+                Pid = worker.Pid, Name = worker.Name, BundleId = worker.BundleId, Platform = "harmony",
+                HarmonyUserId = 100, HarmonyStartTimeTicks = 43
+            };
+            Assert.Null(DevicePickerWindow.SelectHarmonyProcessForView(new[] { main, reused }, worker, app));
         }
 
         [Fact]
@@ -436,6 +562,145 @@ namespace MoTuPerf.Desktop.Tests
                 new AppInfo { BundleId = "com.example.single", HarmonyUserId = -1, Platform = "harmony" }
             };
             Assert.NotNull(DevicePickerWindow.FindHarmonyAppByBundle(singleProfile, "com.example.single", -1));
+        }
+
+        [Theory]
+        [InlineData(true, true, false, false)]
+        [InlineData(true, true, true, false)]
+        [InlineData(true, false, false, true)]
+        [InlineData(false, true, false, true)]
+        public void HarmonyLaunchDoesNotFallbackToAnotherProcessWhenTargetIsMissing(
+            bool isHarmony,
+            bool preserveHarmonyAppPreference,
+            bool hasSelectedApp,
+            bool expected)
+        {
+            AppInfo app = hasSelectedApp
+                ? new AppInfo { BundleId = "com.example.target", Platform = "harmony" }
+                : null;
+            Assert.Equal(
+                expected,
+                DevicePickerWindow.ShouldAutoSelectFallbackProcess(
+                    isHarmony,
+                    preserveHarmonyAppPreference,
+                    app,
+                    null));
+        }
+
+        [Fact]
+        public void HarmonyLaunchModeKeepsTheSelectedAppWhenProcessBelongsToAnotherTarget()
+        {
+            var selectedApp = new AppInfo
+            {
+                BundleId = "com.example.selected",
+                Platform = "harmony",
+                HarmonyUserId = 100
+            };
+            var otherApp = new AppInfo
+            {
+                BundleId = "com.example.other",
+                Platform = "harmony",
+                HarmonyUserId = 100
+            };
+            var otherProcess = new ProcessInfo
+            {
+                Pid = 901,
+                Name = otherApp.BundleId,
+                BundleId = otherApp.BundleId,
+                Platform = "harmony",
+                HarmonyUserId = 100
+            };
+
+            Assert.Same(
+                selectedApp,
+                DevicePickerWindow.ResolveHarmonyConfirmedApp(
+                    true,
+                    selectedApp,
+                    otherProcess,
+                    new[] { selectedApp, otherApp }));
+            Assert.Same(
+                otherApp,
+                DevicePickerWindow.ResolveHarmonyConfirmedApp(
+                    false,
+                    selectedApp,
+                    otherProcess,
+                    new[] { selectedApp, otherApp }));
+            Assert.Null(DevicePickerWindow.ResolveHarmonyConfirmedProcess(true, selectedApp, otherProcess, new[] { otherProcess }));
+            Assert.Same(otherProcess, DevicePickerWindow.ResolveHarmonyConfirmedProcess(false, selectedApp, otherProcess, new[] { otherProcess }));
+        }
+
+        [Fact]
+        public void PendingHarmonyLaunchSurvivesMissingAppRowsAndRepeatedFiltering()
+        {
+            var other = new ProcessInfo
+            {
+                Pid = 900, Name = "com.example.other", BundleId = "com.example.other",
+                Platform = "harmony", HarmonyUserId = 100, Recommended = true
+            };
+            var otherProfile = new ProcessInfo
+            {
+                Pid = 901, Name = "com.example.target", BundleId = "com.example.target",
+                Platform = "harmony", HarmonyUserId = 0, Recommended = true
+            };
+            var items = new[] { other, otherProfile };
+            ProcessInfo selected = other;
+            for (int refresh = 0; refresh < 3; refresh++)
+            {
+                selected = DevicePickerWindow.SelectHarmonyProcessForView(items, selected, null, "com.example.target", 100);
+                Assert.Null(selected);
+            }
+            var target = new ProcessInfo
+            {
+                Pid = 902, Name = "com.example.target", BundleId = "com.example.target",
+                Platform = "harmony", HarmonyUserId = 100
+            };
+            Assert.Same(target, DevicePickerWindow.SelectHarmonyProcessForView(
+                new[] { other, otherProfile, target }, null, null, "com.example.target", 100));
+            Assert.Same(other, DevicePickerWindow.SelectHarmonyProcessForView(items, other, null));
+        }
+
+        [Fact]
+        public void LaunchConfirmationResolvesOnlyTheSelectedProfileAndRequiresARealPid()
+        {
+            var app = new AppInfo { BundleId = "com.example.target", Platform = "harmony", HarmonyUserId = 100 };
+            var foreign = new ProcessInfo
+            {
+                Pid = 1, Name = app.BundleId, BundleId = app.BundleId, Platform = "harmony", HarmonyUserId = 0
+            };
+            var target = new ProcessInfo
+            {
+                Pid = 2, Name = app.BundleId, BundleId = app.BundleId, Platform = "harmony", HarmonyUserId = 100,
+                HarmonyStartTimeTicks = 42
+            };
+            Assert.Null(DevicePickerWindow.ResolveHarmonyConfirmedProcess(true, app, foreign, new[] { foreign }));
+            Assert.Same(target, DevicePickerWindow.ResolveHarmonyConfirmedProcess(true, app, foreign, new[] { foreign, target }));
+            Assert.Null(DevicePickerWindow.ResolveHarmonyConfirmedProcess(true, null, target, new[] { target }));
+            Assert.Null(DevicePickerWindow.ResolveHarmonyConfirmedProcess(true, app, target, new ProcessInfo[0]));
+            var reused = new ProcessInfo
+            {
+                Pid = target.Pid, Name = target.Name, BundleId = target.BundleId, Platform = "harmony",
+                HarmonyUserId = 100, HarmonyStartTimeTicks = 43
+            };
+            Assert.Null(DevicePickerWindow.ResolveHarmonyConfirmedProcess(false, app, target, new[] { reused }));
+            var worker = new ProcessInfo
+            {
+                Pid = 3, Name = app.BundleId + ":worker", BundleId = app.BundleId, Platform = "harmony", HarmonyUserId = 100
+            };
+            Assert.Same(worker, DevicePickerWindow.ResolveHarmonyConfirmedProcess(false, app, worker, new[] { target, worker }));
+        }
+
+        [Fact]
+        public void PendingHarmonyLaunchDoesNotGuessAmongMultipleWorkers()
+        {
+            var app = new AppInfo { BundleId = "com.example.target", Platform = "harmony", HarmonyUserId = 100 };
+            var workers = new[]
+            {
+                new ProcessInfo { Pid = 10, Name = app.BundleId + ":worker", BundleId = app.BundleId, Platform = "harmony", HarmonyUserId = 100 },
+                new ProcessInfo { Pid = 11, Name = app.BundleId + ":render", BundleId = app.BundleId, Platform = "harmony", HarmonyUserId = 100 }
+            };
+            Assert.Null(DevicePickerWindow.SelectHarmonyProcessForView(workers, workers[0], app, app.BundleId, 100));
+            Assert.Null(DevicePickerWindow.ResolveHarmonyConfirmedProcess(true, app, workers[0], workers));
+            Assert.Same(workers[1], DevicePickerWindow.ResolveHarmonyConfirmedProcess(false, app, workers[1], workers));
         }
 
         [Fact]
@@ -876,6 +1141,138 @@ namespace MoTuPerf.Desktop.Tests
                 Assert.Equal("60", viewModel.Metrics.First(delegate(MetricRowViewModel metric) { return metric.Name == "FPS"; }).Value);
                 Assert.Equal("16.7", viewModel.Metrics.First(delegate(MetricRowViewModel metric) { return metric.Name == "Display FrameTime"; }).Value);
             }
+        }
+
+        [Fact]
+        public void HarmonyDefaultPickerHidesSystemOnlyTargetsButKeepsUserAndForegroundTargets()
+        {
+            AppInfo system = new AppInfo
+            {
+                BundleId = "com.example.system",
+                Platform = "harmony",
+                IsSystemApp = true,
+                IsPreInstallApp = true
+            };
+            AppInfo user = new AppInfo
+            {
+                BundleId = "com.example.user",
+                Platform = "harmony"
+            };
+            AppInfo foreground = new AppInfo
+            {
+                BundleId = "com.example.foreground",
+                Platform = "harmony",
+                Recommended = true,
+                IsSystemApp = true
+            };
+
+            Assert.False(DevicePickerWindow.IsHarmonyDefaultAppTarget(system));
+            Assert.True(DevicePickerWindow.IsHarmonyDefaultAppTarget(user));
+            Assert.True(DevicePickerWindow.IsHarmonyDefaultAppTarget(foreground));
+        }
+
+        [Fact]
+        public void HarmonyDefaultProcessFilterKeepsForegroundAndUserBundleButHidesOrphanSystemProcess()
+        {
+            AppInfo user = new AppInfo
+            {
+                BundleId = "com.example.user",
+                Platform = "harmony"
+            };
+            AppInfo system = new AppInfo
+            {
+                BundleId = "com.example.system",
+                Platform = "harmony",
+                IsSystemApp = true,
+                IsPreInstallApp = true
+            };
+            ProcessInfo userProcess = new ProcessInfo
+            {
+                Pid = 101,
+                Name = user.BundleId,
+                BundleId = user.BundleId,
+                OwnerBundleId = user.BundleId,
+                Platform = "harmony"
+            };
+            ProcessInfo systemProcess = new ProcessInfo
+            {
+                Pid = 102,
+                Name = system.BundleId,
+                BundleId = system.BundleId,
+                OwnerBundleId = system.BundleId,
+                Platform = "harmony"
+            };
+            ProcessInfo foregroundSystemProcess = new ProcessInfo
+            {
+                Pid = 103,
+                Name = system.BundleId,
+                BundleId = system.BundleId,
+                OwnerBundleId = system.BundleId,
+                Platform = "harmony",
+                ForegroundApplication = true
+            };
+
+            Assert.True(DevicePickerWindow.IsHarmonyDefaultProcessTarget(userProcess, new[] { user, system }));
+            Assert.False(DevicePickerWindow.IsHarmonyDefaultProcessTarget(systemProcess, new[] { user, system }));
+            Assert.True(DevicePickerWindow.IsHarmonyDefaultProcessTarget(foregroundSystemProcess, new[] { user, system }));
+            Assert.False(DevicePickerWindow.IsHarmonyDefaultProcessTarget(new ProcessInfo
+            {
+                Pid = 104,
+                BundleId = user.BundleId,
+                Platform = "harmony",
+                ForegroundApplication = true
+            }, new[] { user, system }));
+        }
+
+        [Fact]
+        public void HarmonyPickerShowsUserScopeOnlyWhenBundleHasMultipleProfiles()
+        {
+            AppInfo singleProfile = new AppInfo
+            {
+                Platform = "harmony",
+                BundleId = "com.example.single",
+                HarmonyUserId = 100
+            };
+            AppInfo profileZero = new AppInfo
+            {
+                Platform = "harmony",
+                BundleId = "com.example.shared",
+                HarmonyUserId = 0
+            };
+            AppInfo profileOneHundred = new AppInfo
+            {
+                Platform = "harmony",
+                BundleId = "com.example.shared",
+                HarmonyUserId = 100
+            };
+            ProcessInfo processZero = new ProcessInfo
+            {
+                Pid = 10,
+                Platform = "harmony",
+                BundleId = "com.example.shared",
+                Name = "com.example.shared",
+                HarmonyUserId = 0
+            };
+            ProcessInfo processOneHundred = new ProcessInfo
+            {
+                Pid = 11,
+                Platform = "harmony",
+                BundleId = "com.example.shared",
+                Name = "com.example.shared",
+                HarmonyUserId = 100
+            };
+
+            DevicePickerWindow.MarkHarmonyPickerUserScopeVisibility(
+                new[] { singleProfile, profileZero, profileOneHundred },
+                new[] { processZero, processOneHundred });
+
+            Assert.False(singleProfile.ShowHarmonyUserScope);
+            Assert.True(profileZero.ShowHarmonyUserScope);
+            Assert.True(profileOneHundred.ShowHarmonyUserScope);
+            Assert.True(processZero.ShowHarmonyUserScope);
+            Assert.True(processOneHundred.ShowHarmonyUserScope);
+            Assert.Equal("com.example.single", singleProfile.PickerTargetIdentifier);
+            Assert.Equal("com.example.shared · 用户 0", profileZero.PickerTargetIdentifier);
         }
 
         [Fact]

@@ -221,7 +221,7 @@ namespace CSharpIosPerfMonitor
             }
             string androidFpsTarget = string.IsNullOrWhiteSpace(config.TargetName) ? config.BundleId : config.TargetName;
             List<string> args = isHarmony
-                ? new List<string> { runner, "--hdc", transport, "--serial", config.Udid, "--pid", targetPid.ToString(CultureInfo.InvariantCulture), "--target-name", config.TargetName ?? "", "--target-bundle-id", config.BundleId ?? "", "--target-user-id", config.TargetHarmonyUserId.ToString(CultureInfo.InvariantCulture), "--target-start-time-ticks", config.TargetHarmonyStartTimeTicks.ToString(CultureInfo.InvariantCulture), "--interval", "1" }
+                ? BuildHarmonyRunnerArguments(config, targetPid, runner, transport)
                 : isAndroid
                 ? new List<string> { runner, "--adb", RuntimeTools.AdbExecutable, "--serial", config.Udid, "--pid", targetPid.ToString(CultureInfo.InvariantCulture), "--package", androidFpsTarget, "--target-name", config.TargetName ?? "", "--target-start-time-ticks", config.TargetAndroidStartTimeTicks.ToString(CultureInfo.InvariantCulture), "--interval", "1" }
                 : new List<string>
@@ -269,6 +269,22 @@ namespace CSharpIosPerfMonitor
                 diagnostics?.Dispose();
             }, TaskScheduler.Default);
             Raise(Message, CollectionStartMessage(config));
+        }
+
+        internal static List<string> BuildHarmonyRunnerArguments(CaptureConfig config, int targetPid, string runner, string transport)
+        {
+            List<string> args = new List<string>
+            {
+                runner, "--hdc", transport, "--serial", config.Udid,
+                "--pid", targetPid.ToString(CultureInfo.InvariantCulture),
+                "--target-name", config.TargetName ?? "", "--target-bundle-id", config.BundleId ?? "",
+                "--target-user-id", config.TargetHarmonyUserId.ToString(CultureInfo.InvariantCulture),
+                "--target-app-index", config.TargetHarmonyAppIndex.ToString(CultureInfo.InvariantCulture),
+                "--target-start-time-ticks", config.TargetHarmonyStartTimeTicks.ToString(CultureInfo.InvariantCulture),
+                "--interval", "1"
+            };
+            if (config.TargetHarmonyNameIsComm) args.Add("--target-name-is-comm");
+            return args;
         }
 
         private async Task RunCaptureTaskAsync(string name, Func<Task> run, CaptureDiagnosticsLog diagnostics, int generation, CancellationToken token)
@@ -647,24 +663,36 @@ namespace CSharpIosPerfMonitor
                 .ToList();
             if (timed.Count == 0) return;
 
-            PerfSample latest = timed[timed.Count - 1];
-            bool reset = !_frameTimelineAnchor.HasValue ||
-                !string.Equals(_frameTimelineSource, latest.Source, StringComparison.Ordinal) ||
-                (_lastFrameSourceElapsed.HasValue && latest.FrameSourceElapsedSec < _lastFrameSourceElapsed.Value);
-            if (reset)
+            // A queue may contain the final windows of one surface followed by
+            // a rebuilt source. Anchor each continuous run separately.
+            for (int start = 0; start < timed.Count;)
             {
-                _frameTimelineAnchor = receivedAt.AddSeconds(-latest.FrameSourceElapsedSec);
-                _frameTimelineSource = latest.Source;
-            }
+                PerfSample first = timed[start];
+                string identity = first.Source + "\n" + first.FrameSource;
+                int end = start + 1;
+                while (end < timed.Count
+                    && string.Equals(identity, timed[end].Source + "\n" + timed[end].FrameSource, StringComparison.Ordinal)
+                    && timed[end].FrameSourceElapsedSec >= timed[end - 1].FrameSourceElapsedSec) end++;
 
-            DateTime anchor = _frameTimelineAnchor.Value;
-            foreach (PerfSample sample in timed)
-            {
-                if (!string.Equals(sample.Source, _frameTimelineSource, StringComparison.Ordinal)) continue;
-                DateTime timestamp = anchor.AddSeconds(sample.FrameSourceElapsedSec);
-                sample.Timestamp = timestamp < _startedAt ? _startedAt : timestamp;
+                PerfSample latest = timed[end - 1];
+                bool reset = !_frameTimelineAnchor.HasValue
+                    || !string.Equals(_frameTimelineSource, identity, StringComparison.Ordinal)
+                    || (_lastFrameSourceElapsed.HasValue && first.FrameSourceElapsedSec < _lastFrameSourceElapsed.Value);
+                if (reset)
+                {
+                    DateTime received = latest.Timestamp == default(DateTime) ? receivedAt : latest.Timestamp;
+                    _frameTimelineAnchor = received.AddSeconds(-latest.FrameSourceElapsedSec);
+                    _frameTimelineSource = identity;
+                }
+                DateTime anchor = _frameTimelineAnchor.Value;
+                for (int index = start; index < end; index++)
+                {
+                    DateTime timestamp = anchor.AddSeconds(timed[index].FrameSourceElapsedSec);
+                    timed[index].Timestamp = timestamp < _startedAt ? _startedAt : timestamp;
+                }
+                _lastFrameSourceElapsed = latest.FrameSourceElapsedSec;
+                start = end;
             }
-            _lastFrameSourceElapsed = latest.FrameSourceElapsedSec;
         }
 
         private static string RunnerPath(bool android)
@@ -719,7 +747,12 @@ namespace CSharpIosPerfMonitor
                 if (!IsGenerationCurrent(generation)) return;
                 string fatalMessage = Convert.ToString(Get(obj, "message") ?? "所选 pid 已失效，请重新选择当前运行的进程。");
                 string fatalCode = Convert.ToString(Get(obj, "code") ?? "fatal");
+                string reasonCode = Convert.ToString(Get(obj, "reason_code") ?? fatalCode);
                 WriteDiagnosticsEvent("runner_fatal", fatalMessage, fatalCode);
+                if (!string.IsNullOrWhiteSpace(reasonCode) && !string.Equals(reasonCode, fatalCode, StringComparison.Ordinal))
+                    WriteDiagnosticsEvent("runner_failure_reason", fatalMessage, reasonCode);
+                // Keep the terminal lifecycle code stable for the UI while the
+                // diagnostic event retains the concrete transport reason.
                 FailAndStop(fatalMessage, fatalCode);
                 return;
             }
@@ -944,9 +977,19 @@ namespace CSharpIosPerfMonitor
                         _latestJankTimeMs = 0;
                         _latestStutterPercent = 0;
                     }
+                    // Polled sources may deliver several completed windows one
+                    // line at a time. Preserve each endpoint's age even if the
+                    // sample loop drains stdout between lines of the same dump.
+                    DateTime frameReceivedAt = _latestFpsAt.Value;
+                    double sourceLag;
+                    if (DeviceLookupService.IsHarmony(platform)
+                        && string.Equals(source, "hdc-renderservice-surface-fps", StringComparison.Ordinal)
+                        && TryNonNegativeDouble(Get(obj, "source_lag_sec"), out sourceLag)
+                        && sourceLag <= 86400)
+                        frameReceivedAt = frameReceivedAt.AddSeconds(-sourceLag);
                     _pendingFrameSamples.Enqueue(new PerfSample
                     {
-                        Timestamp = _latestFpsAt.Value,
+                        Timestamp = frameReceivedAt,
                         HasFps = true,
                         Fps = fpsValue,
                         FpsUpdated = true,

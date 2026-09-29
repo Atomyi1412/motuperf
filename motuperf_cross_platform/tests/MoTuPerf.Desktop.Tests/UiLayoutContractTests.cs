@@ -177,8 +177,9 @@ namespace MoTuPerf.Desktop.Tests
                 && Attribute(grid, "RowDefinitions") == "46,Auto,48,42,*");
             Assert.Equal("False", Attribute(Named(dialog, "DeviceDiagnosticsButton"), "IsEnabled"));
             Assert.Equal("ShowDeviceDiagnostics", Attribute(Named(dialog, "DeviceDiagnosticsButton"), "Click"));
-            Assert.Equal("Android", Attribute(dialog.Descendants(Avalonia + "TextBlock").Single(text => Attribute(text, "Text") == "Android"), "Text"));
-            Assert.Equal("iOS", Attribute(dialog.Descendants(Avalonia + "TextBlock").Single(text => Attribute(text, "Text") == "iOS"), "Text"));
+            Assert.DoesNotContain(dialog.Descendants(Avalonia + "TextBlock"), text => Attribute(text, "Text") == "Android");
+            Assert.DoesNotContain(dialog.Descendants(Avalonia + "TextBlock"), text => Attribute(text, "Text") == "iOS");
+            Assert.DoesNotContain(dialog.Descendants(Avalonia + "TextBlock"), text => Attribute(text, "Text") == "鸿蒙");
             Assert.DoesNotContain(dialog.Descendants(Avalonia + "ScrollViewer"), scroll => (string)scroll.Attribute(Xaml + "Name") == "DeviceDiagnosticRegion");
             Assert.True(dialog.Descendants(Avalonia + "Grid").Count(grid => Attribute(grid, "ColumnDefinitions") == "*,48") >= 2);
             Assert.Contains(dialog.Descendants(Avalonia + "Grid"), grid => Attribute(grid, "ColumnDefinitions") == "*,88");
@@ -196,6 +197,11 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Equal("下载苹果设备驱动", Attribute(driverButton, "Content"));
             Assert.Equal("DownloadAppleDriver", Attribute(driverButton, "Click"));
             Assert.Equal("False", Attribute(driverButton, "IsVisible"));
+            XElement harmonyHdcButton = Named(dialog, "HarmonyHdcButton");
+            Assert.Contains("driverDownloadButton", Attribute(harmonyHdcButton, "Classes"));
+            Assert.Equal("下载鸿蒙连接工具", Attribute(harmonyHdcButton, "Content"));
+            Assert.Equal("OpenHarmonyHdcSetup", Attribute(harmonyHdcButton, "Click"));
+            Assert.Equal("False", Attribute(harmonyHdcButton, "IsVisible"));
             Assert.DoesNotContain(dialog.Descendants(), element => (string)element.Attribute(Xaml + "Name") == "StatusText");
             Assert.DoesNotContain(dialog.Descendants(Avalonia + "TextBlock"), text => Attribute(text, "Text") == "{Binding Platform}");
 
@@ -231,6 +237,9 @@ namespace MoTuPerf.Desktop.Tests
                 .Count(text => Attribute(text, "Text") == "请输入应用名称进行搜索"));
 
             string dialogCode = LoadText("src", "MoTuPerf.Desktop", "DevicePickerWindow.axaml.cs");
+            Assert.DoesNotContain("AndroidStatusText", dialogCode);
+            Assert.DoesNotContain("IosStatusText", dialogCode);
+            Assert.DoesNotContain("HarmonyStatusText", dialogCode);
             Assert.Contains("ProcessTargetMatcher.IsIosDefaultPickerProcess(process, selectedBundle)", dialogCode);
             Assert.Contains("if (DeviceLookupService.IsIos(device))", dialogCode);
             Assert.DoesNotContain("ThenBy(delegate(ProcessInfo process) { return process.Pid; })", dialogCode);
@@ -243,10 +252,32 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Equal("设备检测详情", Attribute(diagnostics.Root, "Title"));
             Assert.Contains(diagnostics.Descendants(Avalonia + "ScrollViewer"), scroll => Attribute(scroll, "Grid.Row") == "1");
             Assert.Contains(diagnostics.Descendants(Avalonia + "Border"), border => Attribute(border, "Classes") == "diagnosticSection");
+            XElement harmonyHdcSetupButton = Named(diagnostics, "HarmonyHdcSetupButton");
+            Assert.Equal("下载鸿蒙连接工具", Attribute(harmonyHdcSetupButton, "Content"));
+            Assert.Equal("OpenHarmonyHdcSetup", Attribute(harmonyHdcSetupButton, "Click"));
             string formatterCode = LoadText("src", "MoTuPerf.Desktop", "DeviceDiagnosticsPresentation.cs");
             Assert.Contains("已连接 \" + devices.Count + \" 台设备", formatterCode);
             Assert.Contains("缺少 Apple 设备驱动", formatterCode);
             Assert.Contains("本轮没有返回额外诊断", formatterCode);
+            Assert.Contains("HarmonyHdcActionAvailable", formatterCode);
+            XDocument hdcSetup = LoadXaml("src", "MoTuPerf.Desktop", "HarmonyHdcSetupWindow.axaml");
+            Assert.Equal("鸿蒙设备连接准备", Attribute(hdcSetup.Root, "Title"));
+            Assert.Equal("https://developer.huawei.com/consumer/cn/download/", Attribute(Named(hdcSetup, "HdcDownloadUrlText"), "Text"));
+            Assert.Contains(hdcSetup.Descendants(Avalonia + "TextBlock"), text => Attribute(text, "Text").Contains("Command Line Tools", StringComparison.Ordinal));
+            Assert.Contains(hdcSetup.Descendants(Avalonia + "TextBlock"), text => Attribute(text, "Text").Contains("MOTUPERF_HDC", StringComparison.Ordinal));
+            Assert.Contains("HdcDownloadUrl", LoadText("src", "MoTuPerf.Desktop", "HarmonyHdcSetupWindow.axaml.cs"));
+            Assert.Contains("HdcGuideUrl", LoadText("src", "MoTuPerf.Desktop", "HarmonyHdcSetupWindow.axaml.cs"));
+            Assert.Contains(hdcSetup.Descendants(Avalonia + "Button"), button => Attribute(button, "Content") == "选择 Command Line Tools 文件夹并检测"
+                && Attribute(button, "Click") == "SelectHdcDirectory");
+            Assert.Contains(hdcSetup.Descendants(Avalonia + "Button"), button => Attribute(button, "Content") == "高级：直接选择 HDC 文件"
+                && Attribute(button, "Click") == "SelectHdcFile");
+            Assert.Contains(hdcSetup.Descendants(Avalonia + "TextBlock"), text => Attribute(text, "Text").Contains("最外层的 command-line-tools 文件夹", StringComparison.Ordinal));
+            Assert.Contains("FindHdcInDirectory", LoadText("src", "MoTuPerf.Desktop", "HarmonyHdcSetupWindow.axaml.cs"));
+            Assert.Contains(hdcSetup.Descendants(Avalonia + "TextBlock"), text => Attribute(text, "Text").Contains("不需要设置环境变量", StringComparison.Ordinal));
+            Assert.Contains(hdcSetup.Descendants(Avalonia + "Button"), button => Attribute(button, "Content") == "复制官方地址"
+                && Attribute(button, "Click") == "CopyHdcDownload");
+            Assert.Contains(hdcSetup.Descendants(Avalonia + "Button"), button => Attribute(button, "Content") == "重新检测"
+                && Attribute(button, "Click") == "RequestDeviceRefresh");
         }
 
         [Fact]
@@ -277,11 +308,13 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Contains("HarmonyAppsFromProcesses(loadedProcesses)", dialogCode);
             Assert.Contains("应用清单暂不可用，已保留真实进程列表", dialogCode);
             Assert.Contains("WaitForHarmonyProcessAsync", dialogCode);
-            Assert.Contains("FindHarmonyProcessForBundle(loadedProcesses, _preferredAppBundleId, _preferredHarmonyUserId)", dialogCode);
+            Assert.Contains("FindHarmonyProcessForBundle(loadedProcesses, harmonyTargetBundleId,\n                        harmonyTargetUserId, harmonyTargetAppIndex)", dialogCode);
+            Assert.Contains("ResolveHarmonyConfirmedProcess(_launchMode, app, process, _processes)", dialogCode);
+            Assert.Contains("_pendingHarmonyLaunchBundleId, _pendingHarmonyLaunchUserId", dialogCode);
             Assert.Contains("RefreshHarmonyProcessesAfterLaunchFailureAsync", dialogCode);
             Assert.Contains("未使用旧进程，请刷新设备后重新选择", dialogCode);
             Assert.Contains("暂未找到唯一匹配进程", dialogCode);
-            Assert.Contains("APP 已启动，但暂未检测到匹配进程", dialogCode);
+            Assert.Contains("APP 已启动，但暂未检测到唯一匹配进程", dialogCode);
             Assert.Contains("应用列表已读取，但进程列表暂不可用", dialogCode);
             Assert.Contains("SameAppSelection", dialogCode);
             Assert.Contains("SameProcessSelection", dialogCode);
@@ -289,10 +322,27 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Contains("return bundleMatches.Count == 1 ? bundleMatches[0] : null;", dialogCode);
             Assert.Contains("SameAppSelection(app, selectedApp)", dialogCode);
             Assert.Contains("app.ProcessPid", dialogCode);
+            Assert.Contains("FindHarmonyAppForProcess", dialogCode);
+            Assert.Contains("MatchesHarmonyAppProcess", dialogCode);
             Assert.Contains("TrySelectHarmonyRunningProcess", dialogCode);
             Assert.Contains("启动入口不可用，已切换到唯一匹配进程 PID", dialogCode);
             Assert.Contains("PickerSubtitle", LoadText("src", "MoTuPerf.Desktop", "DevicePickerWindow.axaml"));
+            Assert.Contains("PickerTargetIdentifier", LoadText("src", "MoTuPerf.Desktop", "DevicePickerWindow.axaml"));
+            Assert.DoesNotContain("{Binding LaunchAvailability", LoadText("src", "MoTuPerf.Desktop", "DevicePickerWindow.axaml"));
+            Assert.Contains("MarkHarmonyPickerUserScopeVisibility", dialogCode);
             Assert.Contains("MinHeight=\"26\"", LoadText("src", "MoTuPerf.Desktop", "DevicePickerWindow.axaml"));
+        }
+
+        [Fact]
+        public void HarmonyPickerConstrainsLongLabelsAndKeepsFullValuesInTooltips()
+        {
+            string xaml = LoadText("src", "MoTuPerf.Desktop", "DevicePickerWindow.axaml");
+
+            Assert.Contains("ClipToBounds=\"True\"", xaml);
+            Assert.Contains("ToolTip.Tip=\"{Binding PickerTargetIdentifier}\"", xaml);
+            Assert.Contains("ToolTip.Tip=\"{Binding PickerSubtitle}\"", xaml);
+            Assert.DoesNotContain("运行中，可直接选择进程", xaml);
+            Assert.DoesNotContain("可尝试启动", xaml);
         }
 
         [Fact]
@@ -325,6 +375,7 @@ namespace MoTuPerf.Desktop.Tests
                 "DevicePickerWindow.axaml",
                 "ScreenshotViewerWindow.axaml",
                 "DeviceDiagnosticsWindow.axaml",
+                "HarmonyHdcSetupWindow.axaml",
                 "HelpWindow.axaml",
                 "ChangelogWindow.axaml",
                 "ConfirmDialogWindow.axaml",
@@ -377,6 +428,8 @@ namespace MoTuPerf.Desktop.Tests
             string viewModel = LoadText("src", "MoTuPerf.Desktop", "MainWindowViewModel.cs");
             string collector = LoadText("src", "MoTuPerf.Platform", "Shared", "PerfCollector.cs");
             Assert.Contains("TargetHarmonyUserId = process.HarmonyUserId", viewModel);
+            Assert.Contains("TargetHarmonyNameIsComm = process.HarmonyNameIsComm", viewModel);
+            Assert.Contains("\"--target-name-is-comm\"", collector);
             Assert.Contains("\"--target-bundle-id\"", collector);
             Assert.Contains("\"--target-user-id\"", collector);
             Assert.Contains("\"--target-start-time-ticks\"", collector);
@@ -450,7 +503,8 @@ namespace MoTuPerf.Desktop.Tests
                 "UpdatePromptWindow.axaml",
                 "UpdateDownloadWindow.axaml",
                 "ScreenshotViewerWindow.axaml",
-                "DeviceDiagnosticsWindow.axaml"
+                "DeviceDiagnosticsWindow.axaml",
+                "HarmonyHdcSetupWindow.axaml"
             };
             foreach (string viewFile in secondaryWindows)
             {
@@ -487,6 +541,19 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Contains("Process CPU Raw", helpText);
             Assert.Contains("Thermal Status", helpText);
             Assert.Contains("0 正常、1 轻微、2 中度、3 严重、4 临界、5 紧急、6 关机", helpText);
+            Assert.Contains("鸿蒙温度传感器", helpText);
+            Assert.Contains("ambient：环境温度参考", helpText);
+            Assert.Contains("Battery：电池相关温度", helpText);
+            Assert.Contains("charger：充电/电源管理区域相关温度", helpText);
+            Assert.Contains("rfboard：射频/通信电路板相关温度", helpText);
+            Assert.Contains("shell_back：机身背部区域", helpText);
+            Assert.Contains("shell_frame：机身中框/边框区域", helpText);
+            Assert.Contains("shell_front：机身正面/屏幕侧区域", helpText);
+            Assert.Contains("system_h：系统级/主板附近传感器", helpText);
+            Assert.Contains("不是所选进程的温度", helpText);
+            Assert.Contains("不建议跨设备直接比较绝对值", helpText);
+            Assert.Contains("应用图标已支持", helpText);
+            Assert.Contains("鸿蒙系统热状态暂未接入", helpText);
             Assert.Contains("每 3 秒", helpText);
             Assert.Contains("缩放只影响查看", helpText);
             Assert.Contains("按秒汇总", helpText);
@@ -501,9 +568,60 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Equal("更新日志", Attribute(changelog.Root, "Title"));
             Assert.Contains(changelog.Descendants(Avalonia + "Border"), border => Attribute(border, "Classes") == "secondaryWindowFrame");
             string changelogText = string.Join(" ", changelog.Descendants(Avalonia + "TextBlock").Select(element => Attribute(element, "Text")));
-            Assert.Contains("v0.40.8", changelogText);
-            Assert.Contains("v0.40.7", changelogText);
-            Assert.Contains("v0.40.6", changelogText);
+            Assert.Contains("v0.40.50", changelogText);
+            Assert.Contains("v0.40.49", changelogText);
+            Assert.Contains("v0.40.48", changelogText);
+            Assert.Contains("v0.40.47", changelogText);
+            Assert.Contains("v0.40.45", changelogText);
+            Assert.Contains("v0.40.36", changelogText);
+            Assert.Contains("v0.40.38", changelogText);
+            string visibleChangelogText = string.Join(" ", changelog.Descendants(Avalonia + "Border")
+                .Where(border => Attribute(border, "Classes") == "helpSection"
+                    && Attribute(border, "IsVisible") != "False")
+                .Descendants(Avalonia + "TextBlock")
+                .Select(element => Attribute(element, "Text")));
+            string projectRootForChangelog = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(
+                ResolvePath("src", "MoTuPerf.Desktop", "MoTuPerf.Desktop.csproj"))))!;
+            string rootChangelog = File.ReadAllText(Path.Combine(projectRootForChangelog, "..", "CHANGELOG.md"));
+            string[] latestVisibleVersions = System.Text.RegularExpressions.Regex.Matches(
+                    rootChangelog,
+                    @"(?m)^## v(?<version>\d+\.\d+\.\d+)")
+                .Cast<System.Text.RegularExpressions.Match>()
+                .Select(match => "v" + match.Groups["version"].Value)
+                .Take(3)
+                .ToArray();
+            Assert.Equal(3, latestVisibleVersions.Length);
+            Assert.All(latestVisibleVersions, version => Assert.Contains(version, visibleChangelogText));
+            Assert.DoesNotContain("v0.40.87", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.86", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.84", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.83", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.79", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.78", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.77", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.74", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.73", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.70", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.69", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.68", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.67", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.64", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.54", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.53", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.49", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.15", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.35", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.37", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.39", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.46", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.47", visibleChangelogText);
+            Assert.DoesNotContain("v0.40.45", visibleChangelogText);
+            Assert.DoesNotMatch(@"(?<!\d)v0\.40\.11(?!\d)", changelogText);
+            Assert.Equal(3, changelog.Descendants(Avalonia + "Border").Count(border => Attribute(border, "Classes") == "helpSection"));
+            Assert.DoesNotMatch(@"(?<!\d)v0\.40\.10(?!\d)", changelogText);
+            Assert.DoesNotMatch(@"(?<!\d)v0\.40\.9(?!\d)", changelogText);
+            Assert.DoesNotContain(changelog.Descendants(Avalonia + "TextBlock"),
+                element => Attribute(element, "Text") == "v0.40.8");
             Assert.DoesNotContain("v0.38.17", changelogText);
             Assert.DoesNotContain("v0.38.16", changelogText);
             Assert.DoesNotContain("v0.38.14", changelogText);

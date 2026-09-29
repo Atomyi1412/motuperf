@@ -304,24 +304,62 @@ namespace CSharpIosPerfMonitor
             }
             List<ProcessInfo> processes = new List<ProcessInfo>();
             bool modernIos = UsesRsd(productVersion);
+            string modernFailure = "";
             if (modernIos)
             {
-                processes = await ListProcessesWithPymobiledevice3Async(udid, token);
+                try
+                {
+                    processes = await ListProcessesWithPymobiledevice3Async(udid, token);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    // RSD is the preferred source on iOS 17+, but a failed
+                    // developer service must not prevent a bounded legacy
+                    // process query from recovering a real selectable target.
+                    modernFailure = ex.Message;
+                }
             }
+            string tideviceFailure = "";
             if (processes.Count == 0)
             {
                 try
                 {
                     ProcessResult result = await RuntimeTools.RunTideviceAsync(TideviceArguments(udid, "ps", "--json", "-A"), 12000, token);
-                    if (result.ExitCode == 0) processes = ParseTideviceProcesses(result.Stdout);
+                    if (result.ExitCode == 0)
+                    {
+                        processes = ParseTideviceProcesses(result.Stdout);
+                        if (processes.Count == 0)
+                            tideviceFailure = "备用进程通道返回了空结果。";
+                    }
+                    else
+                    {
+                        tideviceFailure = RuntimeTools.DescribeIosFailure(result);
+                    }
                 }
                 catch (TimeoutException)
                 {
+                    tideviceFailure = "备用进程通道读取超时。";
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    tideviceFailure = "备用进程通道不可用：" + RuntimeTools.DescribeIosException(ex);
                 }
             }
             if (processes.Count == 0 && !modernIos)
             {
                 processes = await ListProcessesWithPymobiledevice3Async(udid, token);
+            }
+            if (processes.Count == 0 && modernIos && (!string.IsNullOrWhiteSpace(modernFailure) || !string.IsNullOrWhiteSpace(tideviceFailure)))
+            {
+                throw new InvalidOperationException(CombineProcessListFailures(modernFailure, tideviceFailure));
             }
             foreach (ProcessInfo process in processes)
             {
@@ -445,7 +483,7 @@ namespace CSharpIosPerfMonitor
             }
         }
 
-        private static string DescribeProcessListFailure(ProcessResult result)
+        internal static string DescribeProcessListFailure(ProcessResult result)
         {
             string output = ((result == null ? "" : result.Stderr) + "\n" + (result == null ? "" : result.Stdout)).Trim();
             string lower = output.ToLowerInvariant();
@@ -457,17 +495,47 @@ namespace CSharpIosPerfMonitor
             {
                 return "iOS 开发者服务不可用，请开启开发者模式、解锁设备并重新插拔 USB。";
             }
-            string detail = FirstNonEmptyLine(output);
+            if (lower.Contains("invalidhostid") || lower.Contains("pair") || lower.Contains("trust") || lower.Contains("lockdown"))
+            {
+                return "iOS 设备未完成信任或已锁定，请解锁设备并在设备上确认信任此电脑后重试。";
+            }
+            if (lower.Contains("userspacersdtunnel") || lower.Contains("rsd") || lower.Contains("tunnel") || lower.Contains("connection refused"))
+            {
+                return "iOS 开发者隧道建立失败，请开启开发者模式、保持设备解锁并重新插拔 USB。";
+            }
+            if (lower.Contains("no module named") || lower.Contains("modulenotfounderror"))
+            {
+                return "iOS 运行组件不完整，请重新安装最新版 MoTuPerf。";
+            }
+            string detail = LastUsefulDiagnosticLine(output);
             return string.IsNullOrWhiteSpace(detail)
                 ? "iOS 进程读取失败，请保持设备解锁并重试。"
                 : "iOS 进程读取失败：" + detail;
         }
 
-        private static string FirstNonEmptyLine(string value)
+        internal static string CombineProcessListFailures(string modernFailure, string tideviceFailure)
+        {
+            List<string> failures = new List<string>();
+            if (!string.IsNullOrWhiteSpace(modernFailure)) failures.Add(modernFailure.Trim());
+            if (!string.IsNullOrWhiteSpace(tideviceFailure)) failures.Add(tideviceFailure.Trim());
+            if (failures.Count == 0) return "iOS 进程读取失败，请保持设备解锁并重试。";
+            if (failures.Count == 1) return failures[0];
+            return failures[0] + "\n备用通道：" + failures[1];
+        }
+
+        private static string LastUsefulDiagnosticLine(string value)
         {
             string[] lines = (value ?? "").Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
             if (lines.Length == 0) return "";
-            string line = lines[0].Trim();
+            string line = "";
+            for (int index = lines.Length - 1; index >= 0; index--)
+            {
+                string candidate = lines[index].Trim();
+                if (candidate.Length == 0 || candidate == "Traceback (most recent call last):" || candidate == "^") continue;
+                if (candidate.StartsWith("File \"", StringComparison.Ordinal) || candidate.StartsWith("from ", StringComparison.Ordinal)) continue;
+                line = candidate;
+                break;
+            }
             return line.Length <= 180 ? line : line.Substring(0, 180) + "...";
         }
 

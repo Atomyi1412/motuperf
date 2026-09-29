@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using CSharpIosPerfMonitor;
@@ -11,6 +12,13 @@ namespace MoTuPerf.Platform.Tests
 {
     public sealed class HarmonyLookupServiceTests
     {
+        private static string Format(string json, bool indented)
+        {
+            using var document = JsonDocument.Parse(json);
+            return JsonSerializer.Serialize(document.RootElement,
+                new JsonSerializerOptions { WriteIndented = indented });
+        }
+
         [Fact]
         public void ParsesOfficialVerboseAndDefaultListsWithoutDuplicates()
         {
@@ -126,6 +134,42 @@ namespace MoTuPerf.Platform.Tests
         }
 
         [Fact]
+        public void ExplicitTextAndKeyedProcessFieldsAcceptSingleSegmentHarmonyBundles()
+        {
+            var apps = HarmonyLookupService.ParseApps(
+                "bundleName: x\n"
+                + "versionName: 1.0\n");
+
+            var app = Assert.Single(apps);
+            Assert.Equal("x", app.BundleId);
+            Assert.Equal("1.0", app.Version);
+
+            var processes = HarmonyLookupService.ParseProcesses(
+                "PID=42 BUNDLE_NAME=x COMM=launcher\n", "HARMONY-1");
+
+            var process = Assert.Single(processes);
+            Assert.Equal("x", process.BundleId);
+            Assert.Equal("launcher", process.Name);
+        }
+
+        [Fact]
+        public void ParsesSingleSegmentHarmonyBundlesFromJsonInventoryValues()
+        {
+            var apps = HarmonyLookupService.ParseApps(
+                "{\"bundleInfos\":[\"launcher\",\"systemui\",\"com.example.game\","
+                + "{\"launcher\":{\"versionName\":\"1.0\"}}]}\n"
+                + "{\"metadata\":{\"label\":\"systemui\",\"versionName\":\"9.9\"}}\n"
+                + "{\"bundleInfos\":[{\"systemui\":{\"versionName\":\"2.0\"}}]}\n");
+
+            Assert.Equal(
+                new[] { "launcher", "systemui", "com.example.game" },
+                apps.Select(app => app.BundleId));
+            Assert.Equal("1.0", Assert.Single(apps, app => app.BundleId == "launcher").Version);
+            Assert.DoesNotContain(apps, app => app.BundleId == "metadata");
+            Assert.Equal("2.0", Assert.Single(apps, app => app.BundleId == "systemui").Version);
+        }
+
+        [Fact]
         public void KeepsRealAbilityEntriesWithTheApplicationRecord()
         {
             var apps = HarmonyLookupService.ParseApps(
@@ -141,10 +185,82 @@ namespace MoTuPerf.Platform.Tests
         }
 
         [Fact]
+        public void NestedApplicationInfoKeepsSiblingModulesAndAbilityEntries()
+        {
+            var apps = HarmonyLookupService.ParseApps(
+                "{\"bundleInfo\":{\"applicationInfo\":{"
+                + "\"bundleName\":\"com.example.nested\",\"userId\":100,"
+                + "\"label\":\"Nested App\",\"versionName\":\"1.2.3\"},"
+                + "\"hapModuleInfos\":["
+                + "{\"moduleName\":\"entry\",\"mainElementName\":\"EntryAbility\"},"
+                + "{\"moduleName\":\"feature\",\"abilityInfos\":[{\"abilityName\":\"FeatureAbility\"}],"
+                + "\"serviceAbilityInfos\":[{\"abilityName\":\"SyncService\"}]}"
+                + "]}}\n");
+
+            var app = Assert.Single(apps);
+            Assert.Equal("Nested App", app.Name);
+            Assert.Equal("1.2.3", app.Version);
+            Assert.Equal(new[] { 100 }, app.HarmonyUserIds);
+            Assert.Equal(new[] { "entry/EntryAbility", "feature/FeatureAbility", "feature/SyncService" },
+                app.HarmonyLaunchEntries
+                    .Select(entry => entry.Module + "/" + entry.Ability)
+                    .OrderBy(value => value));
+            Assert.True(app.HasLaunchEntry);
+            Assert.Contains(app.HarmonyLaunchEntries, entry => entry.Ability == "SyncService" && !entry.IsUiEntry);
+        }
+
+        [Fact]
+        public void NestedBundleRecordsKeepSameBundleUsersAndEntriesSeparate()
+        {
+            var apps = HarmonyLookupService.ParseApps(
+                "{\"bundleInfo\":{\"applicationInfo\":{\"bundleName\":\"com.example.multi\",\"userId\":0},"
+                + "\"moduleInfos\":[{\"moduleName\":\"entry\",\"mainElementName\":\"OwnerAbility\"}]}}\n"
+                + "{\"bundleInfo\":{\"applicationInfo\":{\"bundleName\":\"com.example.multi\",\"userId\":100},"
+                + "\"moduleInfos\":[{\"moduleName\":\"entry\",\"mainElementName\":\"WorkAbility\"}],"
+                + "\"extensionAbilityInfos\":[{\"extensionAbilityName\":\"SyncService\"}]}}\n");
+
+            var app = Assert.Single(apps);
+            Assert.Equal(new[] { 0, 100 }, app.HarmonyUserIds);
+            Assert.Equal(new[] { "OwnerAbility", "SyncService", "WorkAbility" },
+                app.HarmonyLaunchEntries.Select(entry => entry.Ability).OrderBy(value => value));
+
+            var instances = HarmonyLookupService.ExpandHarmonyUserInstances(apps);
+            var owner = Assert.Single(instances, item => item.HarmonyUserId == 0);
+            var work = Assert.Single(instances, item => item.HarmonyUserId == 100);
+            Assert.Contains(owner.HarmonyLaunchEntries, entry => entry.Ability == "OwnerAbility");
+            Assert.DoesNotContain(owner.HarmonyLaunchEntries, entry => entry.Ability == "WorkAbility");
+            Assert.Contains(work.HarmonyLaunchEntries, entry => entry.Ability == "WorkAbility");
+            Assert.Contains(work.HarmonyLaunchEntries, entry => entry.Ability == "SyncService");
+            Assert.DoesNotContain(work.HarmonyLaunchEntries, entry => entry.Ability == "OwnerAbility");
+        }
+
+        [Fact]
+        public void IndentedNestedApplicationInfoKeepsBundleAndModuleContext()
+        {
+            var apps = HarmonyLookupService.ParseApps(
+                "bundleInfo:\n"
+                + "  applicationInfo:\n"
+                + "    bundleName: com.example.indented\n"
+                + "    userId: 100\n"
+                + "    appName: Indented App\n"
+                + "  moduleInfos:\n"
+                + "    - moduleName: entry\n"
+                + "      abilityInfos:\n"
+                + "        - abilityName: EntryAbility\n");
+
+            var app = Assert.Single(apps);
+            Assert.Equal("com.example.indented", app.BundleId);
+            Assert.Equal(new[] { 100 }, app.HarmonyUserIds);
+            var entry = Assert.Single(app.HarmonyLaunchEntries);
+            Assert.Equal("entry", entry.Module);
+            Assert.Equal("EntryAbility", entry.Ability);
+        }
+
+        [Fact]
         public async Task LaunchReusesAggregateInventoryAbilityWhenPerBundleDumpIsUnavailable()
         {
             var app = Assert.Single(HarmonyLookupService.ParseApps(
-                "{\"bundleName\":\"com.example.native\",\"hapModuleInfos\":[{"
+                "{\"bundleName\":\"com.example.native\",\"userId\":0,\"hapModuleInfos\":[{"
                 + "\"moduleName\":\"entry\",\"mainElementName\":\"EntryAbility\"}]}"));
             List<string> commands = new List<string>();
 
@@ -156,7 +272,7 @@ namespace MoTuPerf.Platform.Tests
             {
                 string key = string.Join(" ", command ?? Array.Empty<string>());
                 commands.Add(key);
-                if (key == "aa start -b com.example.native -m entry -a EntryAbility")
+                if (key == "aa start -u 0 -b com.example.native -m entry -a EntryAbility")
                     return Task.FromResult(new ProcessResult(0, "Ability started", ""));
                 return Task.FromResult(new ProcessResult(1, "", "unsupported fake HDC command"));
             }
@@ -165,7 +281,7 @@ namespace MoTuPerf.Platform.Tests
             ProcessResult result = await service.LaunchAppAsync("HARMONY-1", app, CancellationToken.None);
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Equal(new[] { "aa start -b com.example.native -m entry -a EntryAbility" }, commands);
+            Assert.Equal(new[] { "aa start -u 0 -b com.example.native -m entry -a EntryAbility" }, commands);
         }
 
         [Fact]
@@ -201,7 +317,7 @@ namespace MoTuPerf.Platform.Tests
                     return Task.FromResult(new ProcessResult(1, "", "unsupported fake HDC command"));
                 if (key.StartsWith("sh -c ", StringComparison.Ordinal))
                     return Task.FromResult(new ProcessResult(0, "", ""));
-                if (key == "aa start -U 0 -b com.example.second -m feature -a SecondAbility")
+                if (key == "aa start -u 0 -b com.example.second -m feature -a SecondAbility")
                     return Task.FromResult(new ProcessResult(0, "Ability started", ""));
                 return Task.FromResult(new ProcessResult(1, "", "unsupported fake HDC command"));
             }
@@ -213,8 +329,8 @@ namespace MoTuPerf.Platform.Tests
             ProcessResult result = await service.LaunchAppAsync("HARMONY-1", selected, CancellationToken.None);
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("aa start -U 0 -b com.example.second -m feature -a SecondAbility", commands);
-            Assert.DoesNotContain("aa start -U 0 -b com.example.first -m entry -a FirstAbility", commands);
+            Assert.Contains("aa start -u 0 -b com.example.second -m feature -a SecondAbility", commands);
+            Assert.DoesNotContain("aa start -u 0 -b com.example.first -m entry -a FirstAbility", commands);
         }
 
         [Fact]
@@ -286,6 +402,9 @@ namespace MoTuPerf.Platform.Tests
             Assert.Contains(apps, app => app.BundleId == "com.example.compat" && app.HarmonyUserId == 100);
             Assert.Contains(apps, app => app.BundleId == "com.example.stopped" && app.HarmonyUserId == 100 && !app.IsRunning);
             Assert.Contains(apps, app => string.IsNullOrWhiteSpace(app.BundleId) && app.ProcessPid == 503 && app.IsProcessOnly);
+            Assert.Equal("有启动入口", apps.Single(app => app.BundleId == "com.example.native").LaunchAvailability);
+            Assert.Equal("可尝试启动", apps.Single(app => app.BundleId == "com.example.stopped").LaunchAvailability);
+            Assert.Equal("仅运行中可采集", apps.Single(app => string.IsNullOrWhiteSpace(app.BundleId) && app.ProcessPid == 503).LaunchAvailability);
         }
 
         [Fact]
@@ -335,6 +454,24 @@ namespace MoTuPerf.Platform.Tests
         }
 
         [Fact]
+        public void ClassNameUsesTheOwningAbilityCollectionToDetermineUiStatus()
+        {
+            string output = "{\"bundleName\":\"com.example.classname\",\"hapModuleInfos\":[{"
+                + "\"moduleName\":\"entry\",\"abilityInfos\":[{\"className\":\"MainAbility\"}],"
+                + "\"serviceAbilityInfos\":[{\"className\":\"SyncService\"}]}]}";
+
+            var entries = HarmonyLookupService.ParseLaunchEntryPoints(output);
+            var ui = Assert.Single(entries, entry => entry.Ability == "MainAbility");
+            var service = Assert.Single(entries, entry => entry.Ability == "SyncService");
+            Assert.True(ui.IsUiEntry);
+            Assert.False(service.IsUiEntry);
+
+            AppInfo app = Assert.Single(HarmonyLookupService.ParseApps(output));
+            Assert.True(app.HasLaunchEntry);
+            Assert.False(app.IsProcessOnly);
+        }
+
+        [Fact]
         public void DoesNotTreatBundleAndModuleMetadataAsLaunchEntries()
         {
             string output = "{\"bundleName\":\"com.example.app\",\"hapModuleInfos\":[{"
@@ -363,6 +500,40 @@ namespace MoTuPerf.Platform.Tests
                 + "  - extensionAbilityName: DataShareService\n";
             var textEntries = HarmonyLookupService.ParseLaunchEntryPoints(text);
             Assert.Contains(textEntries, entry => entry.Module == "service" && entry.Ability == "DataShareService");
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void RealNestedExtensionInfosKeepModuleAndNonUiOwnership(bool indented)
+        {
+            // This is the shape returned by the connected ALN-AL80 for
+            // com.huawei.hmos.aidataservice: ExtensionAbilityInfo records are
+            // nested below each hapModuleInfo, and appId/appIdentifier are
+            // adjacent identity fields rather than the selected Bundle.
+            string json = "{\"appId\":\"com.huawei.hmos.aidataservice_signature\","
+                + "\"appIdentifier\":\"5765880207853016403\","
+                + "\"bundleName\":\"com.huawei.hmos.aidataservice\",\"userId\":100,"
+                + "\"hapModuleInfos\":["
+                + "{\"moduleName\":\"dataaiprocess\",\"extensionInfos\":["
+                + "{\"bundleName\":\"com.huawei.hmos.aidataservice\","
+                + "\"moduleName\":\"dataaiprocess\",\"extensionTypeName\":\"service\","
+                + "\"name\":\"AiProcessServiceAbility\",\"type\":3}]},"
+                + "{\"moduleName\":\"entry\",\"extensionInfos\":["
+                + "{\"moduleName\":\"entry\",\"name\":\"AiDataServiceAbility\","
+                + "\"extensionTypeName\":\"service\",\"type\":3}]}]}";
+
+            List<HarmonyLaunchEntryPoint> entries = HarmonyLookupService.ParseLaunchEntryPoints(
+                Format(json, indented), "com.huawei.hmos.aidataservice", 100);
+
+            Assert.Equal(new[] { "dataaiprocess/AiProcessServiceAbility", "entry/AiDataServiceAbility" },
+                entries.Select(entry => entry.Module + "/" + entry.Ability).OrderBy(value => value));
+            Assert.All(entries, entry => Assert.False(entry.IsUiEntry));
+
+            AppInfo app = Assert.Single(HarmonyLookupService.ParseApps(Format(json, indented)));
+            Assert.False(app.HasLaunchEntry);
+            Assert.True(app.HasNonUiLaunchEntry);
+            Assert.Equal(2, app.HarmonyLaunchEntries.Count);
         }
 
         [Fact]
@@ -409,14 +580,11 @@ namespace MoTuPerf.Platform.Tests
         [Fact]
         public void BuildsCompleteCompatibilityPackageInventoryForAllUsers()
         {
-            var commands = HarmonyLookupService.BuildPackageInventoryCommands(new[] { 100, 0, 100 });
+            var commands = HarmonyLookupService.BuildPackageInventoryCommands(new[] { -1, 100, 0, 100 });
 
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "pm", "list", "packages", "-f" }));
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "pm", "list", "packages", "-f", "--user", "0" }));
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "pm", "list", "packages", "-f", "--user", "100" }));
-            Assert.Contains(commands, command => command.SequenceEqual(new[] { "pm", "list", "packages", "-f", "-u", "100" }));
-            Assert.Contains(commands, command => command.SequenceEqual(new[] { "pm", "list", "packages", "-f", "-U", "100" }));
-            Assert.Contains(commands, command => command.SequenceEqual(new[] { "pm", "list", "packages", "-f", "--user-id", "100" }));
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "pm", "list", "packages" }));
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "pm", "list", "packages", "--user", "0" }));
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "pm", "list", "packages", "--user", "100" }));
@@ -426,10 +594,96 @@ namespace MoTuPerf.Platform.Tests
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "cmd", "package", "list", "packages" }));
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "cmd", "package", "list", "packages", "--user", "0" }));
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "cmd", "package", "list", "packages", "--user", "100" }));
-            Assert.Contains(commands, command => command.SequenceEqual(new[] { "cmd", "package", "list", "packages", "-u", "100" }));
-            Assert.Contains(commands, command => command.SequenceEqual(new[] { "cmd", "package", "list", "packages", "-U", "100" }));
-            Assert.Contains(commands, command => command.SequenceEqual(new[] { "cmd", "package", "list", "packages", "--user-id", "100" }));
-            Assert.Equal(36, commands.Count);
+            Assert.DoesNotContain(commands, command => command.Contains("-u", StringComparer.Ordinal));
+            Assert.DoesNotContain(commands, command => command.Contains("-U", StringComparer.Ordinal));
+            Assert.DoesNotContain(commands, command => command.Contains("--user-id", StringComparer.Ordinal));
+            Assert.DoesNotContain(commands, command => command.Contains("-1", StringComparer.Ordinal));
+            Assert.Equal(12, commands.Count);
+        }
+
+        [Fact]
+        public void OnlyExplicitPackageUserSelectorEstablishesCompatibilityProfile()
+        {
+            Assert.Equal(100, HarmonyLookupService.CommandUserId(
+                new[] { "pm", "list", "packages", "--user", "100" }));
+            Assert.Equal(-1, HarmonyLookupService.CommandUserId(
+                new[] { "pm", "list", "packages", "-u", "100" }));
+            Assert.Equal(-1, HarmonyLookupService.CommandUserId(
+                new[] { "pm", "list", "packages", "-U", "100" }));
+            Assert.Equal(-1, HarmonyLookupService.CommandUserId(
+                new[] { "cmd", "package", "list", "packages", "--user-id", "100" }));
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public async Task CompatibilityInventoryKeepsRealProfilesWithoutShortFlagAttribution(
+            bool unifiedInventory, bool scopedPackagesDenied)
+        {
+            var commands = new List<string[]>();
+            var service = new HarmonyLookupService((serial, command, timeout, token) =>
+            {
+                commands.Add(command);
+                string key = string.Join(" ", command);
+                if (key == "pm list users")
+                    return Task.FromResult(new ProcessResult(0,
+                        "UserInfo{0:Owner:13}\nUserInfo{100:Work:13}\n", ""));
+                if (key == "bm dump -a")
+                    return Task.FromResult(new ProcessResult(0,
+                        "{\"bundleName\":\"com.example.native\",\"userId\":100}", ""));
+                if (key.StartsWith("pm list packages", StringComparison.Ordinal)
+                    || key.StartsWith("cmd package list packages", StringComparison.Ordinal))
+                {
+                    // Android short flags treat a trailing number as a name
+                    // filter; they do not limit the result to that profile.
+                    if (command.Contains("-u") || command.Contains("-U"))
+                        return Task.FromResult(new ProcessResult(0,
+                            "package:com.example.100.retired uid:10123\n", ""));
+                    if (command.Contains("--user-id"))
+                        return Task.FromResult(new ProcessResult(1, "", "Unknown option: --user-id"));
+                    int userIndex = Array.IndexOf(command, "--user");
+                    if (userIndex < 0)
+                        return Task.FromResult(new ProcessResult(0, "package:com.example.global\n", ""));
+                    if (scopedPackagesDenied)
+                        return Task.FromResult(new ProcessResult(1, "", "permission denied"));
+                    bool owner = command[userIndex + 1] == "0";
+                    return Task.FromResult(new ProcessResult(0,
+                        "package:com.example.shared\npackage:com.example."
+                        + (owner ? "owner" : "work") + "\n", ""));
+                }
+                if (command[0] == "ps")
+                    return Task.FromResult(new ProcessResult(0, "PID ARGS\n503 foundation\n", ""));
+                return Task.FromResult(new ProcessResult(1, "", "unavailable"));
+            });
+
+            HarmonyTargetInventory inventory = unifiedInventory
+                ? await service.ListTargetsAsync("TEST-HDC", CancellationToken.None) : null;
+            List<AppInfo> apps = inventory?.Apps
+                ?? await service.ListAppsAsync("TEST-HDC", CancellationToken.None);
+            Assert.DoesNotContain(apps, app => app.BundleId == "com.example.100.retired");
+            Assert.Equal(100, Assert.Single(apps, app => app.BundleId == "com.example.native").HarmonyUserId);
+            Assert.Contains(apps, app => app.BundleId == "" && app.ProcessPid == 503 && app.IsProcessOnly);
+            if (unifiedInventory)
+                Assert.Equal("foundation", Assert.Single(inventory.Processes).Name);
+            AppInfo unscoped = Assert.Single(apps, app => app.BundleId == "com.example.global");
+            Assert.Equal(-1, unscoped.HarmonyUserId);
+            Assert.False(unscoped.CanAttemptLaunch);
+            if (scopedPackagesDenied)
+            {
+                Assert.DoesNotContain(apps, app => app.BundleId == "com.example.shared");
+            }
+            else
+            {
+                Assert.Equal(new[] { 0, 100 }, apps.Where(app => app.BundleId == "com.example.shared")
+                    .Select(app => app.HarmonyUserId).OrderBy(user => user).ToArray());
+                Assert.Equal(0, Assert.Single(apps, app => app.BundleId == "com.example.owner").HarmonyUserId);
+                Assert.Equal(100, Assert.Single(apps, app => app.BundleId == "com.example.work").HarmonyUserId);
+            }
+            int beforeLaunch = commands.Count;
+            Assert.NotEqual(0, (await service.LaunchAppAsync("TEST-HDC", unscoped, CancellationToken.None)).ExitCode);
+            Assert.Equal(beforeLaunch, commands.Count);
         }
 
         [Fact]
@@ -451,18 +705,15 @@ namespace MoTuPerf.Platform.Tests
         [Fact]
         public void BuildsScopedBundleManagerInventoryForShortAndLongUserOptions()
         {
-            var commands = HarmonyLookupService.BuildBundleManagerInventoryCommands(new[] { 100, 0, 100 });
+            var commands = HarmonyLookupService.BuildBundleManagerInventoryCommands(new[] { 100, -1, 0, 100 });
 
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "bm", "dump", "-a" }));
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "bm", "dump", "-a", "-u", "0" }));
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "bm", "dump", "-a", "-u", "100" }));
-            Assert.Contains(commands, command => command.SequenceEqual(new[] { "bm", "dump", "-a", "--user", "0" }));
-            Assert.Contains(commands, command => command.SequenceEqual(new[] { "bm", "dump", "-a", "--user", "100" }));
-            Assert.Contains(commands, command => command.SequenceEqual(new[] { "bm", "dump", "-a", "-U", "0" }));
-            Assert.Contains(commands, command => command.SequenceEqual(new[] { "bm", "dump", "-a", "-U", "100" }));
+            Assert.DoesNotContain(commands, command => command.Contains("--user") || command.Contains("-U"));
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "bm", "dump", "-a", "--user-id", "0" }));
             Assert.Contains(commands, command => command.SequenceEqual(new[] { "bm", "dump", "-a", "--user-id", "100" }));
-            Assert.Equal(9, commands.Count);
+            Assert.Equal(5, commands.Count);
         }
 
         [Fact]
@@ -483,15 +734,15 @@ namespace MoTuPerf.Platform.Tests
                 + "userId=12\n"
                 + "user id: 14\n");
 
-            Assert.Equal(new[] { 0, 10, 12, 14, 100 }, ids);
+            Assert.Equal(new[] { 10, 12, 14, 100 }, ids);
         }
 
         [Fact]
         public void ReadsHarmonyUserIdFromShortAndLongCommandOptions()
         {
             Assert.Equal(100, HarmonyLookupService.CommandUserId(new[] { "bm", "dump", "-a", "-u", "100" }));
-            Assert.Equal(101, HarmonyLookupService.CommandUserId(new[] { "bm", "dump", "-a", "--user", "101" }));
-            Assert.Equal(102, HarmonyLookupService.CommandUserId(new[] { "aa", "start", "-U", "102", "-b", "com.example.app" }));
+            Assert.Equal(101, HarmonyLookupService.CommandUserId(new[] { "aa", "dump", "-r", "--userId", "101" }));
+            Assert.Equal(102, HarmonyLookupService.CommandUserId(new[] { "aa", "start", "-u", "102", "-b", "com.example.app" }));
             Assert.Equal(103, HarmonyLookupService.CommandUserId(new[] { "bm", "dump", "-a", "--user-id", "103" }));
         }
 
@@ -507,6 +758,49 @@ namespace MoTuPerf.Platform.Tests
             Assert.Equal("com.example.native", rows.Single(row => row.Pid == 701).BundleId);
             Assert.Equal(100, rows.Single(row => row.Pid == 701).HarmonyUserId);
             Assert.Equal("com.example.compat", rows.Single(row => row.Pid == 702).BundleId);
+        }
+
+        [Fact]
+        public void KeepsKeyValueBundleOnlyRowsWithoutInventingAProcessName()
+        {
+            var rows = HarmonyLookupService.ParseProcesses(
+                "pid=701,bundleName=com.example.game,uid=u100_a1\n", "device");
+
+            var process = Assert.Single(rows);
+            Assert.Empty(process.Name);
+            Assert.Equal("com.example.game", process.BundleId);
+            Assert.Equal("com.example.game", process.OwnerBundleId);
+            Assert.Equal("com.example.game", process.OwnerName);
+            Assert.Equal("process-inventory", process.OwnershipSource);
+            Assert.True(process.OwnershipVerified);
+            Assert.Equal(100, process.HarmonyUserId);
+        }
+
+        [Fact]
+        public void KeepsBundleOnlyTableRowsSeparateFromTheProcessNameColumn()
+        {
+            var rows = HarmonyLookupService.ParseProcesses(
+                "PID BUNDLE_NAME USER\n"
+                + "702 com.example.compat u0_a2\n", "device");
+
+            var process = Assert.Single(rows);
+            Assert.Empty(process.Name);
+            Assert.Equal("com.example.compat", process.BundleId);
+            Assert.Equal(0, process.HarmonyUserId);
+            Assert.True(process.OwnershipVerified);
+        }
+
+        [Fact]
+        public void KeepsRealProcessNameWhenBundleColumnIsAlsoPresent()
+        {
+            var rows = HarmonyLookupService.ParseProcesses(
+                "PID NAME BUNDLE_NAME USER\n"
+                + "703 com.example.game:worker com.example.game u100_a1\n", "device");
+
+            var process = Assert.Single(rows);
+            Assert.Equal("com.example.game:worker", process.Name);
+            Assert.Equal("com.example.game", process.BundleId);
+            Assert.Equal(100, process.HarmonyUserId);
         }
 
         [Fact]
@@ -641,7 +935,7 @@ namespace MoTuPerf.Platform.Tests
         public void KeepsServiceOnlyBundlesAsRealLaunchCandidates()
         {
             var apps = HarmonyLookupService.ParseApps(
-                "{\"bundleName\":\"com.example.service\",\"hapModuleInfos\":[{"
+                "{\"bundleName\":\"com.example.service\",\"userId\":0,\"hapModuleInfos\":[{"
                 + "\"moduleName\":\"entry\",\"serviceAbilityInfos\":[{\"className\":\"SyncService\"}],"
                 + "\"dataShareAbilityInfos\":[{\"className\":\"ShareService\"}]}]}\n");
 
@@ -671,7 +965,7 @@ namespace MoTuPerf.Platform.Tests
             {
                 string key = string.Join(" ", command ?? new string[0]);
                 commands.Add(key);
-                if (key == "aa start -U 0 -b com.example.service -m entry -a " + ability)
+                if (key == "aa start -u 0 -b com.example.service -m entry -a " + ability)
                     return Task.FromResult(new ProcessResult(0, "Ability started", ""));
                 return Task.FromResult(new ProcessResult(1, "", "unsupported fake HDC command"));
             }
@@ -691,13 +985,14 @@ namespace MoTuPerf.Platform.Tests
                 }, CancellationToken.None);
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("aa start -U 0 -b com.example.service -m entry -a " + ability, commands);
+            Assert.Contains("aa start -u 0 -b com.example.service -m entry -a " + ability, commands);
             Assert.DoesNotContain(commands, command => command.Contains("am start", StringComparison.Ordinal));
         }
 
         [Fact]
         public async Task KeepsNonUiLaunchFailureWhenEveryRealEntryIsRejected()
         {
+            List<string> commands = new List<string>();
             Task<ProcessResult> ExecuteFakeHdcAsync(
                 string serial,
                 string[] command,
@@ -705,6 +1000,7 @@ namespace MoTuPerf.Platform.Tests
                 CancellationToken token)
             {
                 string key = string.Join(" ", command ?? new string[0]);
+                commands.Add(key);
                 if (key.StartsWith("aa start ", StringComparison.Ordinal))
                     return Task.FromResult(new ProcessResult(1, "", "permission denied for real ability"));
                 return Task.FromResult(new ProcessResult(1, "", "unsupported fake HDC command"));
@@ -726,6 +1022,9 @@ namespace MoTuPerf.Platform.Tests
 
             Assert.NotEqual(0, result.ExitCode);
             Assert.Contains("permission denied for real ability", result.Stderr);
+            Assert.DoesNotContain(commands, command => command == "aa start -u 0 -b com.example.service");
+            Assert.DoesNotContain(commands, command => command.StartsWith("am start ", StringComparison.Ordinal));
+            Assert.DoesNotContain(commands, command => command.StartsWith("monkey ", StringComparison.Ordinal));
         }
 
         [Fact]
@@ -752,9 +1051,9 @@ namespace MoTuPerf.Platform.Tests
                     return Task.FromResult(new ProcessResult(1, "", "unknown option"));
                 if (key == "bm dump -n com.example.mixed")
                     return Task.FromResult(new ProcessResult(1, "", "unscoped lookup must not be used here"));
-                if (key == "aa start -U 0 -b com.example.mixed -m entry -a EntryAbility")
+                if (key == "aa start -u 0 -b com.example.mixed -m entry -a EntryAbility")
                     return Task.FromResult(new ProcessResult(1, "", "ui entry rejected"));
-                if (key == "aa start -U 0 -b com.example.mixed -m entry -a SyncService")
+                if (key == "aa start -u 0 -b com.example.mixed -m entry -a SyncService")
                     return Task.FromResult(new ProcessResult(0, "Ability started", ""));
                 return Task.FromResult(new ProcessResult(1, "", "unsupported fake HDC command"));
             }
@@ -763,14 +1062,14 @@ namespace MoTuPerf.Platform.Tests
             ProcessResult result = await service.LaunchAppAsync("HARMONY-1", "com.example.mixed", new[] { 0 }, CancellationToken.None);
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("aa start -U 0 -b com.example.mixed -m entry -a SyncService", commands);
+            Assert.Contains("aa start -u 0 -b com.example.mixed -m entry -a SyncService", commands);
         }
 
         [Fact]
         public void KeepsUiLaunchableWhenTheBundleAlsoHasNonUiEntries()
         {
             var apps = HarmonyLookupService.ParseApps(
-                "{\"bundleName\":\"com.example.mixed\",\"hapModuleInfos\":[{"
+                "{\"bundleName\":\"com.example.mixed\",\"userId\":0,\"hapModuleInfos\":[{"
                 + "\"moduleName\":\"entry\",\"abilityInfos\":[{\"name\":\"EntryAbility\"}],"
                 + "\"serviceAbilityInfos\":[{\"className\":\"SyncService\"}]}]}\n");
 
@@ -866,6 +1165,55 @@ namespace MoTuPerf.Platform.Tests
         }
 
         [Fact]
+        public void TextInventoryKeepsUsersWhenUserFieldPrecedesEachSameBundleRecord()
+        {
+            string output = "userId: 100\n"
+                + "bundleName: com.example.shared\n"
+                + "hapModuleInfos:\n"
+                + "  - moduleName: entry\n"
+                + "    abilityInfos:\n"
+                + "      - name: OwnerAbility\n"
+                + "userId: 101\n"
+                + "bundleName: com.example.shared\n"
+                + "hapModuleInfos:\n"
+                + "  - moduleName: work\n"
+                + "    abilityInfos:\n"
+                + "      - name: WorkAbility\n"
+                + "    extensionAbilityInfos:\n"
+                + "      - extensionAbilityName: WorkService\n";
+
+            var rows = HarmonyLookupService.ExpandHarmonyUserInstances(
+                HarmonyLookupService.ParseApps(output));
+
+            var owner = Assert.Single(rows, app => app.HarmonyUserId == 100);
+            var work = Assert.Single(rows, app => app.HarmonyUserId == 101);
+            Assert.Contains(owner.HarmonyLaunchEntries,
+                entry => entry.Module == "entry" && entry.Ability == "OwnerAbility");
+            Assert.DoesNotContain(owner.HarmonyLaunchEntries, entry => entry.Ability == "WorkAbility");
+            Assert.Contains(work.HarmonyLaunchEntries,
+                entry => entry.Module == "work" && entry.Ability == "WorkAbility");
+            Assert.Contains(work.HarmonyLaunchEntries,
+                entry => entry.Module == "work" && entry.Ability == "WorkService" && !entry.IsUiEntry);
+            Assert.DoesNotContain(work.HarmonyLaunchEntries, entry => entry.Ability == "OwnerAbility");
+        }
+
+        [Fact]
+        public void TextInventoryMapsHarmonyUidProfileTokensBeforeBundleRecords()
+        {
+            var apps = HarmonyLookupService.ParseApps(
+                "uid: u100_a123\n"
+                + "bundleName: com.example.profiled\n"
+                + "uid: 20010123\n"
+                + "bundleName: com.example.nativeuid\n"
+                + "userId: 101\n"
+                + "bundleName: com.example.user\n");
+
+            Assert.Contains(apps, app => app.BundleId == "com.example.profiled" && app.HarmonyUserIds.Contains(100));
+            Assert.Contains(apps, app => app.BundleId == "com.example.nativeuid" && app.HarmonyUserIds.Contains(100));
+            Assert.Contains(apps, app => app.BundleId == "com.example.user" && app.HarmonyUserIds.Contains(101));
+        }
+
+        [Fact]
         public void DoesNotPairFlatAbilityFieldsWithAnEarlierModuleWhenAliasesRepeat()
         {
             string output = "moduleName: entry\n"
@@ -895,6 +1243,56 @@ namespace MoTuPerf.Platform.Tests
             Assert.Single(merged);
             Assert.Equal(601, merged[0].Pid);
             Assert.Equal("com.example.game", merged[0].BundleId);
+            Assert.Equal("com.example.game:render", merged[0].Name);
+            Assert.False(merged[0].OwnershipAmbiguous);
+        }
+
+        [Fact]
+        public void MultipleConcreteProcessViewsRemainAmbiguousEvenWhenBundleMatches()
+        {
+            var merged = HarmonyLookupService.MergeProcesses(new[]
+            {
+                new ProcessInfo { Pid = 602, Name = "appspawn", BundleId = "com.example.game", Platform = "harmony" },
+                new ProcessInfo { Pid = 602, Name = "com.example.game:worker", BundleId = "com.example.game", Platform = "harmony" },
+                new ProcessInfo { Pid = 602, Name = "com.example.game:renderer", BundleId = "com.example.game", Platform = "harmony" }
+            });
+
+            ProcessInfo process = Assert.Single(merged);
+            Assert.Equal("appspawn", process.Name);
+            Assert.True(process.OwnershipAmbiguous);
+            Assert.False(process.OwnershipVerified);
+            Assert.Empty(process.BundleId);
+            Assert.False(process.Recommended);
+        }
+
+        [Fact]
+        public void ExistingProcessAmbiguityCannotBeClearedByLaterAbilityEvidence()
+        {
+            var process = new ProcessInfo
+            {
+                Pid = 603,
+                Name = "appspawn",
+                Platform = "harmony",
+                BundleId = "com.example.game",
+                OwnershipAmbiguous = true
+            };
+
+            HarmonyLookupService.ApplyAbilityProcessBindings(new[] { process }, new[]
+            {
+                new HarmonyProcessBinding
+                {
+                    Pid = 603,
+                    ProcessName = "com.example.game:renderer",
+                    BundleId = "com.example.game",
+                    HarmonyUserId = 0,
+                    Foreground = true
+                }
+            });
+
+            Assert.True(process.OwnershipAmbiguous);
+            Assert.False(process.OwnershipVerified);
+            Assert.Empty(process.BundleId);
+            Assert.False(process.Recommended);
         }
 
         [Fact]
@@ -995,8 +1393,8 @@ namespace MoTuPerf.Platform.Tests
         public void TreatsEmbeddedNumericUidAsItsHarmonyProfile()
         {
             var apps = HarmonyLookupService.ParseApps(
-                "{\"bundleName\":\"com.example.work\",\"uid\":100123}\n"
-                + "bundleName: com.example.text uid: 200234\n");
+                "{\"bundleName\":\"com.example.work\",\"uid\":210123}\n"
+                + "bundleName: com.example.text uid: 410234\n");
 
             Assert.Contains(apps, app => app.BundleId == "com.example.work" && app.HarmonyUserIds.Contains(1));
             Assert.Contains(apps, app => app.BundleId == "com.example.text" && app.HarmonyUserIds.Contains(2));
@@ -1028,7 +1426,7 @@ namespace MoTuPerf.Platform.Tests
             var apps = HarmonyLookupService.ParseApps(
                 "{\"com.example.keyed\":{\"version_code\":7}}\n"
                 + "[\"com.example.string.one\",\"com.example.string.two\"]\n"
-                + "{\"bundle_name\":\"com.example.native\",\"name\":\"Native\",\"abilityInfos\":[{\"name\":\"EntryAbility\"}]}\n");
+                + "{\"bundle_name\":\"com.example.native\",\"userId\":0,\"name\":\"Native\",\"abilityInfos\":[{\"name\":\"EntryAbility\"}]}\n");
 
             Assert.Equal(new[] { "com.example.keyed", "com.example.string.one", "com.example.string.two", "com.example.native" },
                 apps.Select(app => app.BundleId));
@@ -1036,6 +1434,89 @@ namespace MoTuPerf.Platform.Tests
             Assert.Equal("Native", apps.Single(app => app.BundleId == "com.example.native").Name);
             Assert.True(apps.Single(app => app.BundleId == "com.example.native").HasLaunchEntry);
             Assert.Equal("有启动入口", apps.Single(app => app.BundleId == "com.example.native").LaunchAvailability);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void DoesNotCreateApplicationsFromDottedMetadata(bool indented)
+        {
+            string output = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                bundleInfos = new[]
+                {
+                    new
+                    {
+                        bundleName = "com.example.real",
+                        label = "Studio.Game",
+                        vendor = "com.example.vendor",
+                        versionName = "Release.Beta",
+                        permissions = new[] { "ohos.permission.CAMERA" },
+                        defPermissions = new[] { new { name = "ohos.permission.CUSTOM", label = "Camera access" } },
+                        metadata = new { channel = "com.example.channel", name = "com.example.meta", label = "Metadata" },
+                        abilityInfos = new[] { new { name = "com.example.real.EntryAbility" } }
+                    }
+                }
+            }, new System.Text.Json.JsonSerializerOptions { WriteIndented = indented });
+
+            AppInfo app = Assert.Single(HarmonyLookupService.ParseApps(output));
+
+            Assert.Equal("com.example.real", app.BundleId);
+            Assert.Equal("Studio.Game", app.Name);
+            Assert.Equal("Release.Beta", app.Version);
+            Assert.Contains(app.HarmonyLaunchEntries, entry => entry.Ability == "com.example.real.EntryAbility");
+        }
+
+        [Fact]
+        public void KeepsRealInventoryShapesWhileIgnoringMetadataArrays()
+        {
+            string output = "[\"com.example.root\"]\n"
+                + "{\"installedBundles\":[\"com.example.installed\"],"
+                + "\"permissions\":[\"ohos.permission.LOCATION\"],"
+                + "\"wrapper\":{\"bundleInfos\":[{\"bundleName\":\"com.example.nested\"}]}}\n"
+                + "{\"com.example.keyed\":{\"versionName\":\"Preview.Stable\"}}\n"
+                + "bundleName: com.example.text appName: Text App\n";
+
+            Assert.Equal(new[] { "com.example.root", "com.example.installed", "com.example.nested",
+                "com.example.keyed", "com.example.text" },
+                HarmonyLookupService.ParseApps(output).Select(app => app.BundleId));
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task MetadataDoesNotBecomeLaunchTargetsInUnifiedInventory(bool indented)
+        {
+            string output = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                bundleName = "com.example.game",
+                userId = 100,
+                label = "Studio.Game",
+                reqPermissions = new[] { "ohos.permission.CAMERA" },
+                hapModuleInfos = new[] { new { moduleName = "entry", mainElementName = "EntryAbility" } }
+            }, new System.Text.Json.JsonSerializerOptions { WriteIndented = indented });
+            List<string> starts = new List<string>();
+            Task<ProcessResult> Execute(string serial, string[] command, int timeoutMs, CancellationToken token)
+            {
+                string key = string.Join(" ", command);
+                if (key == "bm dump -a") return Task.FromResult(new ProcessResult(0, output, ""));
+                if (key.StartsWith("aa start ", StringComparison.Ordinal))
+                {
+                    starts.Add(key);
+                    return Task.FromResult(new ProcessResult(0, "Ability started", ""));
+                }
+                return Task.FromResult(new ProcessResult(1, "", "not available"));
+            }
+            var service = new HarmonyLookupService(Execute);
+
+            HarmonyTargetInventory inventory = await service.ListTargetsAsync("device", CancellationToken.None);
+            AppInfo app = Assert.Single(inventory.Apps);
+            Assert.Equal("com.example.game", app.BundleId);
+            Assert.Equal(100, app.HarmonyUserId);
+            ProcessResult launch = await service.LaunchAppAsync("device", app, CancellationToken.None);
+
+            Assert.Equal(0, launch.ExitCode);
+            Assert.Equal(new[] { "aa start -u 100 -b com.example.game -m entry -a EntryAbility" }, starts);
         }
 
         [Fact]
@@ -1099,18 +1580,104 @@ namespace MoTuPerf.Platform.Tests
         }
 
         [Fact]
+        public void ProcInventoryFallbackUsesReadOnlyPidUidAndCommandEvidence()
+        {
+            string command = Assert.Single(HarmonyLookupService.BuildProcProcessInventoryCommands())[2];
+            Assert.Contains("__MOTUPERF_PROC_LIST__", command);
+            Assert.Contains("/proc/[0-9]*", command);
+            Assert.DoesNotContain("kill", command, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("start", command, StringComparison.OrdinalIgnoreCase);
+
+            List<ProcessInfo> rows = HarmonyLookupService.ParseProcesses(
+                "__MOTUPERF_PROC_LIST__\n"
+                + "PID=901 UID=20000123 CMDLINE=/system/bin/com.example.game --render\n"
+                + "PID=902 UID=0 COMM=foundation\n", "harmony",
+                inferBundleFromProcessName: false);
+
+            Assert.Equal(new[] { 901, 902 }, rows.Select(row => row.Pid).OrderBy(pid => pid));
+            Assert.Equal("com.example.game", rows.Single(row => row.Pid == 901).Name);
+            Assert.Empty(rows.Single(row => row.Pid == 901).BundleId);
+            Assert.Equal(100, rows.Single(row => row.Pid == 901).HarmonyUserId);
+            Assert.Equal("foundation", rows.Single(row => row.Pid == 902).Name);
+            Assert.Empty(rows.Single(row => row.Pid == 902).BundleId);
+            Assert.True(rows.Single(row => row.Pid == 902).HarmonyNameIsComm);
+            Assert.Equal(-1, rows.Single(row => row.Pid == 902).HarmonyUserId);
+        }
+
+        [Fact]
+        public async Task ProcInventoryFallbackRecoversWhenEveryPsViewIsUnavailable()
+        {
+            Task<ProcessResult> ExecuteFakeHdcAsync(
+                string serial,
+                string[] command,
+                int timeoutMs,
+                CancellationToken token)
+            {
+                string key = string.Join(" ", command ?? Array.Empty<string>());
+                if (key.StartsWith("ps", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(1, "", "ps: unsupported"));
+                if (command.Length >= 3 && command[0] == "sh" && command[2].Contains("__MOTUPERF_PROC_LIST__", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(0,
+                        "__MOTUPERF_PROC_LIST__\nPID=901 UID=20000123 CMDLINE=/system/bin/com.example.game\n", ""));
+                if (command.Length >= 3 && command[0] == "sh")
+                {
+                    string stat = "901 (com.example.game) "
+                        + string.Join(" ", Enumerable.Repeat("0", 19))
+                        + " 12345\n";
+                    return Task.FromResult(new ProcessResult(0, stat, ""));
+                }
+                if (key.StartsWith("aa", StringComparison.Ordinal)) return Task.FromResult(new ProcessResult(0, "", ""));
+                return Task.FromResult(new ProcessResult(1, "", "unsupported fake HDC command"));
+            }
+
+            var service = new HarmonyLookupService(ExecuteFakeHdcAsync);
+            List<ProcessInfo> processes = await service.ListProcessesAsync("HARMONY-1", CancellationToken.None);
+
+            ProcessInfo process = Assert.Single(processes);
+            Assert.Equal(901, process.Pid);
+            Assert.Equal("com.example.game", process.Name);
+            Assert.Empty(process.BundleId);
+            Assert.Equal(100, process.HarmonyUserId);
+            Assert.Equal(12345, process.HarmonyStartTimeTicks);
+        }
+
+        [Fact]
+        public async Task ProcInventoryFallbackRejectsUnmarkedCommandOutput()
+        {
+            Task<ProcessResult> ExecuteFakeHdcAsync(
+                string serial,
+                string[] command,
+                int timeoutMs,
+                CancellationToken token)
+            {
+                string key = string.Join(" ", command ?? Array.Empty<string>());
+                if (key.StartsWith("ps", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(1, "", "ps: unsupported"));
+                if (command.Length >= 3 && command[0] == "sh")
+                    return Task.FromResult(new ProcessResult(0,
+                        "PID=999 UID=20000123 CMDLINE=/system/bin/phantom\n", ""));
+                return Task.FromResult(new ProcessResult(0, "", ""));
+            }
+
+            var service = new HarmonyLookupService(ExecuteFakeHdcAsync);
+
+            await Assert.ThrowsAsync<IOException>(
+                () => service.ListProcessesAsync("HARMONY-1", CancellationToken.None));
+        }
+
+        [Fact]
         public void MapsNumericUidWhenVendorUsesUserColumn()
         {
             List<ProcessInfo> rows = HarmonyLookupService.ParseProcesses(
                 "USER PID PPID NAME\n"
-                + "100000 901 1 foundation\n"
-                + "200000 902 1 com.example.work\n"
+                + "210001 901 1 foundation\n"
+                + "410001 902 1 com.example.work\n"
                 + "100 903 1 com.example.owner\n",
                 "harmony");
 
             Assert.Equal(1, rows.Single(row => row.Pid == 901).HarmonyUserId);
             Assert.Equal(2, rows.Single(row => row.Pid == 902).HarmonyUserId);
-            Assert.Equal(100, rows.Single(row => row.Pid == 903).HarmonyUserId);
+            Assert.Equal(-1, rows.Single(row => row.Pid == 903).HarmonyUserId);
         }
 
         [Fact]
@@ -1140,12 +1707,92 @@ namespace MoTuPerf.Platform.Tests
             HarmonyLookupService.MergeProcessApps(apps, rows);
             AppInfo bundledProcess = Assert.Single(apps, app => app.BundleId == "com.example.running");
             Assert.True(bundledProcess.IsProcessOnly);
-            Assert.True(bundledProcess.CanAttemptLaunch);
-            Assert.Equal("可尝试启动", bundledProcess.LaunchAvailability);
+            Assert.False(bundledProcess.CanAttemptLaunch);
+            Assert.Equal("仅运行中可采集", bundledProcess.LaunchAvailability);
             AppInfo unbundledProcess = Assert.Single(apps, app => string.IsNullOrWhiteSpace(app.BundleId));
             Assert.True(unbundledProcess.IsProcessOnly);
             Assert.False(unbundledProcess.CanAttemptLaunch);
             Assert.Equal("仅运行中可采集", unbundledProcess.LaunchAvailability);
+        }
+
+        [Fact]
+        public async Task UnknownUserProcessOnlyTargetCannotIssueAnUnscopedLaunch()
+        {
+            List<string> commands = new List<string>();
+            Task<ProcessResult> ExecuteFakeHdcAsync(
+                string serial,
+                string[] command,
+                int timeoutMs,
+                CancellationToken token)
+            {
+                commands.Add(string.Join(" ", command ?? Array.Empty<string>()));
+                return Task.FromResult(new ProcessResult(0, "unexpected launch", ""));
+            }
+
+            var service = new HarmonyLookupService(ExecuteFakeHdcAsync);
+            ProcessResult result = await service.LaunchAppAsync("HARMONY-1", new AppInfo
+            {
+                BundleId = "com.example.running",
+                Platform = "harmony",
+                IsProcessOnly = true,
+                HarmonyUserId = -1
+            }, CancellationToken.None);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("只能选择运行中的真实进程", result.Stderr);
+            Assert.Empty(commands);
+        }
+
+        [Fact]
+        public async Task UnknownUserBundleDoesNotInventUserZeroOrIssueAnUnscopedLaunch()
+        {
+            List<string> commands = new List<string>();
+            Task<ProcessResult> ExecuteFakeHdcAsync(
+                string serial,
+                string[] command,
+                int timeoutMs,
+                CancellationToken token)
+            {
+                string key = string.Join(" ", command ?? Array.Empty<string>());
+                commands.Add(key);
+                if (key == "bm dump -a")
+                    return Task.FromResult(new ProcessResult(0,
+                        "bundleName: com.example.unknown\n"
+                        + "module name: entry\n"
+                        + "ability name: EntryAbility\n", ""));
+                throw new IOException("user inventory unavailable");
+            }
+
+            var service = new HarmonyLookupService(ExecuteFakeHdcAsync);
+            HarmonyTargetInventory inventory = await service.ListTargetsAsync("hdc-1", CancellationToken.None);
+            AppInfo app = Assert.Single(inventory.Apps, candidate => candidate.BundleId == "com.example.unknown");
+
+            Assert.Equal(-1, app.HarmonyUserId);
+            Assert.Empty(app.HarmonyUserIds);
+            Assert.False(app.CanAttemptLaunch);
+            Assert.Equal("用户范围未知", app.LaunchAvailability);
+            Assert.Contains("不会默认使用 user 0", inventory.UserInventoryError);
+
+            ProcessResult launch = await service.LaunchAppAsync("hdc-1", app, CancellationToken.None);
+            Assert.NotEqual(0, launch.ExitCode);
+            Assert.Contains("不会执行无范围启动", launch.Stderr);
+            Assert.DoesNotContain(commands, command => command.StartsWith("aa start", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void DuplicateKnownUserEvidenceDoesNotBecomeAnAmbiguousScope()
+        {
+            var app = new AppInfo
+            {
+                BundleId = "com.example.running",
+                Platform = "harmony",
+                IsProcessOnly = true,
+                HarmonyUserId = -1,
+                HarmonyUserIds = new List<int> { 100, 100 }
+            };
+
+            Assert.True(app.CanAttemptLaunch);
+            Assert.Equal("可尝试启动", app.LaunchAvailability);
         }
 
         [Fact]
@@ -1212,7 +1859,7 @@ namespace MoTuPerf.Platform.Tests
         public void ParsesNumericHarmonyUidAndKeepsUserFromTheRicherPsView()
         {
             Assert.Equal(1, HarmonyLookupService.ParseProcesses(
-                "UID PID PPID C STIME TTY TIME CMD\n100123 701 1 0 10:00 ? 00:00:01 com.example.game\n",
+                "UID PID PPID C STIME TTY TIME CMD\n210123 701 1 0 10:00 ? 00:00:01 com.example.game\n",
                 "device").Single().HarmonyUserId);
 
             var withoutUser = HarmonyLookupService.ParseProcesses(
@@ -1236,7 +1883,7 @@ namespace MoTuPerf.Platform.Tests
                 + "USER PID PPID ARGS\n"
                 + "u200_a2 802 1 com.example.user\n"
                 + "PID UID PPID ARGS\n"
-                + "803 300123 1 com.example.uidfirst\n"
+                + "803 610123 1 com.example.uidfirst\n"
                 + "PID USER PPID ARGS\n"
                 + "804 u400_a4 1 com.example.userfirst\n", "device");
 
@@ -1253,7 +1900,7 @@ namespace MoTuPerf.Platform.Tests
             var rows = HarmonyLookupService.ParseProcesses(
                 "UID PID PPID ARGS\n"
                 + "2000 805 1 com.example.systemuid\n"
-                + "USER PID PPID ARGS\n"
+                + "USERID PID PPID ARGS\n"
                 + "100 806 1 com.example.work\n", "device");
 
             Assert.Equal(-1, rows.Single(row => row.Pid == 805).HarmonyUserId);
@@ -1397,10 +2044,13 @@ namespace MoTuPerf.Platform.Tests
 
             HarmonyLookupService.MergeProcessApps(ambiguousApps, ambiguousProcesses);
 
-            AppInfo ambiguousApp = Assert.Single(ambiguousApps);
+            AppInfo ambiguousApp = Assert.Single(ambiguousApps, app => app.HarmonyUserId == 100);
             Assert.Equal(0, ambiguousApp.ProcessPid);
             Assert.Empty(ambiguousApp.ProcessName);
             Assert.True(ambiguousApp.IsRunning);
+            AppInfo unknownProcess = Assert.Single(ambiguousApps, app => app.ProcessPid == 1803);
+            Assert.True(unknownProcess.IsProcessOnly);
+            Assert.Equal(-1, unknownProcess.HarmonyUserId);
         }
 
         [Fact]
@@ -1444,16 +2094,28 @@ namespace MoTuPerf.Platform.Tests
             Assert.True(workProcess.IsProcessOnly);
         }
 
-        [Fact]
-        public void FindsBundleInProcessCommandArguments()
+        [Theory]
+        [InlineData("/system/bin/appspawn --bundle-name com.example.launcher --user 0", "appspawn", "")]
+        [InlineData("/system/bin/service --log /data/log/service.log", "service", "")]
+        [InlineData("com.example.game:worker --parent com.example.host", "com.example.game:worker", "com.example.game")]
+        public void ProcessArgumentsDoNotReplaceExecutableIdentity(string command, string name, string bundle)
         {
             var rows = HarmonyLookupService.ParseProcesses(
-                "PID ARGS\n"
-                + "601 /system/bin/appspawn --bundle-name com.example.launcher --user 0\n", "device");
+                "PID ARGS\n601 " + command + "\n", "device");
 
             Assert.Single(rows);
-            Assert.Equal("com.example.launcher", rows[0].BundleId);
-            Assert.Equal("com.example.launcher", rows[0].Name);
+            Assert.Equal(bundle, rows[0].BundleId);
+            Assert.Equal(name, rows[0].Name);
+        }
+
+        [Fact]
+        public void HeaderlessServiceArgumentsDoNotBecomeProcessIdentity()
+        {
+            var process = Assert.Single(HarmonyLookupService.ParseProcesses(
+                "42 u100_a123 1 0 10:25:33 ? 00:00:01 service --bundle com.example.game\n", "device"));
+            Assert.Equal("service", process.Name);
+            Assert.Empty(process.BundleId);
+            Assert.Equal(100, process.HarmonyUserId);
         }
 
         [Fact]
@@ -1470,6 +2132,22 @@ namespace MoTuPerf.Platform.Tests
             Assert.Equal("1440x2560", HarmonyLookupService.ParseResolution("physicalResolution: 1440 x 2560\n"));
             Assert.Equal("1080x2400", HarmonyLookupService.ParseResolution("width=1080 height=2400\n"));
             Assert.Equal("", HarmonyLookupService.ParseResolution("error code 1080x2400"));
+        }
+
+        [Fact]
+        public void ParsesHarmonyVendorCpuSummaryWhenProcCpuInfoIsBlocked()
+        {
+            Assert.Equal("ARM64 / 2核 / 2.62 GHz", HarmonyLookupService.ParseCpuInfo(
+                "aarch64\n"
+                + "cmd is: cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq\n\n1530000\n"
+                + "cmd is: cat /sys/devices/system/cpu/cpu11/cpufreq/cpuinfo_max_freq\n\n2620000\n"));
+        }
+
+        [Fact]
+        public void ParsesHarmonyRenderServiceGlesRenderer()
+        {
+            Assert.Equal("Maleoon 910", HarmonyLookupService.ParseGpuInfo(
+                "GL_VENDOR: HUAWEI\nGL_RENDERER: Maleoon 910\nGL_VERSION: OpenGL ES 3.2\n"));
         }
 
         [Fact]
@@ -1555,11 +2233,11 @@ namespace MoTuPerf.Platform.Tests
                     await Task.Delay(1, token);
                     if (key == "pm list users")
                         return new ProcessResult(0, "Users:\n UserInfo{0:Owner:13} running\n UserInfo{100:Work:13} running\n", "");
-                    if (key == "bm dump -a" || key == "bm dump -a -u 0" || key == "bm dump -a --user 0")
+                    if (key == "bm dump -a" || key == "bm dump -a -u 0" || key == "bm dump -a --user-id 0")
                         return new ProcessResult(0,
                             "{\"bundleName\":\"com.example.native\",\"versionName\":\"1.0\",\"hapModuleInfos\":[{\"moduleName\":\"entry\",\"mainElementName\":\"EntryAbility\"}]}\n",
                             "");
-                    if (key == "bm dump -a -u 100" || key == "bm dump -a --user 100")
+                    if (key == "bm dump -a -u 100" || key == "bm dump -a --user-id 100")
                         return new ProcessResult(0,
                             "{\"bundleName\":\"com.example.work\",\"versionName\":\"2.0\",\"hapModuleInfos\":[{\"moduleName\":\"entry\",\"mainElementName\":\"WorkAbility\"}]}\n",
                             "");
@@ -1578,11 +2256,11 @@ namespace MoTuPerf.Platform.Tests
                         return new ProcessResult(0, "", "");
                     if (key == "bm dump -n com.example.work -u 100")
                         return new ProcessResult(1, "", "unknown option: -u");
-                    if (key == "bm dump -n com.example.work --user 100")
+                    if (key == "bm dump -n com.example.work --user-id 100")
                         return new ProcessResult(0,
                             "{\"bundleName\":\"com.example.work\",\"hapModuleInfos\":[{\"moduleName\":\"entry\",\"mainElementName\":\"WorkAbility\"}]}\n",
                             "");
-                    if (key == "aa start -U 100 -b com.example.work -m entry -a WorkAbility")
+                    if (key == "aa start -u 100 -b com.example.work -m entry -a WorkAbility")
                         return new ProcessResult(0, "Ability started", "");
                     return new ProcessResult(1, "", "unsupported fake HDC command");
                 }
@@ -1619,8 +2297,8 @@ namespace MoTuPerf.Platform.Tests
 
             Assert.Equal(0, launch.ExitCode);
             Assert.Contains("bm dump -n com.example.work -u 100", commands);
-            Assert.Contains("bm dump -n com.example.work --user 100", commands);
-            Assert.Contains("aa start -U 100 -b com.example.work -m entry -a WorkAbility", commands);
+            Assert.Contains("bm dump -n com.example.work --user-id 100", commands);
+            Assert.Contains("aa start -u 100 -b com.example.work -m entry -a WorkAbility", commands);
             Assert.Equal(1, maxActiveShells);
         }
 
@@ -1666,15 +2344,21 @@ namespace MoTuPerf.Platform.Tests
             var service = new HarmonyLookupService(ExecuteFakeHdcAsync);
             HarmonyTargetInventory snapshot = await service.ListTargetsAsync("HARMONY-1", CancellationToken.None);
 
-            AppInfo app = Assert.Single(snapshot.Apps, candidate => candidate.BundleId == "com.example.snapshot");
+            AppInfo app = Assert.Single(snapshot.Apps, candidate => candidate.BundleId == "com.example.snapshot" && candidate.HarmonyUserId == 0);
+            AppInfo unknownProcess = Assert.Single(snapshot.Apps, candidate => candidate.ProcessPid == 801);
             ProcessInfo process = Assert.Single(snapshot.Processes);
-            Assert.True(app.IsRunning);
+            Assert.False(app.IsRunning);
+            Assert.True(unknownProcess.IsProcessOnly);
+            Assert.Equal(-1, unknownProcess.HarmonyUserId);
             Assert.Equal(801, process.Pid);
             Assert.Equal(12345, process.HarmonyStartTimeTicks);
             Assert.Equal(HarmonyLookupService.BuildProcessInventoryCommands().Count,
                 commands.Count(command => string.Equals(command, "ps", StringComparison.Ordinal)
                     || command.StartsWith("ps ", StringComparison.Ordinal)));
-            Assert.Equal(1, commands.Count(command => command.StartsWith("sh -c ", StringComparison.Ordinal)));
+            int expectedShellCommands = HarmonyLookupService.BuildProcessStatCommands(new[] { 801 }).Count
+                + HarmonyLookupService.BuildProcProcessInventoryCommands().Count;
+            Assert.Equal(expectedShellCommands,
+                commands.Count(command => command.StartsWith("sh -c ", StringComparison.Ordinal)));
         }
 
         [Fact]
@@ -1992,7 +2676,7 @@ namespace MoTuPerf.Platform.Tests
         }
 
         [Fact]
-        public async Task FakeHdcFallsBackAcrossNativeAbilityUserOptionSpellings()
+        public async Task NativeAbilityDetailSupportsDocumentedLongUserOption()
         {
             List<string> commands = new List<string>();
 
@@ -2004,7 +2688,7 @@ namespace MoTuPerf.Platform.Tests
             {
                 string key = string.Join(" ", command ?? Array.Empty<string>());
                 commands.Add(key);
-                if (key == "bm dump -n com.example.work --user 100")
+                if (key == "bm dump -n com.example.work --user-id 100")
                     return Task.FromResult(new ProcessResult(0,
                         "bundleName: com.example.work\n"
                         + "hapModuleInfos:\n"
@@ -2015,9 +2699,7 @@ namespace MoTuPerf.Platform.Tests
                     return Task.FromResult(new ProcessResult(1, "", "unknown option"));
                 if (key == "bm dump -n com.example.work")
                     return Task.FromResult(new ProcessResult(0, "", ""));
-                if (key == "aa start -U 100 -b com.example.work -m entry -a WorkAbility")
-                    return Task.FromResult(new ProcessResult(1, "", "unknown option"));
-                if (key == "aa start --user 100 -b com.example.work -m entry -a WorkAbility")
+                if (key == "aa start -u 100 -b com.example.work -m entry -a WorkAbility")
                     return Task.FromResult(new ProcessResult(0, "Ability started", ""));
                 return Task.FromResult(new ProcessResult(1, "", "unsupported fake HDC command"));
             }
@@ -2030,8 +2712,9 @@ namespace MoTuPerf.Platform.Tests
                 CancellationToken.None);
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("aa start -U 100 -b com.example.work -m entry -a WorkAbility", commands);
-            Assert.Contains("aa start --user 100 -b com.example.work -m entry -a WorkAbility", commands);
+            Assert.Contains("aa start -u 100 -b com.example.work -m entry -a WorkAbility", commands);
+            Assert.DoesNotContain(commands, command => command.StartsWith("aa start --user", StringComparison.Ordinal)
+                || command.StartsWith("aa start -U", StringComparison.Ordinal));
             Assert.DoesNotContain("aa start -b com.example.work -m entry -a WorkAbility", commands);
         }
 
@@ -2069,9 +2752,9 @@ namespace MoTuPerf.Platform.Tests
 
             Assert.NotEqual(0, result.ExitCode);
             Assert.Contains(commands, command => command == "bm dump -n com.example.work -u 100");
-            Assert.Contains(commands, command => command == "bm dump -n com.example.work --user 100");
-            Assert.Contains(commands, command => command == "bm dump -n com.example.work -U 100");
             Assert.Contains(commands, command => command == "bm dump -n com.example.work --user-id 100");
+            Assert.DoesNotContain(commands, command => command == "bm dump -n com.example.work --user 100"
+                || command == "bm dump -n com.example.work -U 100");
             Assert.DoesNotContain(commands, command => command == "bm dump -n com.example.work");
             Assert.DoesNotContain(commands, command => command.Contains("OwnerOnlyAbility", StringComparison.Ordinal));
         }
@@ -2089,12 +2772,9 @@ namespace MoTuPerf.Platform.Tests
             {
                 string key = string.Join(" ", command ?? Array.Empty<string>());
                 commands.Add(key);
-                if (key == "aa start -U 0 -b com.example.moduleless -m entry -a EntryAbility"
-                    || key == "aa start --user 0 -b com.example.moduleless -m entry -a EntryAbility"
-                    || key == "aa start -u 0 -b com.example.moduleless -m entry -a EntryAbility"
-                    || key == "aa start --user-id 0 -b com.example.moduleless -m entry -a EntryAbility")
+                if (key == "aa start -u 0 -b com.example.moduleless -m entry -a EntryAbility")
                     return Task.FromResult(new ProcessResult(1, "", "module option unsupported"));
-                if (key == "aa start -U 0 -b com.example.moduleless -a EntryAbility")
+                if (key == "aa start -u 0 -b com.example.moduleless -a EntryAbility")
                     return Task.FromResult(new ProcessResult(0, "Ability started", ""));
                 return Task.FromResult(new ProcessResult(1, "", "unsupported fake HDC command"));
             }
@@ -2115,8 +2795,8 @@ namespace MoTuPerf.Platform.Tests
                 CancellationToken.None);
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("aa start -U 0 -b com.example.moduleless -m entry -a EntryAbility", commands);
-            Assert.Contains("aa start -U 0 -b com.example.moduleless -a EntryAbility", commands);
+            Assert.Contains("aa start -u 0 -b com.example.moduleless -m entry -a EntryAbility", commands);
+            Assert.Contains("aa start -u 0 -b com.example.moduleless -a EntryAbility", commands);
         }
 
         [Fact]
@@ -2303,6 +2983,199 @@ namespace MoTuPerf.Platform.Tests
         }
 
         [Fact]
+        public void KeepsUserSpecificLaunchEntriesOnTheirOwnHarmonyProfile()
+        {
+            List<AppInfo> source = HarmonyLookupService.ParseApps(
+                "{\"bundleName\":\"com.example.profiled\",\"userId\":0,"
+                + "\"hapModuleInfos\":[{\"moduleName\":\"entry\",\"mainElementName\":\"OwnerAbility\"}]}\n"
+                + "{\"bundleName\":\"com.example.profiled\",\"userId\":100,"
+                + "\"hapModuleInfos\":[{\"moduleName\":\"entry\",\"mainElementName\":\"WorkAbility\"}]}\n");
+
+            List<AppInfo> rows = HarmonyLookupService.ExpandHarmonyUserInstances(source);
+            AppInfo owner = Assert.Single(rows, row => row.HarmonyUserId == 0);
+            AppInfo work = Assert.Single(rows, row => row.HarmonyUserId == 100);
+
+            Assert.Contains(owner.HarmonyLaunchEntries, entry => entry.Ability == "OwnerAbility");
+            Assert.DoesNotContain(owner.HarmonyLaunchEntries, entry => entry.Ability == "WorkAbility");
+            Assert.Contains(work.HarmonyLaunchEntries, entry => entry.Ability == "WorkAbility");
+            Assert.DoesNotContain(work.HarmonyLaunchEntries, entry => entry.Ability == "OwnerAbility");
+        }
+
+        [Fact]
+        public void UsesExplicitLaunchEntryUsersWhenProfileListIsMissing()
+        {
+            var source = new List<AppInfo>
+            {
+                new AppInfo
+                {
+                    BundleId = "com.example.entryscoped",
+                    Name = "Entry Scoped",
+                    Platform = "harmony",
+                    HarmonyUserId = -1,
+                    HarmonyLaunchEntries = new List<HarmonyLaunchEntryInfo>
+                    {
+                        new HarmonyLaunchEntryInfo
+                        {
+                            Module = "entry",
+                            Ability = "OwnerAbility",
+                            IsUiEntry = true,
+                            HarmonyUserId = 0
+                        },
+                        new HarmonyLaunchEntryInfo
+                        {
+                            Module = "entry",
+                            Ability = "WorkAbility",
+                            IsUiEntry = true,
+                            HarmonyUserId = 100
+                        }
+                    }
+                }
+            };
+
+            List<AppInfo> rows = HarmonyLookupService.ExpandHarmonyUserInstances(source);
+
+            Assert.Equal(new[] { 0, 100 }, rows.Select(row => row.HarmonyUserId).OrderBy(id => id));
+            AppInfo owner = Assert.Single(rows, row => row.HarmonyUserId == 0);
+            AppInfo work = Assert.Single(rows, row => row.HarmonyUserId == 100);
+            Assert.Contains(owner.HarmonyLaunchEntries, entry => entry.Ability == "OwnerAbility");
+            Assert.DoesNotContain(owner.HarmonyLaunchEntries, entry => entry.Ability == "WorkAbility");
+            Assert.Contains(work.HarmonyLaunchEntries, entry => entry.Ability == "WorkAbility");
+            Assert.DoesNotContain(work.HarmonyLaunchEntries, entry => entry.Ability == "OwnerAbility");
+        }
+
+        [Fact]
+        public async Task LaunchUsesTheOnlyExplicitLaunchEntryUserWhenProfileListIsMissing()
+        {
+            var starts = new List<string[]>();
+            var app = new AppInfo
+            {
+                BundleId = "com.example.entryscoped",
+                Platform = "harmony",
+                HarmonyUserId = -1,
+                HarmonyLaunchEntries = new List<HarmonyLaunchEntryInfo>
+                {
+                    new HarmonyLaunchEntryInfo
+                    {
+                        Module = "entry",
+                        Ability = "EntryAbility",
+                        IsUiEntry = true,
+                        HarmonyUserId = 100
+                    }
+                }
+            };
+            var service = new HarmonyLookupService((serial, command, timeout, token) =>
+            {
+                starts.Add(command);
+                return Task.FromResult(command[0] == "aa"
+                    && command.Contains("-u")
+                    && command.Contains("100")
+                    ? new ProcessResult(0, "Ability started", "")
+                    : new ProcessResult(1, "", "wrong or unscoped user"));
+            });
+
+            Assert.True(app.CanAttemptLaunch);
+            ProcessResult result = await service.LaunchAppAsync("HARMONY-1", app, CancellationToken.None);
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Contains(starts, command => command[0] == "aa"
+                && HarmonyLookupService.CommandUserId(command) == 100
+                && command.Contains("EntryAbility"));
+        }
+
+        [Fact]
+        public async Task LaunchesOnlyTheSelectedProfileEntryFromAggregatedInventory()
+        {
+            List<string> commands = new List<string>();
+            Task<ProcessResult> ExecuteFakeHdcAsync(
+                string serial,
+                string[] command,
+                int timeoutMs,
+                CancellationToken token)
+            {
+                string key = string.Join(" ", command ?? Array.Empty<string>());
+                commands.Add(key);
+                if (key == "aa start -u 100 -b com.example.profiled -m entry -a WorkAbility")
+                    return Task.FromResult(new ProcessResult(0, "Ability started", ""));
+                if (key.StartsWith("aa start ", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(1, "", "wrong profile Ability"));
+                return Task.FromResult(new ProcessResult(1, "", "unsupported fake HDC command"));
+            }
+
+            AppInfo work = Assert.Single(
+                HarmonyLookupService.ExpandHarmonyUserInstances(HarmonyLookupService.ParseApps(
+                    "{\"bundleName\":\"com.example.profiled\",\"userId\":0,"
+                    + "\"hapModuleInfos\":[{\"moduleName\":\"entry\",\"mainElementName\":\"OwnerAbility\"}]}\n"
+                    + "{\"bundleName\":\"com.example.profiled\",\"userId\":100,"
+                    + "\"hapModuleInfos\":[{\"moduleName\":\"entry\",\"mainElementName\":\"WorkAbility\"}]}\n")),
+                app => app.HarmonyUserId == 100);
+
+            var service = new HarmonyLookupService(ExecuteFakeHdcAsync);
+            ProcessResult result = await service.LaunchAppAsync("HARMONY-1", work, CancellationToken.None);
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Contains("aa start -u 100 -b com.example.profiled -m entry -a WorkAbility", commands);
+            Assert.DoesNotContain(commands, command => command.Contains("OwnerAbility", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public async Task KeepsGlobalAndScopedEntriesSeparatedForSameBundleProfiles()
+        {
+            Task<ProcessResult> ExecuteFakeHdcAsync(
+                string serial,
+                string[] command,
+                int timeoutMs,
+                CancellationToken token)
+            {
+                string key = string.Join(" ", command ?? Array.Empty<string>());
+                if (key == "pm list users" || key == "cmd user list")
+                    return Task.FromResult(new ProcessResult(0,
+                        "UserInfo{0:Owner:13} running\nUserInfo{100:Work:13} running\n", ""));
+                if (key == "bm dump -a")
+                    return Task.FromResult(new ProcessResult(0,
+                        "{\"bundleName\":\"com.example.profiled\","
+                        + "\"hapModuleInfos\":[{\"moduleName\":\"entry\","
+                        + "\"mainElementName\":\"GlobalAbility\"}]}\n", ""));
+                if (key == "bm dump -a -u 0")
+                    return Task.FromResult(new ProcessResult(0,
+                        "{\"bundleName\":\"com.example.profiled\","
+                        + "\"hapModuleInfos\":[{\"moduleName\":\"entry\","
+                        + "\"mainElementName\":\"OwnerAbility\"}]}\n", ""));
+                if (key == "bm dump -a -u 100")
+                    return Task.FromResult(new ProcessResult(0,
+                        "{\"bundleName\":\"com.example.profiled\","
+                        + "\"hapModuleInfos\":[{\"moduleName\":\"entry\","
+                        + "\"mainElementName\":\"WorkAbility\"}]}\n", ""));
+                if (key.StartsWith("bm dump -a --user-id ", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(1, "", "unsupported user option"));
+                if (key.StartsWith("pm list packages", StringComparison.Ordinal)
+                    || key.StartsWith("cmd package list packages", StringComparison.Ordinal)
+                    || key.StartsWith("ps", StringComparison.Ordinal)
+                    || key.StartsWith("sh -c ", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(0, "", ""));
+                return Task.FromResult(new ProcessResult(0, "", ""));
+            }
+
+            List<AppInfo> apps = await new HarmonyLookupService(ExecuteFakeHdcAsync)
+                .ListAppsAsync("HARMONY-1", CancellationToken.None);
+
+            AppInfo owner = Assert.Single(apps, app => app.BundleId == "com.example.profiled" && app.HarmonyUserId == 0);
+            AppInfo work = Assert.Single(apps, app => app.BundleId == "com.example.profiled" && app.HarmonyUserId == 100);
+
+            Assert.Contains(owner.HarmonyLaunchEntries, entry => entry.Ability == "GlobalAbility");
+            Assert.Contains(owner.HarmonyLaunchEntries, entry => entry.Ability == "OwnerAbility");
+            Assert.DoesNotContain(owner.HarmonyLaunchEntries, entry => entry.Ability == "WorkAbility");
+            Assert.Contains(work.HarmonyLaunchEntries, entry => entry.Ability == "GlobalAbility");
+            Assert.Contains(work.HarmonyLaunchEntries, entry => entry.Ability == "WorkAbility");
+            Assert.DoesNotContain(work.HarmonyLaunchEntries, entry => entry.Ability == "OwnerAbility");
+            Assert.All(apps
+                .SelectMany(app => app.HarmonyLaunchEntries)
+                .Where(entry => entry.Ability == "GlobalAbility"),
+                entry => Assert.Equal(-1, entry.HarmonyUserId));
+            Assert.Equal(0, owner.HarmonyLaunchEntries.Single(entry => entry.Ability == "OwnerAbility").HarmonyUserId);
+            Assert.Equal(100, work.HarmonyLaunchEntries.Single(entry => entry.Ability == "WorkAbility").HarmonyUserId);
+        }
+
+        [Fact]
         public void DoesNotCopyLiveProcessBindingToAnotherHarmonyUserInstance()
         {
             var source = new List<AppInfo>
@@ -2390,6 +3263,40 @@ namespace MoTuPerf.Platform.Tests
         }
 
         [Fact]
+        public void InheritsUserScopeFromNestedBundleInventoryJson()
+        {
+            List<AppInfo> apps = HarmonyLookupService.ParseApps(
+                "{\"userId\":100,\"bundleInfos\":["
+                + "{\"bundleName\":\"com.example.nested\","
+                + "\"hapModuleInfos\":[{\"moduleName\":\"entry\",\"mainElementName\":\"WorkAbility\"}]}"
+                + "]}");
+
+            AppInfo app = Assert.Single(HarmonyLookupService.ExpandHarmonyUserInstances(apps));
+            Assert.Equal(100, app.HarmonyUserId);
+            Assert.Equal(new[] { 100 }, app.HarmonyUserIds);
+            HarmonyLaunchEntryInfo entry = Assert.Single(app.HarmonyLaunchEntries);
+            Assert.Equal(100, entry.HarmonyUserId);
+            Assert.Equal("WorkAbility", entry.Ability);
+        }
+
+        [Fact]
+        public void NestedExplicitBundleUserOverridesInheritedInventoryScope()
+        {
+            List<AppInfo> apps = HarmonyLookupService.ParseApps(
+                "{\"userId\":100,\"bundleInfos\":["
+                + "{\"bundleName\":\"com.example.nested\",\"userId\":0,"
+                + "\"hapModuleInfos\":[{\"moduleName\":\"entry\",\"mainElementName\":\"OwnerAbility\"}]}"
+                + "]}");
+
+            AppInfo app = Assert.Single(HarmonyLookupService.ExpandHarmonyUserInstances(apps));
+            Assert.Equal(0, app.HarmonyUserId);
+            Assert.Equal(new[] { 0 }, app.HarmonyUserIds);
+            HarmonyLaunchEntryInfo entry = Assert.Single(app.HarmonyLaunchEntries);
+            Assert.Equal(0, entry.HarmonyUserId);
+            Assert.Equal("OwnerAbility", entry.Ability);
+        }
+
+        [Fact]
         public async Task LaunchesOnlyTheSelectedHarmonyUserInstance()
         {
             List<string> commands = new List<string>();
@@ -2402,7 +3309,7 @@ namespace MoTuPerf.Platform.Tests
             {
                 string key = string.Join(" ", command ?? Array.Empty<string>());
                 commands.Add(key);
-                if (key == "aa start -U 100 -b com.example.shared -m entry -a EntryAbility")
+                if (key == "aa start -u 100 -b com.example.shared -m entry -a EntryAbility")
                     return Task.FromResult(new ProcessResult(0, "Ability started", ""));
                 if (key.StartsWith("aa start ", StringComparison.Ordinal))
                     return Task.FromResult(new ProcessResult(1, "", "wrong user must not launch"));
@@ -2423,8 +3330,8 @@ namespace MoTuPerf.Platform.Tests
             }, CancellationToken.None);
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("aa start -U 100 -b com.example.shared -m entry -a EntryAbility", commands);
-            Assert.DoesNotContain(commands, command => command.Contains("-U 0", StringComparison.Ordinal));
+            Assert.Contains("aa start -u 100 -b com.example.shared -m entry -a EntryAbility", commands);
+            Assert.DoesNotContain(commands, command => command.Contains("-u 0", StringComparison.Ordinal));
         }
 
         [Fact]
@@ -2453,6 +3360,346 @@ namespace MoTuPerf.Platform.Tests
             Assert.NotEqual(0, result.ExitCode);
             Assert.Contains("用户作用域不明确", result.Stderr);
             Assert.Empty(commands);
+        }
+
+        [Fact]
+        public async Task DoesNotReuseLaunchAbilityFromAnotherHarmonyUser()
+        {
+            List<string> commands = new List<string>();
+
+            Task<ProcessResult> ExecuteFakeHdcAsync(
+                string serial,
+                string[] command,
+                int timeoutMs,
+                CancellationToken token)
+            {
+                string key = string.Join(" ", command ?? Array.Empty<string>());
+                commands.Add(key);
+                if (key == "bm dump -n com.example.profiled -u 0")
+                    return Task.FromResult(new ProcessResult(0, "moduleName: entry\nabilityName: OwnerAbility\n", ""));
+                if (key == "bm dump -n com.example.profiled -u 100")
+                    return Task.FromResult(new ProcessResult(0, "moduleName: entry\nabilityName: WorkAbility\n", ""));
+                if (key.StartsWith("bm dump -n com.example.profiled ", StringComparison.Ordinal))
+                    return Task.FromResult(new ProcessResult(1, "", "unsupported detail option"));
+                return Task.FromResult(new ProcessResult(1, "", "launch rejected"));
+            }
+
+            var service = new HarmonyLookupService(ExecuteFakeHdcAsync);
+            await service.LaunchAppAsync(
+                "HARMONY-1",
+                "com.example.profiled",
+                new[] { 0, 100 },
+                CancellationToken.None);
+
+            Assert.Contains("aa start -u 0 -b com.example.profiled -m entry -a OwnerAbility", commands);
+            Assert.Contains("aa start -u 100 -b com.example.profiled -m entry -a WorkAbility", commands);
+            Assert.DoesNotContain(commands, command => command.Contains("aa start -u 100", StringComparison.Ordinal)
+                && command.Contains("OwnerAbility", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void ParsesAbilityManagerProcessBindingsFromJsonAndText()
+        {
+            string output = "{\"appRunningRecords\":["
+                + "{\"bundleName\":\"com.example.native\",\"pid\":501,\"userId\":0,\"isForeground\":true},"
+                + "{\"bundleName\":\"com.example.compat\",\"processId\":502,\"uid\":201234},"
+                + "{\"process_name\":\"/system/bin/com.example.worker --bundle-name com.example.other\",\"pid\":504}]}\n"
+                + "AppRunningRecord ID #3\n"
+                + "  bundle name [com.example.service]\n"
+                + "  pid #503  uid #401234\n"
+                + "  state #FOREGROUND\n";
+
+            List<HarmonyProcessBinding> bindings = HarmonyLookupService.ParseAbilityProcessBindings(output);
+
+            Assert.Contains(bindings, binding => binding.Pid == 501
+                && binding.BundleId == "com.example.native"
+                && binding.HarmonyUserId == 0
+                && binding.Foreground);
+            Assert.Contains(bindings, binding => binding.Pid == 502
+                && binding.BundleId == "com.example.compat"
+                && binding.HarmonyUserId == 1);
+            Assert.Contains(bindings, binding => binding.Pid == 503
+                && binding.BundleId == "com.example.service"
+                && binding.HarmonyUserId == 2
+                && binding.Foreground);
+            Assert.Contains(bindings, binding => binding.Pid == 504
+                && binding.ProcessName == "com.example.worker");
+        }
+
+        [Fact]
+        public void JsonRelatedProcessAndMetadataPidsDoNotBecomeSelectableTargets()
+        {
+            string output = "{\"appRunningRecords\":["
+                + "{\"bundleName\":\"com.example.game\",\"pid\":501,\"userId\":100,"
+                + "\"state\":\"FOREGROUND\","
+                + "\"rootCaller\":{\"pid\":700,\"bundleName\":\"com.example.caller\"},"
+                + "\"uiExtensionProvider\":{\"processId\":701,\"processName\":\"com.example.extension\"},"
+                + "\"metadata\":{\"pid\":702,\"bundleName\":\"com.example.metadata\"}},"
+                + "{\"bundleName\":\"com.example.service\",\"processId\":502,\"userId\":100}]}";
+
+            var bindings = HarmonyLookupService.ParseAbilityProcessBindings(output);
+
+            Assert.Equal(new[] { 501, 502 }, bindings.Select(binding => binding.Pid).OrderBy(pid => pid));
+            Assert.Equal("com.example.game", bindings.Single(binding => binding.Pid == 501).BundleId);
+            Assert.Equal("com.example.service", bindings.Single(binding => binding.Pid == 502).BundleId);
+            Assert.DoesNotContain(bindings, binding => new[] { 700, 701, 702 }.Contains(binding.Pid));
+        }
+
+        [Fact]
+        public void AbilityManagerBindingFillsGenericProcessAndPreservesForegroundRecommendation()
+        {
+            List<ProcessInfo> processes = HarmonyLookupService.ParseProcesses(
+                "UID PID PPID NAME\n"
+                + "u0 501 1 appspawn\n"
+                + "u0 502 1 render_service\n", "HARMONY-1");
+
+            HarmonyLookupService.ApplyAbilityProcessBindings(processes, new[]
+            {
+                new HarmonyProcessBinding
+                {
+                    Pid = 501,
+                    BundleId = "com.example.native",
+                    HarmonyUserId = 0,
+                    Foreground = true
+                },
+                new HarmonyProcessBinding
+                {
+                    Pid = 502,
+                    BundleId = "com.example.compat",
+                    HarmonyUserId = 0
+                }
+            });
+
+            ProcessInfo native = Assert.Single(processes, process => process.Pid == 501);
+            Assert.Equal("com.example.native", native.BundleId);
+            Assert.Equal("com.example.native", native.OwnerBundleId);
+            Assert.True(native.OwnershipVerified);
+            Assert.True(native.Recommended);
+            Assert.Equal(0, native.HarmonyUserId);
+            Assert.Equal("aa-dump", native.OwnershipSource);
+            Assert.Equal("com.example.compat", processes.Single(process => process.Pid == 502).BundleId);
+        }
+
+        [Fact]
+        public void GenericAppspawnIdentityCanBeCompletedByRealAbilityProcessEvidence()
+        {
+            List<ProcessInfo> processes = HarmonyLookupService.ParseProcesses(
+                "UID PID PPID NAME\n"
+                + "u0 501 1 appspawn\n", "HARMONY-1");
+
+            HarmonyLookupService.ApplyAbilityProcessBindings(processes, new[]
+            {
+                new HarmonyProcessBinding
+                {
+                    Pid = 501,
+                    BundleId = "com.example.native",
+                    ProcessName = "/system/bin/com.example.native:worker",
+                    HarmonyUserId = 0,
+                    Foreground = true
+                }
+            });
+
+            ProcessInfo process = Assert.Single(processes);
+            Assert.Equal("com.example.native:worker", process.Name);
+            Assert.Equal(process.Name, process.DisplayName);
+            Assert.Equal("com.example.native", process.BundleId);
+            Assert.True(process.OwnershipVerified);
+            Assert.True(process.Recommended);
+            Assert.False(process.OwnershipAmbiguous);
+        }
+
+        [Fact]
+        public void ProcInventoryOwnershipCannotBeReplacedFromProcessNameInference()
+        {
+            List<ProcessInfo> processes = new List<ProcessInfo>
+            {
+                new ProcessInfo
+                {
+                    Pid = 501,
+                    Name = "com.example.inferred:worker",
+                    DisplayName = "com.example.inferred:worker",
+                    BundleId = "com.example.inferred",
+                    OwnershipSource = "proc-inventory",
+                    Platform = "harmony",
+                    DeviceUdid = "HARMONY-1",
+                    HarmonyUserId = 0
+                }
+            };
+
+            HarmonyLookupService.ApplyAbilityProcessBindings(processes, new[]
+            {
+                new HarmonyProcessBinding
+                {
+                    Pid = 501,
+                    BundleId = "com.example.real",
+                    HarmonyUserId = 0
+                }
+            });
+
+            ProcessInfo process = Assert.Single(processes);
+            Assert.True(process.OwnershipAmbiguous);
+            Assert.False(process.OwnershipVerified);
+            Assert.Empty(process.BundleId);
+            Assert.Empty(process.OwnerBundleId);
+        }
+
+        [Fact]
+        public void AbilityManagerCommandAliasUsesExecutableTokenOnly()
+        {
+            List<ProcessInfo> processes = HarmonyLookupService.ParseProcesses(
+                "UID PID PPID NAME\n"
+                + "u0 501 1 appspawn\n", "HARMONY-1");
+
+            HarmonyLookupService.ApplyAbilityProcessBindings(processes, new[]
+            {
+                new HarmonyProcessBinding
+                {
+                    Pid = 501,
+                    ProcessName = "/system/bin/com.example.native --bundle-name com.example.other",
+                    HarmonyUserId = 0
+                }
+            });
+
+            ProcessInfo process = Assert.Single(processes);
+            Assert.Equal("com.example.native", process.Name);
+            Assert.Empty(process.BundleId);
+            Assert.False(process.OwnershipVerified);
+        }
+
+        [Fact]
+        public void ConflictingAbilityManagerBindingsRemainUnowned()
+        {
+            List<ProcessInfo> processes = HarmonyLookupService.ParseProcesses(
+                "UID PID PPID NAME\n"
+                + "u0 501 1 appspawn\n", "HARMONY-1");
+
+            HarmonyLookupService.ApplyAbilityProcessBindings(processes, new[]
+            {
+                new HarmonyProcessBinding { Pid = 501, BundleId = "com.example.first", HarmonyUserId = 0 },
+                new HarmonyProcessBinding { Pid = 501, BundleId = "com.example.second", HarmonyUserId = 0 }
+            });
+
+            ProcessInfo process = Assert.Single(processes);
+            Assert.False(process.OwnershipVerified);
+            Assert.True(process.OwnershipAmbiguous);
+            Assert.DoesNotContain("com.example.first", process.BundleId);
+            Assert.DoesNotContain("com.example.second", process.BundleId);
+        }
+
+        [Fact]
+        public void AbilityInventoryCommandsKeepEachKnownUserScoped()
+        {
+            IReadOnlyList<string[]> commands = HarmonyLookupService.BuildAbilityInventoryCommands(new[] { 0, 100, 100 });
+
+            Assert.Contains(commands, command => string.Join(" ", command) == "aa dump -a");
+            Assert.Contains(commands, command => string.Join(" ", command) == "aa dump -a -u 0");
+            Assert.Contains(commands, command => string.Join(" ", command) == "aa dump -a --userId 100");
+            Assert.Contains(commands, command => string.Join(" ", command) == "aa dump -r -u 0");
+            Assert.Contains(commands, command => string.Join(" ", command) == "aa dump -r --userId 100");
+            Assert.DoesNotContain(commands, command => command.Contains("--user"));
+            Assert.DoesNotContain(commands, command => string.Join(" ", command) == "aa dump -a -u 100 -u 0");
+        }
+
+        [Fact]
+        public void ParsesHarmonyIconAndHapEvidenceOnlyForTheRequestedBundle()
+        {
+            string output = "{\"bundleName\":\"com.example.game\","
+                + "\"applicationInfo\":{\"iconPath\":\"/data/app/com.example.game/icon.png\","
+                + "\"hapPath\":\"/data/app/com.example.game/entry.hap\","
+                + "\"icon\":\"resources/base/media/icon\"}}";
+
+            HarmonyIconMetadata metadata = HarmonyLookupService.ParseHarmonyIconMetadata(output, "com.example.game");
+
+            Assert.Contains("/data/app/com.example.game/icon.png", metadata.IconPaths);
+            Assert.Contains("/data/app/com.example.game/entry.hap", metadata.HapPaths);
+            Assert.Contains("resources/base/media/icon", metadata.IconEntries);
+            Assert.Empty(HarmonyLookupService.ParseHarmonyIconMetadata(
+                output.Replace("com.example.game", "com.other.game"), "com.example.game").IconPaths);
+        }
+
+        [Fact]
+        public void SelectsReferencedHarmonyIconBeforeGenericResources()
+        {
+            string entry = HarmonyLookupService.SelectHarmonyIconEntry(
+                new[]
+                {
+                    "resources/base/media/notification.png",
+                    "resources/base/media/icon.webp",
+                    "resources/base/media/entry_icon.png",
+                    "resources/base/media/splash.png"
+                },
+                new[] { "resources/base/media/entry_icon.png" });
+
+            Assert.Equal("resources/base/media/entry_icon.png", entry);
+        }
+
+        [Fact]
+        public void HarmonyIconCommandsKeepKnownUserScopeAndDoNotInventUnknownScope()
+        {
+            IReadOnlyList<string[]> scoped = HarmonyLookupService.BuildIconMetadataCommands(
+                "com.example.game", 100);
+            IReadOnlyList<string[]> unscoped = HarmonyLookupService.BuildIconMetadataCommands(
+                "com.example.game", -1);
+
+            Assert.Contains(scoped, command => string.Join(" ", command) == "bm dump -n com.example.game -u 100");
+            Assert.Contains(scoped, command => string.Join(" ", command) == "bm dump -n com.example.game --user-id 100");
+            Assert.DoesNotContain(unscoped, command => string.Join(" ", command).Contains("--user-id"));
+            Assert.DoesNotContain(unscoped, command => string.Join(" ", command).Contains(" -u "));
+        }
+
+        [Fact]
+        public void HarmonyLaunchCapabilityIgnoresEntriesFromAnotherUser()
+        {
+            var app = new AppInfo
+            {
+                BundleId = "com.example.game",
+                Platform = "harmony",
+                HarmonyUserId = 100,
+                HasLaunchEntry = true,
+                HarmonyLaunchEntries = new List<HarmonyLaunchEntryInfo>
+                {
+                    new HarmonyLaunchEntryInfo
+                    {
+                        Module = "entry",
+                        Ability = "WorkOnlyAbility",
+                        IsUiEntry = true,
+                        HarmonyUserId = 101
+                    }
+                }
+            };
+
+            Assert.False(app.CanAttemptLaunch);
+        }
+
+        [Fact]
+        public void PreservesHarmonyInstallEvidenceForDefaultPickerFiltering()
+        {
+            List<AppInfo> apps = HarmonyLookupService.ParseApps(
+                "{\"bundleInfos\":["
+                + "{\"bundleName\":\"com.example.user\",\"isSystemApp\":false,\"isPreInstallApp\":false,\"installSource\":\"user\"},"
+                + "{\"bundleName\":\"com.example.system\",\"isSystemApp\":true,\"isPreInstallApp\":true,\"installSource\":\"pre-installed\"}]}\n");
+
+            AppInfo user = Assert.Single(apps, app => app.BundleId == "com.example.user");
+            AppInfo system = Assert.Single(apps, app => app.BundleId == "com.example.system");
+            Assert.False(user.IsSystemApp);
+            Assert.False(user.IsPreInstallApp);
+            Assert.Equal("user", user.InstallSource);
+            Assert.True(system.IsSystemApp);
+            Assert.True(system.IsPreInstallApp);
+            Assert.Equal("pre-installed", system.InstallSource);
+        }
+
+        [Fact]
+        public void HarmonyFileReceiveUsesDeviceScopeOutsideTheRemoteShell()
+        {
+            IReadOnlyList<string> args = HarmonyLookupService.FileReceiveArgs(
+                "SERIAL-1", "/data/app/com.example.game/icon.png", "C:/temp/icon.png");
+
+            Assert.Equal(new[]
+            {
+                "-t", "SERIAL-1", "file", "recv", "/data/app/com.example.game/icon.png", "C:/temp/icon.png"
+            }, args);
+            Assert.DoesNotContain("shell", args);
         }
     }
 }

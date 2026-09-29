@@ -8,7 +8,7 @@
 - .NET 8 SDK。
 - arm64 Python 3。
 - Android platform-tools (`adb`)。
-- 如需连接鸿蒙设备，安装官方 HarmonyOS/OpenHarmony SDK 的 HDC；当前 DMG 不捆绑 HDC。MoTuPerf 会自动检查 PATH 和常见 DevEco/OpenHarmony SDK 目录，自定义安装位置可通过 `MOTUPERF_HDC` 指定。
+- 如需连接鸿蒙设备，首次使用时在设备选择页点击“下载鸿蒙连接工具”，只下载官方 `Command Line Tools`。解压后在向导中选择最外层的 `command-line-tools` 文件夹，MoTuPerf 会自动找到 `sdk/default/openharmony/toolchains/hdc` 并保存位置；当前 DMG 不捆绑 HDC。
 - Xcode Command Line Tools（用于原生 Python 依赖和签名工具）。
 
 ## 构建
@@ -31,8 +31,8 @@ chmod +x packaging/macos-arm64/*.sh
 默认生成：
 
 - `dist/macos-arm64/MoTuPerf.app`
-- `dist/macos-arm64/MoTuPerf-v0.40.8-osx-arm64.dmg`
-- `dist/macos-arm64/MoTuPerf-v0.40.8-osx-arm64.dmg.sha256`
+- `dist/macos-arm64/MoTuPerf-v0.41.2-osx-arm64.dmg`
+- `dist/macos-arm64/MoTuPerf-v0.41.2-osx-arm64.dmg.sha256`
 
 打开 DMG 后，将 `MoTuPerf.app` 拖到 `Applications`。当前内测包使用 ad-hoc 签名，第一次启动需在 Finder 中右键应用并选择“打开”；它不是已公证的公开发行包。
 

@@ -125,13 +125,13 @@ namespace MoTuPerf.Core.Tests
             document.Process = new ProcessInfo
             {
                 Platform = "harmony", Pid = 808, Name = "com.example.harmony:main", BundleId = "com.example.harmony",
-                HarmonyUserId = 100, HarmonyStartTimeTicks = 3210
+                HarmonyUserId = 100, HarmonyAppIndex = 2, HarmonyStartTimeTicks = 3210
             };
 
             string csv = CsvExportService.Build(document);
 
-            Assert.Contains("Platform,DeviceSerial,TargetBundle,HarmonyUserId,HarmonyStartTimeTicks,TargetPid", csv);
-            Assert.Contains("HarmonyOS,HARMONY-123,com.example.harmony,100,3210,808", csv);
+            Assert.Contains("Platform,DeviceSerial,TargetBundle,HarmonyUserId,HarmonyAppIndex,HarmonyStartTimeTicks,TargetPid", csv);
+            Assert.Contains("HarmonyOS,HARMONY-123,com.example.harmony,100,2,3210,808", csv);
         }
 
         [Fact]

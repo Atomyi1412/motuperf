@@ -19,7 +19,28 @@ namespace CSharpIosPerfMonitor
 
         public static string PythonExecutable { get { return ResolveExecutable(Resolver.PythonExecutable, Resolver.OperatingSystem == "macos" ? "python3" : "python"); } }
         public static string AdbExecutable { get { return ResolveExecutable(Resolver.AdbExecutable, "adb"); } }
-        public static string HdcExecutable { get { return HdcToolLocator.Resolve(Resolver.HdcExecutable); } }
+        public static string HdcExecutable
+        {
+            get
+            {
+                string persisted = HdcToolLocator.ReadConfiguredPath(Resolver.UserDataDirectory);
+                return HdcToolLocator.Resolve(Resolver.HdcExecutable, persisted);
+            }
+        }
+        public static string HdcExecutableName { get { return OperatingSystem.IsWindows() ? "hdc.exe" : "hdc"; } }
+        public static string ConfiguredHdcPath { get { return HdcToolLocator.ReadConfiguredPath(Resolver.UserDataDirectory); } }
+        public static bool IsValidHdcExecutablePath(string path)
+        {
+            return HdcToolLocator.IsPlatformExecutablePath(path, OperatingSystem.IsWindows());
+        }
+        public static string FindHdcInDirectory(string directory)
+        {
+            return HdcToolLocator.FindInSelectedDirectory(directory, OperatingSystem.IsWindows());
+        }
+        public static void ConfigureHdcExecutable(string path)
+        {
+            HdcToolLocator.SaveConfiguredPath(Resolver.UserDataDirectory, path, OperatingSystem.IsWindows());
+        }
         public static bool IsPackagedBuild { get { return File.Exists(Resolver.PackageManifestPath); } }
         public static string UserDataDirectory { get { return Resolver.UserDataDirectory; } }
         public static string DataDirectory { get { return Resolver.UserDataDirectory; } }

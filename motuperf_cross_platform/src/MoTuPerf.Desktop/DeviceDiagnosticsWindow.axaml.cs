@@ -1,3 +1,4 @@
+using System;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -6,6 +7,7 @@ namespace MoTuPerf.Desktop
 {
     public partial class DeviceDiagnosticsWindow : Window
     {
+        public event EventHandler RecheckRequested;
         private TextBlock _overallStatusText;
         private TextBlock _androidSummaryText;
         private TextBlock _iosSummaryText;
@@ -13,6 +15,7 @@ namespace MoTuPerf.Desktop
         private TextBlock _androidDiagnosticText;
         private TextBlock _iosDiagnosticText;
         private TextBlock _harmonyDiagnosticText;
+        private Button _harmonyHdcSetupButton;
         private TextBlock _appleDriverDetailText;
         private Border _appleDriverDetail;
 
@@ -31,6 +34,7 @@ namespace MoTuPerf.Desktop
             _androidDiagnosticText.Text = snapshot.AndroidDiagnostic;
             _iosDiagnosticText.Text = snapshot.IosDiagnostic;
             _harmonyDiagnosticText.Text = snapshot.HarmonyDiagnostic;
+            _harmonyHdcSetupButton.IsVisible = snapshot.HarmonyHdcActionAvailable;
             _appleDriverDetailText.Text = snapshot.AppleDriverMissing
                 ? "未检测到 Apple 移动设备支持，可在设备选择窗口使用驱动按钮下载或修复。"
                 : snapshot.AppleDriverActionAvailable
@@ -50,6 +54,7 @@ namespace MoTuPerf.Desktop
             _androidDiagnosticText = this.FindControl<TextBlock>("AndroidDiagnosticText");
             _iosDiagnosticText = this.FindControl<TextBlock>("IosDiagnosticText");
             _harmonyDiagnosticText = this.FindControl<TextBlock>("HarmonyDiagnosticText");
+            _harmonyHdcSetupButton = this.FindControl<Button>("HarmonyHdcSetupButton");
             _appleDriverDetailText = this.FindControl<TextBlock>("AppleDriverDetailText");
             _appleDriverDetail = this.FindControl<Border>("AppleDriverDetail");
         }
@@ -57,6 +62,16 @@ namespace MoTuPerf.Desktop
         private void DialogTitlePointerPressed(object sender, PointerPressedEventArgs e)
         {
             if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) BeginMoveDrag(e);
+        }
+
+        private async void OpenHarmonyHdcSetup(object sender, RoutedEventArgs e)
+        {
+            HarmonyHdcSetupWindow window = new HarmonyHdcSetupWindow();
+            window.RecheckRequested += delegate
+            {
+                RecheckRequested?.Invoke(this, EventArgs.Empty);
+            };
+            await window.ShowDialog(this);
         }
 
         private void CloseWindow(object sender, RoutedEventArgs e) { Close(); }

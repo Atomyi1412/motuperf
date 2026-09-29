@@ -52,6 +52,24 @@ namespace MoTuPerf.Core.Tests
         }
 
         [Fact]
+        public void HarmonyBundlePidRemainsValidWhenExecutableNameIsUnreadable()
+        {
+            var process = new CSharpIosPerfMonitor.ProcessInfo
+            {
+                Pid = 6712,
+                Platform = "harmony",
+                BundleId = "com.example.game",
+                OwnerBundleId = "com.example.game",
+                OwnershipVerified = true,
+                HarmonyUserId = 100
+            };
+
+            Assert.True(CSharpIosPerfMonitor.ProcessTargetMatcher.IsValidTarget(process));
+            process.OwnershipAmbiguous = true;
+            Assert.False(CSharpIosPerfMonitor.ProcessTargetMatcher.IsValidTarget(process));
+        }
+
+        [Fact]
         public void HarmonyProcessReuseRequiresTheSelectedIdentity()
         {
             var selected = new CSharpIosPerfMonitor.ProcessInfo

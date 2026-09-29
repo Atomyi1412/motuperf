@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 
 namespace CSharpIosPerfMonitor
 {
@@ -138,6 +139,8 @@ namespace CSharpIosPerfMonitor
             Module = "";
             Ability = "";
             IsUiEntry = true;
+            HarmonyUserId = -1;
+            HarmonyAppIndex = -1;
         }
 
         public string Module { get; set; }
@@ -149,6 +152,16 @@ namespace CSharpIosPerfMonitor
         /// provenance and are not presented as a UI entry point.
         /// </summary>
         public bool IsUiEntry { get; set; }
+        /// <summary>
+        /// Harmony profile that supplied this entry. -1 means the entry came
+        /// from an unscoped record and may be tried for any selected profile.
+        /// </summary>
+        public int HarmonyUserId { get; set; }
+        /// <summary>
+        /// Harmony application clone/index that supplied this entry. -1 means
+        /// the device did not expose an appIndex value.
+        /// </summary>
+        public int HarmonyAppIndex { get; set; }
     }
 
     public sealed class AppInfo
@@ -164,7 +177,9 @@ namespace CSharpIosPerfMonitor
             IconPath = "";
             ApkPath = "";
             ProcessName = "";
+            InstallSource = "";
             HarmonyUserId = -1;
+            HarmonyAppIndex = -1;
             HarmonyUserIds = new List<int>();
             HarmonyLaunchEntries = new List<HarmonyLaunchEntryInfo>();
         }
@@ -194,6 +209,11 @@ namespace CSharpIosPerfMonitor
         /// </summary>
         public int HarmonyUserId { get; set; }
         /// <summary>
+        /// Concrete Harmony application index represented by this row. -1 is
+        /// an explicit unknown value and is never treated as the main app.
+        /// </summary>
+        public int HarmonyAppIndex { get; set; }
+        /// <summary>
         /// User profiles in which HDC reported this Harmony bundle. The list
         /// is optional so old session files remain compatible.
         /// </summary>
@@ -204,9 +224,25 @@ namespace CSharpIosPerfMonitor
         /// lookup on systems that only expose the aggregate inventory command.
         /// </summary>
         public List<HarmonyLaunchEntryInfo> HarmonyLaunchEntries { get; set; }
+        /// <summary>
+        /// The picker only shows the numeric Harmony profile when the same
+        /// Bundle is present in more than one profile. The identity remains
+        /// stored in HarmonyUserId and is never relaxed by this presentation
+        /// flag.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool ShowHarmonyUserScope { get; set; }
         public bool IsRunning { get; set; }
         public bool IsProcessOnly { get; set; }
         public bool HasLaunchEntry { get; set; }
+        /// <summary>
+        /// Installation evidence reported by Harmony Bundle Manager. These
+        /// fields are optional because compatibility package inventories and
+        /// older session files may not expose them.
+        /// </summary>
+        public bool IsSystemApp { get; set; }
+        public bool IsPreInstallApp { get; set; }
+        public string InstallSource { get; set; }
         /// <summary>
         /// True when the inventory explicitly contained only non-UI
         /// Service/Form/DataShare/WorkScheduler/Extension entries. Those
@@ -221,19 +257,97 @@ namespace CSharpIosPerfMonitor
             {
                 if (!DevicePlatformNames.IsHarmony(Platform)
                     || string.IsNullOrWhiteSpace(BundleId)) return false;
+                // A Bundle/Ability record without a concrete profile cannot
+                // safely use an unscoped start command. Keep it visible for
+                // inspection, but require one unambiguous user evidence.
+                if (HarmonyUserId < 0)
+                {
+                    HashSet<int> knownUsers = new HashSet<int>();
+                    foreach (int userId in HarmonyUserIds ?? new List<int>())
+                    {
+                        if (userId >= 0) knownUsers.Add(userId);
+                    }
+                    foreach (HarmonyLaunchEntryInfo entry in HarmonyLaunchEntries ?? new List<HarmonyLaunchEntryInfo>())
+                    {
+                        if (entry != null && entry.HarmonyUserId >= 0) knownUsers.Add(entry.HarmonyUserId);
+                    }
+                    if (knownUsers.Count != 1) return false;
+                }
+                int effectiveUserId = HarmonyUserId;
+                if (effectiveUserId < 0)
+                {
+                    IEnumerable<int> candidateUsers = (HarmonyUserIds ?? new List<int>())
+                        .Concat((HarmonyLaunchEntries ?? new List<HarmonyLaunchEntryInfo>())
+                            .Where(entry => entry != null)
+                            .Select(entry => entry.HarmonyUserId));
+                    foreach (int userId in candidateUsers)
+                    {
+                        if (userId >= 0)
+                        {
+                            effectiveUserId = userId;
+                            break;
+                        }
+                    }
+                }
                 // Older session files do not contain HasNonUiLaunchEntry.
                 // Reconstruct the real entry evidence from persisted entries
                 // so a discovered Service/Form/Extension can be attempted
                 // without inventing a UI Ability.
                 bool hasUiEntry = false;
                 bool hasNonUiEntry = false;
+                bool hasStoredEntry = false;
                 foreach (HarmonyLaunchEntryInfo entry in HarmonyLaunchEntries ?? new List<HarmonyLaunchEntryInfo>())
                 {
                     if (entry == null) continue;
+                    if (string.IsNullOrWhiteSpace(entry.Ability)) continue;
+                    hasStoredEntry = true;
+                    if (effectiveUserId >= 0 && entry.HarmonyUserId >= 0 && entry.HarmonyUserId != effectiveUserId)
+                        continue;
+                    // A clone row must never inherit the main instance's
+                    // unindexed Ability. For appIndex 0 an unindexed entry
+                    // remains compatible with older session files; a positive
+                    // clone index requires explicit matching evidence.
+                    if (HarmonyAppIndex > 0 && entry.HarmonyAppIndex != HarmonyAppIndex)
+                        continue;
+                    if (HarmonyAppIndex == 0 && entry.HarmonyAppIndex >= 0 && entry.HarmonyAppIndex != 0)
+                        continue;
                     hasUiEntry = hasUiEntry || entry.IsUiEntry;
                     hasNonUiEntry = hasNonUiEntry || !entry.IsUiEntry;
                 }
+                // A persisted aggregate may contain entries for several
+                // Harmony profiles. Once the selected profile is concrete,
+                // entries from another profile are not launch evidence for it.
+                if (hasStoredEntry && !hasUiEntry && !hasNonUiEntry) return false;
+                if (HarmonyAppIndex > 0 && !hasStoredEntry) return false;
                 if (hasUiEntry || hasNonUiEntry) return true;
+                // A running process row without a readable executable name
+                // has no safe launch proof. Keep it available for direct PID
+                // collection, but do not turn its Bundle evidence into an
+                // inferred launch target.
+                if (IsProcessOnly && ProcessPid > 0 && string.IsNullOrWhiteSpace(ProcessName)) return false;
+                if (IsProcessOnly && HarmonyUserId < 0)
+                {
+                    // A process-derived Bundle without a concrete profile is
+                    // not safe to start: an unscoped command could launch a
+                    // different installation of the same Bundle. It remains
+                    // selectable through its own real PID. Explicitly
+                    // discovered Ability/Extension entries returned above are
+                    // safe evidence and remain launch candidates.
+                    HashSet<int> knownUsers = new HashSet<int>();
+                    foreach (int userId in HarmonyUserIds ?? new List<int>())
+                    {
+                        if (userId < 0) continue;
+                        knownUsers.Add(userId);
+                        if (knownUsers.Count > 1) return false;
+                    }
+                    foreach (HarmonyLaunchEntryInfo entry in HarmonyLaunchEntries ?? new List<HarmonyLaunchEntryInfo>())
+                    {
+                        if (entry == null || entry.HarmonyUserId < 0) continue;
+                        knownUsers.Add(entry.HarmonyUserId);
+                        if (knownUsers.Count > 1) return false;
+                    }
+                    if (knownUsers.Count == 0) return false;
+                }
                 return !HasNonUiLaunchEntry;
             }
         }
@@ -248,6 +362,8 @@ namespace CSharpIosPerfMonitor
             get
             {
                 if (!DevicePlatformNames.IsHarmony(Platform)) return "";
+                if (HarmonyUserId < 0 && !IsProcessOnly)
+                    return "用户范围未知";
                 if (IsProcessOnly && !CanAttemptLaunch) return "仅运行中可采集";
                 if (IsProcessOnly && CanAttemptLaunch) return "可尝试启动";
                 if (HasLaunchEntry) return "有启动入口";
@@ -264,13 +380,36 @@ namespace CSharpIosPerfMonitor
                 {
                     if (DevicePlatformNames.IsHarmony(Platform))
                     {
-                        return BundleId + " · " + (HarmonyUserId >= 0
+                        string index = HarmonyAppIndex >= 0
+                            ? " · 分身 " + HarmonyAppIndex.ToString(CultureInfo.InvariantCulture)
+                            : "";
+                        return BundleId + index + " · " + (HarmonyUserId >= 0
                             ? "用户 " + HarmonyUserId.ToString(CultureInfo.InvariantCulture)
                             : "用户未知");
                     }
                     return BundleId;
                 }
                 return ProcessPid > 0 ? "PID " + ProcessPid.ToString(CultureInfo.InvariantCulture) : "";
+            }
+        }
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string PickerTargetIdentifier
+        {
+            get
+            {
+                if (!DevicePlatformNames.IsHarmony(Platform)) return TargetIdentifier;
+                if (string.IsNullOrWhiteSpace(BundleId))
+                    return ProcessPid > 0 ? "PID " + ProcessPid.ToString(CultureInfo.InvariantCulture) : "";
+                string index = HarmonyAppIndex >= 0
+                    ? " · 分身 " + HarmonyAppIndex.ToString(CultureInfo.InvariantCulture)
+                    : "";
+                string user = ShowHarmonyUserScope
+                    ? " · " + (HarmonyUserId >= 0
+                        ? "用户 " + HarmonyUserId.ToString(CultureInfo.InvariantCulture)
+                        : "用户未知")
+                    : "";
+                return BundleId + index + user;
             }
         }
 
@@ -324,6 +463,8 @@ namespace CSharpIosPerfMonitor
             IconKey = "";
             IconPath = "";
             HarmonyUserId = -1;
+            HarmonyAppIndex = -1;
+            HarmonyNameIsComm = false;
         }
 
         public int Pid { get; set; }
@@ -338,6 +479,14 @@ namespace CSharpIosPerfMonitor
         public long AndroidStartTimeTicks { get; set; }
         public long HarmonyStartTimeTicks { get; set; }
         public int HarmonyUserId { get; set; }
+        /// <summary>
+        /// Concrete Harmony application index associated with this PID. -1
+        /// means the process evidence did not expose one.
+        /// </summary>
+        public int HarmonyAppIndex { get; set; }
+        // Linux/Harmony ps COMM is a kernel-truncated name (normally 15
+        // visible bytes), not a complete executable identity.
+        public bool HarmonyNameIsComm { get; set; }
         public long ProcessUniqueId { get; set; }
         public int OwnerPid { get; set; }
         public string OwnerName { get; set; }
@@ -355,6 +504,13 @@ namespace CSharpIosPerfMonitor
         public string IconKey { get; set; }
         public string IconPath { get; set; }
 
+        /// <summary>
+        /// The numeric Harmony profile is only useful when identical Bundle
+        /// rows from multiple profiles need to be distinguished in the picker.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool ShowHarmonyUserScope { get; set; }
+
         public string PickerSubtitle
         {
             get
@@ -362,10 +518,13 @@ namespace CSharpIosPerfMonitor
                 if (!DevicePlatformNames.IsHarmony(Platform)) return "";
                 List<string> details = new List<string>();
                 details.Add(string.IsNullOrWhiteSpace(BundleId) ? "无 Bundle" : BundleId);
-                details.Add(HarmonyUserId >= 0
-                    ? "用户 " + HarmonyUserId.ToString(CultureInfo.InvariantCulture)
-                    : "用户未知");
-                details.Add(string.IsNullOrWhiteSpace(BundleId) ? "仅运行中可采集" : "运行中进程");
+                if (ShowHarmonyUserScope)
+                    details.Add(HarmonyUserId >= 0
+                        ? "用户 " + HarmonyUserId.ToString(CultureInfo.InvariantCulture)
+                        : "用户未知");
+                if (HarmonyAppIndex >= 0)
+                    details.Add("分身 " + HarmonyAppIndex.ToString(CultureInfo.InvariantCulture));
+                if (string.IsNullOrWhiteSpace(Name)) details.Add("进程名不可读");
                 return string.Join(" · ", details);
             }
         }
@@ -386,6 +545,8 @@ namespace CSharpIosPerfMonitor
             get
             {
                 string name = string.IsNullOrWhiteSpace(DisplayName) ? Name : DisplayName;
+                if (string.IsNullOrWhiteSpace(name) && DevicePlatformNames.IsHarmony(Platform))
+                    name = string.IsNullOrWhiteSpace(BundleId) ? "PID " + Pid.ToString(CultureInfo.InvariantCulture) : BundleId;
                 if (!Name.StartsWith("com.apple.WebKit", StringComparison.Ordinal) || string.IsNullOrWhiteSpace(StartedAt))
                 {
                     return name;
@@ -553,6 +714,7 @@ namespace CSharpIosPerfMonitor
             ScreenshotIntervalSec = 3;
             TargetOwnerName = "";
             TargetHarmonyUserId = -1;
+            TargetHarmonyAppIndex = -1;
             CollectFps = true;
             CollectMemory = true;
             CollectCpu = true;
@@ -569,6 +731,8 @@ namespace CSharpIosPerfMonitor
         public long TargetAndroidStartTimeTicks { get; set; }
         public long TargetHarmonyStartTimeTicks { get; set; }
         public int TargetHarmonyUserId { get; set; }
+        public int TargetHarmonyAppIndex { get; set; }
+        public bool TargetHarmonyNameIsComm { get; set; }
         public long TargetCoalitionId { get; set; }
         public int TargetOwnerPid { get; set; }
         public string TargetOwnerName { get; set; }

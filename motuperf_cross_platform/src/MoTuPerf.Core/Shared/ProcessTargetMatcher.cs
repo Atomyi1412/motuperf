@@ -6,9 +6,17 @@ namespace CSharpIosPerfMonitor
     {
         public static bool IsValidTarget(ProcessInfo process)
         {
-            return process != null
-                && process.Pid > 0
-                && !string.IsNullOrWhiteSpace(process.Name);
+            if (process == null || process.Pid <= 0) return false;
+            if (!string.IsNullOrWhiteSpace(process.Name)) return true;
+
+            // Ability Manager can prove a Harmony Bundle owns a real PID even
+            // when /proc/<pid>/cmdline and ps expose no executable name. Keep
+            // that target selectable by its PID and Bundle evidence, while
+            // refusing unnamed Android/iOS rows or ambiguous ownership.
+            return DevicePlatformNames.IsHarmony(process.Platform)
+                && process.OwnershipVerified
+                && !process.OwnershipAmbiguous
+                && !string.IsNullOrWhiteSpace(FirstNonEmpty(process.BundleId, process.OwnerBundleId));
         }
 
         public static bool BelongsToDevice(ProcessInfo process, string udid)
@@ -119,21 +127,40 @@ namespace CSharpIosPerfMonitor
             {
                 return false;
             }
-            if (selected.HarmonyUserId >= 0
-                && (current.HarmonyUserId < 0 || current.HarmonyUserId != selected.HarmonyUserId))
+            // Unknown profile scope is distinct from every concrete Harmony
+            // user. Do not reuse an unscoped row for a known-user process (or
+            // the reverse), even when PID/name/start-time happen to match.
+            if ((selected.HarmonyUserId >= 0 || current.HarmonyUserId >= 0)
+                && (selected.HarmonyUserId < 0 || current.HarmonyUserId < 0
+                    || current.HarmonyUserId != selected.HarmonyUserId))
+            {
+                return false;
+            }
+            if ((selected.HarmonyAppIndex >= 0 || current.HarmonyAppIndex >= 0)
+                && (selected.HarmonyAppIndex < 0 || current.HarmonyAppIndex < 0
+                    || current.HarmonyAppIndex != selected.HarmonyAppIndex))
             {
                 return false;
             }
             if (!string.IsNullOrWhiteSpace(selected.Name)
-                && !string.Equals(current.Name, selected.Name, StringComparison.OrdinalIgnoreCase))
+                && !string.Equals(current.Name, selected.Name, StringComparison.Ordinal))
             {
-                return false;
+                if (selected.HarmonyStartTimeTicks <= 0 || current.OwnershipAmbiguous || selected.OwnershipAmbiguous)
+                    return false;
+                bool commAlias = selected.HarmonyNameIsComm && !current.HarmonyNameIsComm
+                    && IsHarmonyCommAlias(selected.Name, current.Name);
+                commAlias |= current.HarmonyNameIsComm && !selected.HarmonyNameIsComm
+                    && IsHarmonyCommAlias(current.Name, selected.Name);
+                if (!commAlias) return false;
             }
             string selectedBundle = FirstNonEmpty(selected.BundleId, selected.OwnerBundleId);
             string currentBundle = FirstNonEmpty(current.BundleId, current.OwnerBundleId);
-            return string.IsNullOrWhiteSpace(selectedBundle)
-                || string.IsNullOrWhiteSpace(currentBundle)
-                || string.Equals(currentBundle, selectedBundle, StringComparison.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(selectedBundle))
+            {
+                return !string.IsNullOrWhiteSpace(currentBundle)
+                    && string.Equals(currentBundle, selectedBundle, StringComparison.OrdinalIgnoreCase);
+            }
+            return true;
         }
 
         public static bool CanReuseAndroidSelectionForCapture(ProcessInfo process, string udid)
@@ -141,6 +168,29 @@ namespace CSharpIosPerfMonitor
             return IsValidTarget(process)
                 && process.AndroidStartTimeTicks > 0
                 && BelongsToDevice(process, udid);
+        }
+
+        public static bool IsHarmonyCommAlias(string comm, string fullName)
+        {
+            if (string.IsNullOrEmpty(comm) || string.IsNullOrEmpty(fullName)
+                || System.Text.Encoding.UTF8.GetByteCount(comm) != 15
+                || fullName.Length <= comm.Length)
+                return false;
+
+            // Some Harmony vendors expose the native process COMM without
+            // the common `com.` bundle prefix while ARGS/NAME retains the
+            // complete executable identity. Keep this narrowly scoped to
+            // the observed prefix form. Some vendor `ps COMM` columns also
+            // drop the first character when a 16-byte ASCII Bundle exceeds
+            // the 15-byte kernel limit (for example `om.m2.xzlr.hwhm` for
+            // `com.m2.xzlr.hwhm`). Keep that exact one-character form here;
+            // arbitrary suffix matching would merge unrelated processes that
+            // happen to share a label.
+            return fullName.StartsWith(comm, StringComparison.Ordinal)
+                || fullName.StartsWith("com." + comm, StringComparison.Ordinal)
+                || (fullName.Length == comm.Length + 1
+                    && fullName.StartsWith("com.", StringComparison.Ordinal)
+                    && string.Equals(fullName.Substring(1), comm, StringComparison.Ordinal));
         }
 
         private static bool IsAndroidAppBrandProcessName(string processName)
