@@ -26,6 +26,13 @@
           <StackPanel Margin="22,10,18,12" Spacing="9">
             <Border Classes="helpSection">
               <StackPanel>
+                <TextBlock Text="v0.41.3" Classes="helpTitle" />
+                <TextBlock Text="2026-09-29" Classes="dialogHint" />
+                <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复 Windows GitHub Actions 与本地换行格式不一致导致桌面 UI 契约测试误报失败的问题，统一源码读取的换行处理。&#x0A;• 发布版本提升至 v0.41.3，重新触发 Windows 安装包和 macOS Apple Silicon DMG 的自动构建。" />
+              </StackPanel>
+            </Border>
+            <Border Classes="helpSection">
+              <StackPanel>
                 <TextBlock Text="v0.41.2" Classes="helpTitle" />
                 <TextBlock Text="2026-09-29" Classes="dialogHint" />
                 <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 完善鸿蒙温度曲线的帮助说明，解释 ambient、Battery、charger、rfboard、shell_back、shell_frame、shell_front 和 system_h 的含义。&#x0A;• 明确这些数据是设备级传感器温度，单位为 °C，不是所选进程温度，也不等同于 CPU/GPU 芯片温度；同时说明厂商差异、缺失数据和跨设备对比边界。&#x0A;• 修复无鸿蒙真机的 CI 环境执行平台测试时，真机探针被误判为失败的问题；设置设备序列号后仍会执行完整真机验证。" />
@@ -38,7 +45,7 @@
                 <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复部分鸿蒙设备的 ps 输出将同一进程的 COMM 名称截断为首字符缺失的短名，导致前台应用无法与完整 Bundle 合并的问题。&#x0A;• 前台 Ability、真实 PID、用户和 Bundle 证据现在可以稳定同步到“选择进程”和“启动 APP”的推荐状态；仍保留严格的身份冲突校验，不从短名猜测 Bundle。&#x0A;• 本版本完成本地真机验证，尚未打包或发布。" />
               </StackPanel>
             </Border>
-            <Border Classes="helpSection">
+            <Border Classes="helpSection legacyChangelogSection" IsVisible="False">
               <StackPanel>
                 <TextBlock Text="v0.41.0" Classes="helpTitle" />
                 <TextBlock Text="2026-09-29" Classes="dialogHint" />

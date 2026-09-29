@@ -1,5 +1,10 @@
 # 更新日志
 
+## v0.41.3 - 2026-09-29
+
+- 修复 Windows GitHub Actions 与本地换行格式不一致导致桌面 UI 契约测试误报失败的问题，统一源码读取的换行处理。
+- 发布版本提升至 `v0.41.3`，重新触发 Windows 安装包和 macOS Apple Silicon DMG 的自动构建。
+
 ## v0.41.2 - 2026-09-29
 
 - 完善鸿蒙温度曲线的帮助说明，解释 `ambient`、`Battery`、`charger`、`rfboard`、`shell_back`、`shell_frame`、`shell_front` 和 `system_h` 的含义。

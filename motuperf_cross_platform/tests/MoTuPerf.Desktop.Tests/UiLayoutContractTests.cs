@@ -1061,7 +1061,9 @@ namespace MoTuPerf.Desktop.Tests
 
         private static string LoadText(params string[] relativePath)
         {
-            return File.ReadAllText(ResolvePath(relativePath));
+            return File.ReadAllText(ResolvePath(relativePath))
+                .Replace("\r\n", "\n")
+                .Replace("\r", "\n");
         }
 
         private static string ResolvePath(params string[] relativePath)
