@@ -132,17 +132,17 @@
 
             <Border Grid.Row="1" x:Name="ParameterDataPanel" Classes="dataPanel" CornerRadius="5" Padding="10" Margin="14,20,14,12">
               <StackPanel>
-              <Grid ColumnDefinitions="*,*,*" Margin="0,0,0,10">
+              <UniformGrid Rows="1" Margin="0,0,0,10">
                 <Button x:Name="LiveDataTabButton" Classes="dataTab" Click="ShowLiveDataTab">
                   <TextBlock Text="实时数据" Classes="dataTabText" />
                 </Button>
-                <Button x:Name="SelectedDataTabButton" Grid.Column="1" Classes="dataTab" Click="ShowSelectedDataTab">
+                <Button x:Name="SelectedDataTabButton" Classes="dataTab" Click="ShowSelectedDataTab">
                   <TextBlock Text="选中数据" Classes="dataTabText" />
                 </Button>
-                <Button x:Name="AnalysisDataTabButton" Grid.Column="2" Classes="dataTab activeTab" Click="ShowAnalysisDataTab">
+                <Button x:Name="AnalysisDataTabButton" Classes="dataTab activeTab" IsVisible="{Binding CanShowAnalysisData}" Click="ShowAnalysisDataTab">
                   <TextBlock Text="分析数据" Classes="dataTabText" />
                 </Button>
-              </Grid>
+              </UniformGrid>
                 <Grid>
                   <ItemsControl ItemsSource="{Binding LiveDataTiles}" IsVisible="{Binding ShowLiveData}">
                     <ItemsControl.ItemsPanel>

@@ -46,6 +46,42 @@ namespace MoTuPerf.Desktop.Tests
         }
 
         [Fact]
+        public async Task FullUiBufferBackpressuresAndCloseWakesProducerWithoutDroppingSamples()
+        {
+            CaptureUiBuffer queue = new CaptureUiBuffer();
+            long generation = queue.Begin();
+            for (int i = 0; i < CaptureUiBuffer.Capacity; i++)
+                Assert.True(queue.Enqueue(generation, new PerfSample { ElapsedSec = i }));
+
+            Task<bool> blocked = Task.Run(() => queue.Enqueue(generation, new PerfSample { ElapsedSec = CaptureUiBuffer.Capacity }));
+            await Assert.ThrowsAsync<TimeoutException>(() => blocked.WaitAsync(TimeSpan.FromMilliseconds(100)));
+
+            IReadOnlyList<PerfSample> first = queue.Drain(generation, 1);
+            Assert.Single(first);
+            await blocked.WaitAsync(TimeSpan.FromSeconds(1));
+            Assert.True(await blocked);
+
+            IReadOnlyList<PerfSample> remaining = queue.Drain(generation, int.MaxValue, close: true);
+            Assert.Equal(CaptureUiBuffer.Capacity, remaining.Count);
+            Assert.Equal(CaptureUiBuffer.Capacity, remaining[remaining.Count - 1].ElapsedSec);
+        }
+
+        [Fact]
+        public async Task ClosingFullUiBufferRejectsWaitingProducer()
+        {
+            CaptureUiBuffer queue = new CaptureUiBuffer();
+            long generation = queue.Begin();
+            for (int i = 0; i < CaptureUiBuffer.Capacity; i++)
+                Assert.True(queue.Enqueue(generation, new PerfSample { ElapsedSec = i }));
+
+            Task<bool> blocked = Task.Run(() => queue.Enqueue(generation, new PerfSample()));
+            await Assert.ThrowsAsync<TimeoutException>(() => blocked.WaitAsync(TimeSpan.FromMilliseconds(100)));
+            queue.Drain(generation, int.MaxValue, close: true);
+            await blocked.WaitAsync(TimeSpan.FromSeconds(1));
+            Assert.False(await blocked);
+        }
+
+        [Fact]
         public void SnapshotPreservesPublishedPrefixAndMergesLateSamplesStably()
         {
             List<PerfSample> raw = new List<PerfSample> { new PerfSample { ElapsedSec = 1 }, new PerfSample { ElapsedSec = 3 } };

@@ -48,6 +48,7 @@ namespace MoTuPerf.Desktop
         private bool _chartZoomEnabled;
         private bool _followLatest = true;
         private bool _parametersCollapsed;
+        private bool _analysisDataAvailable = true;
         private DataPanelTab _dataPanelTab = DataPanelTab.Analysis;
         private bool _deviceInfoVisible;
         private bool _checkForUpdates;
@@ -120,7 +121,7 @@ namespace MoTuPerf.Desktop
 
         public event PropertyChangedEventHandler PropertyChanged;
         public event Action<string> CaptureStoppedUnexpectedly;
-        public string Version { get { return "v0.41.3"; } }
+        public string Version { get { return "v0.42.0"; } }
         public IReadOnlyList<AppThemeDefinition> ThemeOptions { get { return AppThemeManager.Themes; } }
         public string CurrentThemeName { get { return AppThemeManager.Current.DisplayName; } }
         public string CurrentThemePreviewColor { get { return AppThemeManager.Current.PreviewColor; } }
@@ -173,6 +174,7 @@ namespace MoTuPerf.Desktop
         public bool ShowLiveData { get { return _dataPanelTab == DataPanelTab.Live; } }
         public bool ShowSelectedData { get { return _dataPanelTab == DataPanelTab.Selected; } }
         public bool ShowAnalysisData { get { return _dataPanelTab == DataPanelTab.Analysis; } }
+        public bool CanShowAnalysisData { get { return _analysisDataAvailable; } }
         public ObservableCollection<DataMetricTileViewModel> LiveDataTiles { get; private set; }
         public ObservableCollection<DataMetricTileViewModel> SelectedDataTiles { get; private set; }
         public ObservableCollection<AnalysisMetricRowViewModel> AnalysisDataRows { get; private set; }
@@ -690,6 +692,8 @@ namespace MoTuPerf.Desktop
                 _screenshots.Reset(_captureCancellation.Token);
                 _collector.Start(config);
                 IsCapturing = true;
+                SetAnalysisDataAvailability(false);
+                ShowLiveDataTab();
                 _sampleRefreshTimer.Start();
                 OnPropertyChanged(nameof(TargetSummary));
                 _ = MonitorDeviceConnectionAsync(config, captureToken, generation, _collector);
@@ -707,6 +711,8 @@ namespace MoTuPerf.Desktop
             _screenshots.Stop();
             CancelCaptureToken();
             IsCapturing = false;
+            SetAnalysisDataAvailability(true);
+            UpdateAnalysisData();
             ShowAnalysisDataTab();
             Status = status;
             OnPropertyChanged(nameof(TargetSummary));
@@ -741,7 +747,7 @@ namespace MoTuPerf.Desktop
             OnPropertyChanged(nameof(HasSessionData));
             TrimStaleLatestMetricValues();
             UpdateDataPanels();
-            UpdateAnalysisData();
+            if (!IsCapturing) UpdateAnalysisData();
         }
 
         private void SetMetric(string name, double value, string format)
@@ -831,7 +837,14 @@ namespace MoTuPerf.Desktop
         }
         public void ShowAnalysisDataTab()
         {
+            if (!CanShowAnalysisData) return;
             SetDataPanelTab(DataPanelTab.Analysis);
+        }
+        private void SetAnalysisDataAvailability(bool available)
+        {
+            if (_analysisDataAvailable == available) return;
+            _analysisDataAvailable = available;
+            OnPropertyChanged(nameof(CanShowAnalysisData));
         }
         private void SetDataPanelTab(DataPanelTab tab)
         {
@@ -1303,9 +1316,11 @@ namespace MoTuPerf.Desktop
             OnPropertyChanged(nameof(TimelineLabel));
             OnPropertyChanged(nameof(HasScreenshots));
             OnPropertyChanged(nameof(HasSessionData));
+            SetAnalysisDataAvailability(true);
             ShowAnalysisDataTab();
             if (addScreenshots) CompleteScreenshotProjection();
             ApplyLatestMetricValues(prepared.LatestMetricValues, prepared.SelectedSample);
+            UpdateAnalysisData();
             OnPropertyChanged(nameof(TargetSummary));
             Status = "现场数据已还原";
         }

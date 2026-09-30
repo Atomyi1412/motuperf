@@ -48,6 +48,7 @@ namespace MoTuPerf.Desktop.Tests
                 Assert.False(viewModel.ShowLiveData);
                 Assert.False(viewModel.ShowSelectedData);
                 Assert.True(viewModel.ShowAnalysisData);
+                Assert.True(viewModel.CanShowAnalysisData);
                 Assert.NotEmpty(viewModel.AnalysisDataRows);
                 Assert.All(viewModel.AnalysisDataRows, delegate(AnalysisMetricRowViewModel row)
                 {

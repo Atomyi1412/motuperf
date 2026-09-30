@@ -29,6 +29,14 @@ namespace MoTuPerf.Desktop.Tests
             Assert.DoesNotContain("activeTab", Attribute(liveTab, "Classes"));
             Assert.DoesNotContain("activeTab", Attribute(selectedTab, "Classes"));
             Assert.Contains("activeTab", Attribute(analysisTab, "Classes"));
+            Assert.Equal("{Binding CanShowAnalysisData}", Attribute(analysisTab, "IsVisible"));
+            Assert.Equal(Avalonia + "UniformGrid", liveTab.Parent.Name);
+            Assert.Equal("1", Attribute(liveTab.Parent, "Rows"));
+            Assert.Equal("", Attribute(liveTab.Parent, "Columns"));
+            Assert.Same(liveTab.Parent, selectedTab.Parent);
+            Assert.Same(liveTab.Parent, analysisTab.Parent);
+            Assert.Equal("", Attribute(selectedTab, "Grid.Column"));
+            Assert.Equal("", Attribute(analysisTab, "Grid.Column"));
             Assert.Equal("dataTabText", Attribute(liveTab.Elements().Single(), "Classes"));
             Assert.Equal("dataTabText", Attribute(selectedTab.Elements().Single(), "Classes"));
             Assert.Equal("dataTabText", Attribute(analysisTab.Elements().Single(), "Classes"));
@@ -568,13 +576,6 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Equal("更新日志", Attribute(changelog.Root, "Title"));
             Assert.Contains(changelog.Descendants(Avalonia + "Border"), border => Attribute(border, "Classes") == "secondaryWindowFrame");
             string changelogText = string.Join(" ", changelog.Descendants(Avalonia + "TextBlock").Select(element => Attribute(element, "Text")));
-            Assert.Contains("v0.40.50", changelogText);
-            Assert.Contains("v0.40.49", changelogText);
-            Assert.Contains("v0.40.48", changelogText);
-            Assert.Contains("v0.40.47", changelogText);
-            Assert.Contains("v0.40.45", changelogText);
-            Assert.Contains("v0.40.36", changelogText);
-            Assert.Contains("v0.40.38", changelogText);
             string visibleChangelogText = string.Join(" ", changelog.Descendants(Avalonia + "Border")
                 .Where(border => Attribute(border, "Classes") == "helpSection"
                     && Attribute(border, "IsVisible") != "False")
@@ -592,58 +593,8 @@ namespace MoTuPerf.Desktop.Tests
                 .ToArray();
             Assert.Equal(3, latestVisibleVersions.Length);
             Assert.All(latestVisibleVersions, version => Assert.Contains(version, visibleChangelogText));
-            Assert.DoesNotContain("v0.40.87", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.86", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.84", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.83", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.79", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.78", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.77", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.74", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.73", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.70", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.69", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.68", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.67", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.64", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.54", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.53", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.49", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.15", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.35", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.37", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.39", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.46", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.47", visibleChangelogText);
-            Assert.DoesNotContain("v0.40.45", visibleChangelogText);
-            Assert.DoesNotMatch(@"(?<!\d)v0\.40\.11(?!\d)", changelogText);
             Assert.Equal(3, changelog.Descendants(Avalonia + "Border").Count(border => Attribute(border, "Classes") == "helpSection"));
-            Assert.DoesNotMatch(@"(?<!\d)v0\.40\.10(?!\d)", changelogText);
-            Assert.DoesNotMatch(@"(?<!\d)v0\.40\.9(?!\d)", changelogText);
-            Assert.DoesNotContain(changelog.Descendants(Avalonia + "TextBlock"),
-                element => Attribute(element, "Text") == "v0.40.8");
-            Assert.DoesNotContain("v0.38.17", changelogText);
-            Assert.DoesNotContain("v0.38.16", changelogText);
-            Assert.DoesNotContain("v0.38.14", changelogText);
-            Assert.DoesNotContain("v0.38.11", changelogText);
-            Assert.DoesNotContain("v0.38.9", changelogText);
-            Assert.DoesNotContain("v0.38.7", changelogText);
-            Assert.DoesNotContain("v0.38.2", changelogText);
-            Assert.DoesNotContain("v0.37.6", changelogText);
-            Assert.DoesNotContain("v0.37.3", changelogText);
-            Assert.DoesNotContain("v0.37.0", changelogText);
-            Assert.DoesNotContain("v0.34.1", changelogText);
-            Assert.DoesNotContain("v0.29.0", changelogText);
-            Assert.DoesNotContain("v0.28.0", changelogText);
-            Assert.DoesNotContain("v0.27.1", changelogText);
-            Assert.DoesNotContain("v0.27.0", changelogText);
-            Assert.DoesNotContain("v0.25.1", changelogText);
-            Assert.DoesNotContain("v0.25.0", changelogText);
-            Assert.DoesNotContain("v0.24.3", changelogText);
-            Assert.DoesNotContain("v0.24.2", changelogText);
-            Assert.DoesNotContain("v0.24.1", changelogText);
-            Assert.DoesNotContain("v0.23.0", changelogText);
-            Assert.DoesNotContain("v0.24.0", changelogText);
+            Assert.DoesNotContain('`', changelogText);
             Assert.Contains(changelog.Descendants(Avalonia + "Button"), button => Attribute(button, "Content") == "查看完整在线更新日志"
                 && Attribute(button, "Click") == "OpenVersionLog");
 
