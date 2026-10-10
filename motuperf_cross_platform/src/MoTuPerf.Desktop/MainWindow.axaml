@@ -28,7 +28,7 @@
                    TextTrimming="CharacterEllipsis" />
         <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
           <Button x:Name="ThemeSelectorButton" Classes="themeSelectorButton" ToolTip.Tip="{Binding ThemeSelectorToolTip}">
-            <TextBlock Text="&#xE790;" Classes="themeSelectorIcon" />
+            <PathIcon Data="{StaticResource IconPalette}" Classes="themeSelectorIcon" />
             <Button.Flyout>
               <Flyout Placement="BottomEdgeAlignedRight" ShowMode="TransientWithDismissOnPointerMoveAway"
                       FlyoutPresenterClasses="themeFlyoutPresenter">
@@ -51,7 +51,7 @@
             </Button.Flyout>
           </Button>
           <Button x:Name="SettingsButton" Classes="themeSelectorButton" ToolTip.Tip="软件设置" IsEnabled="{Binding CanChangeDevice}">
-            <TextBlock Text="&#xE713;" Classes="themeSelectorIcon" />
+            <PathIcon Data="{StaticResource IconSettings}" Classes="themeSelectorIcon" />
             <Button.Flyout>
               <Flyout Placement="BottomEdgeAlignedRight" ShowMode="TransientWithDismissOnPointerMoveAway"
                       FlyoutPresenterClasses="themeFlyoutPresenter">
@@ -60,19 +60,19 @@
                     <CheckBox Content="启动时检查更新" Classes="settingsCheckBox" IsChecked="{Binding CheckForUpdates}" Margin="12,8,12,4" />
                     <Button Classes="themeOptionButton" Click="CheckForUpdatesManually">
                       <Grid ColumnDefinitions="22,*" ColumnSpacing="10">
-                        <TextBlock Text="&#xE895;" Classes="settingsMenuIcon" />
+                        <PathIcon Data="{StaticResource IconHistory}" Classes="settingsMenuIcon" />
                         <TextBlock Grid.Column="1" Text="检查更新" Classes="themeOptionText" />
                       </Grid>
                     </Button>
                     <Button Classes="themeOptionButton" Click="ShowDataCleanup">
                       <Grid ColumnDefinitions="22,*" ColumnSpacing="10">
-                        <TextBlock Text="&#xE74D;" Classes="settingsMenuIcon" />
+                        <PathIcon Data="{StaticResource IconTrash}" Classes="settingsMenuIcon" />
                         <TextBlock Grid.Column="1" Text="清理数据" Classes="themeOptionText" />
                       </Grid>
                     </Button>
                     <Button Classes="themeOptionButton" Click="ShowDataDirectorySettings">
                       <Grid ColumnDefinitions="22,*" ColumnSpacing="10">
-                        <TextBlock Text="&#xE713;" Classes="settingsMenuIcon" />
+                        <PathIcon Data="{StaticResource IconSettings}" Classes="settingsMenuIcon" />
                         <TextBlock Grid.Column="1" Text="设置目录" Classes="themeOptionText" />
                       </Grid>
                     </Button>
@@ -91,11 +91,11 @@
     <Border Grid.Row="1" Background="{DynamicResource Theme.ToolbarBackground}" BorderBrush="{DynamicResource Theme.Border}" BorderThickness="0,0,0,1">
       <Grid ColumnDefinitions="Auto,*,250">
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0">
-          <Button Classes="toolbarButton" Click="OpenSession" IsEnabled="{Binding CanUseFileActions}" ToolTip.Tip="打开现场文件"><StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="&#xE838;" Classes="toolbarIcon" /><TextBlock Text="打开" Classes="toolbarText" /></StackPanel></Button>
-          <Button Classes="toolbarButton" Click="SaveSession" IsEnabled="{Binding CanUseFileActions}" ToolTip.Tip="保存现场文件"><StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="&#xE74E;" Classes="toolbarIcon" /><TextBlock Text="保存" Classes="toolbarText" /></StackPanel></Button>
-          <Button Classes="toolbarButton" Click="ExportCsv" IsEnabled="{Binding CanUseFileActions}" ToolTip.Tip="导出 CSV"><StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="&#xEDE4;" Classes="toolbarIcon" /><TextBlock Text="导出" Classes="toolbarText" /></StackPanel></Button>
-          <Button Classes="toolbarButton" Click="ShowHelp" ToolTip.Tip="查看使用帮助"><StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="&#xE897;" Classes="toolbarIcon" /><TextBlock Text="帮助" Classes="toolbarText" /></StackPanel></Button>
-          <Button Classes="toolbarButton" Click="ShowChangelog" ToolTip.Tip="查看更新日志"><StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="&#xE8A5;" Classes="toolbarIcon" /><TextBlock Text="更新日志" Classes="toolbarText" /></StackPanel></Button>
+          <Button Classes="toolbarButton" Click="OpenSession" IsEnabled="{Binding CanUseFileActions}" ToolTip.Tip="打开现场文件"><StackPanel Orientation="Horizontal" Spacing="10"><PathIcon Data="{StaticResource IconFolder}" Classes="toolbarIcon" /><TextBlock Text="打开" Classes="toolbarText" /></StackPanel></Button>
+          <Button Classes="toolbarButton" Click="SaveSession" IsEnabled="{Binding CanUseFileActions}" ToolTip.Tip="保存现场文件"><StackPanel Orientation="Horizontal" Spacing="10"><PathIcon Data="{StaticResource IconSave}" Classes="toolbarIcon" /><TextBlock Text="保存" Classes="toolbarText" /></StackPanel></Button>
+          <Button Classes="toolbarButton" Click="ExportCsv" IsEnabled="{Binding CanUseFileActions}" ToolTip.Tip="导出 CSV"><StackPanel Orientation="Horizontal" Spacing="10"><PathIcon Data="{StaticResource IconExport}" Classes="toolbarIcon" /><TextBlock Text="导出" Classes="toolbarText" /></StackPanel></Button>
+          <Button Classes="toolbarButton" Click="ShowHelp" ToolTip.Tip="查看使用帮助"><StackPanel Orientation="Horizontal" Spacing="10"><PathIcon Data="{StaticResource IconHelp}" Classes="toolbarIcon" /><TextBlock Text="帮助" Classes="toolbarText" /></StackPanel></Button>
+          <Button Classes="toolbarButton" Click="ShowChangelog" ToolTip.Tip="查看更新日志"><StackPanel Orientation="Horizontal" Spacing="10"><PathIcon Data="{StaticResource IconHistory}" Classes="toolbarIcon" /><TextBlock Text="更新日志" Classes="toolbarText" /></StackPanel></Button>
         </StackPanel>
         <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
           <Button Classes="captureToolbarButton" Click="ToggleCapture" IsEnabled="{Binding CanToggleCapture}">
@@ -122,7 +122,7 @@
               <Border Height="2" Background="{DynamicResource Theme.Accent}" VerticalAlignment="Top" HorizontalAlignment="Left" Width="128" />
               <Border Classes="parameterHeaderDivider" Height="1" Background="{DynamicResource Theme.Border}" VerticalAlignment="Bottom" />
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
-                <TextBlock Text="&#xE9D2;" Classes="symbol" Margin="0,0,10,0" />
+                <PathIcon Data="{StaticResource IconDevice}" Classes="symbol" Margin="0,0,10,0" />
                 <TextBlock Text="参数面板" Classes="sectionTitle" />
               </StackPanel>
               <Button Classes="panelToggleButton" Content="&#x226A;" Click="CollapseParameters"
@@ -236,7 +236,7 @@
           <Grid>
             <Border Height="2" Background="{DynamicResource Theme.Accent}" VerticalAlignment="Top" HorizontalAlignment="Left" Width="128" />
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0">
-              <TextBlock Text="&#xE9D9;" Classes="symbol" Margin="0,0,10,0" />
+              <PathIcon Data="{StaticResource IconChart}" Classes="symbol" Margin="0,0,10,0" />
               <TextBlock Text="数据显示" Classes="sectionTitle" />
             </StackPanel>
           </Grid>

@@ -16,7 +16,7 @@
               PointerPressed="DialogTitlePointerPressed">
         <Grid ColumnDefinitions="*,46">
           <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="24,0,0,0">
-            <TextBlock Text="&#xE897;" Foreground="{DynamicResource Theme.Accent}" FontSize="18" FontFamily="Segoe MDL2 Assets, sans-serif" Margin="0,0,10,0" />
+            <PathIcon Data="{StaticResource IconHelp}" Foreground="{DynamicResource Theme.Accent}" Width="18" Height="18" Margin="0,0,10,0" />
             <TextBlock Text="使用帮助" Classes="sectionTitle" />
           </StackPanel>
           <Button Grid.Column="1" Classes="windowButton closeButton" Content="&#x00D7;" Click="CloseWindow" ToolTip.Tip="关闭" />

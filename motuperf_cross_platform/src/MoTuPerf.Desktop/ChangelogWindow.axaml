@@ -16,7 +16,7 @@
       <Border Grid.Row="0" Classes="dialogTitleBar" PointerPressed="DialogTitlePointerPressed">
         <Grid ColumnDefinitions="*,46">
           <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="24,0,0,0">
-            <TextBlock Text="&#xE8A5;" Foreground="{DynamicResource Theme.Accent}" FontSize="18" FontFamily="Segoe MDL2 Assets, sans-serif" Margin="0,0,10,0" />
+            <PathIcon Data="{StaticResource IconHistory}" Foreground="{DynamicResource Theme.Accent}" Width="18" Height="18" Margin="0,0,10,0" />
             <TextBlock Text="更新日志" Classes="sectionTitle" />
           </StackPanel>
           <Button Grid.Column="1" Classes="windowButton closeButton" Content="&#x00D7;" Click="CloseWindow" ToolTip.Tip="关闭" />
@@ -24,6 +24,13 @@
       </Border>
       <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <StackPanel Margin="22,10,18,12" Spacing="9">
+          <Border Classes="helpSection">
+            <StackPanel>
+              <TextBlock Text="v0.42.1" Classes="helpTitle" />
+              <TextBlock Text="2026-10-09" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复 macOS Apple Silicon 上主界面、设置菜单、工具栏和二级窗口图标显示问号的问题，改用 Avalonia 跨平台路径图标，移除对 Windows 私有图标字体的依赖。&#xA;• 增加跨平台图标契约测试，防止后续重新引入 Windows 私有字形或私有区字符。" />
+            </StackPanel>
+          </Border>
           <Border Classes="helpSection">
             <StackPanel>
               <TextBlock Text="v0.42.0" Classes="helpTitle" />
@@ -36,13 +43,6 @@
               <TextBlock Text="v0.41.3" Classes="helpTitle" />
               <TextBlock Text="2026-09-29" Classes="dialogHint" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复 Windows GitHub Actions 与本地换行格式不一致导致桌面 UI 契约测试误报失败的问题，统一源码读取的换行处理。&#xA;• 发布版本提升至 v0.41.3，重新触发 Windows 安装包和 macOS Apple Silicon DMG 的自动构建。" />
-            </StackPanel>
-          </Border>
-          <Border Classes="helpSection">
-            <StackPanel>
-              <TextBlock Text="v0.41.2" Classes="helpTitle" />
-              <TextBlock Text="2026-09-29" Classes="dialogHint" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 完善鸿蒙温度曲线的帮助说明，解释 ambient、Battery、charger、rfboard、shell_back、shell_frame、shell_front 和 system_h 的含义。&#xA;• 明确这些数据是设备级传感器温度，单位为 °C，不是所选进程温度，也不等同于 CPU/GPU 芯片温度；同时说明厂商差异、缺失数据和跨设备对比边界。&#xA;• 修复无鸿蒙真机的 CI 环境执行平台测试时，真机探针被误判为失败的问题；设置设备序列号后仍会执行完整真机验证。" />
             </StackPanel>
           </Border>
         </StackPanel>

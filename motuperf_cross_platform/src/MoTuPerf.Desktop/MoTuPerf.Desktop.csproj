@@ -8,7 +8,7 @@
     <AvaloniaNameGeneratorIsEnabled>false</AvaloniaNameGeneratorIsEnabled>
     <AssemblyName>MoTuPerf.CrossPlatform</AssemblyName>
     <RootNamespace>MoTuPerf.Desktop</RootNamespace>
-    <Version>0.42.0</Version>
+    <Version>0.42.1</Version>
     <ApplicationIcon Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(MSBuildProjectDirectory)\..\..\..\csharp_perf_monitor\assets\motu-icon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
@@ -22,6 +22,7 @@
     <AvaloniaResource Include="..\..\..\csharp_perf_monitor\assets\motu-icon.png" Link="Assets\motu-icon.png" />
     <AvaloniaResource Include="Assets\motu-logo-titlebar.png" />
     <AvaloniaResource Include="Assets\retro-sage-texture.png" />
+    <Content Include="Assets\fluent-icons-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\..\..\csharp_perf_monitor\tools\*.py" Link="tools\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>

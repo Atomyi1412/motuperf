@@ -612,6 +612,31 @@ namespace MoTuPerf.Desktop.Tests
         }
 
         [Fact]
+        public void IconsDoNotDependOnWindowsPrivateFontGlyphs()
+        {
+            string sourceRoot = Path.GetDirectoryName(ResolvePath("src", "MoTuPerf.Desktop", "MoTuPerf.Desktop.csproj"));
+            string[] xamlFiles = Directory.GetFiles(
+                sourceRoot,
+                "*.axaml",
+                SearchOption.TopDirectoryOnly);
+            foreach (string path in xamlFiles)
+            {
+                XDocument document = XDocument.Load(path);
+                foreach (XElement element in document.Descendants())
+                {
+                    foreach (XAttribute attribute in element.Attributes())
+                    {
+                        if (attribute.Name.LocalName == "FontFamily")
+                            Assert.DoesNotContain("Segoe MDL2 Assets", attribute.Value);
+                        Assert.DoesNotMatch("[\\uE000-\\uF8FF]", attribute.Value);
+                    }
+                    if (element.Name.LocalName == "Setter" && Attribute(element, "Property") == "FontFamily")
+                        Assert.DoesNotContain("Segoe MDL2 Assets", Attribute(element, "Value"));
+                }
+            }
+        }
+
+        [Fact]
         public void ScreenshotViewerUsesDisplayedImageOrientationSizing()
         {
             string viewerCode = LoadText("src", "MoTuPerf.Desktop", "ScreenshotViewerWindow.axaml.cs");
@@ -881,8 +906,8 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Contains("themeSelectorButton", Attribute(selector, "Classes"));
             Assert.Equal("{Binding ThemeSelectorToolTip}", Attribute(selector, "ToolTip.Tip"));
             Assert.True(string.IsNullOrWhiteSpace(Attribute(selector, "Click")));
-            Assert.Contains(selector.Descendants(Avalonia + "TextBlock"),
-                element => Attribute(element, "Text") == "\uE790"
+            Assert.Contains(selector.Descendants(Avalonia + "PathIcon"),
+                element => Attribute(element, "Data") == "{StaticResource IconPalette}"
                     && Attribute(element, "Classes").Contains("themeSelectorIcon", StringComparison.Ordinal));
             Assert.DoesNotContain(selector.Descendants(),
                 element => Attribute(element, "Text") == "{Binding CurrentThemeName}"

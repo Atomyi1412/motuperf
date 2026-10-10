@@ -16,7 +16,7 @@
       <Border Grid.Row="0" Classes="dialogTitleBar" PointerPressed="DialogTitlePointerPressed">
         <Grid ColumnDefinitions="*,46">
           <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="24,0,0,0">
-            <TextBlock Text="&#xE946;" Classes="symbol" Foreground="{DynamicResource Theme.Accent}" FontSize="17" Margin="0,0,10,0" />
+            <PathIcon Data="{StaticResource IconInfo}" Classes="symbol" Foreground="{DynamicResource Theme.Accent}" Width="17" Height="17" Margin="0,0,10,0" />
             <TextBlock Text="鸿蒙 HDC 获取与配置" Classes="sectionTitle" />
           </StackPanel>
           <Button Grid.Column="1" Classes="windowButton closeButton" Content="&#x00D7;" Click="CloseWindow" ToolTip.Tip="关闭" />

@@ -79,7 +79,7 @@
               PointerPressed="DialogTitlePointerPressed">
         <Grid ColumnDefinitions="*,50">
           <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="26,0,0,0">
-            <TextBlock Text="&#xE8EA;" Classes="symbol" Foreground="{DynamicResource Theme.TextPrimary}" FontSize="17" Margin="0,0,10,0" />
+            <PathIcon Data="{StaticResource IconDevice}" Classes="symbol" Foreground="{DynamicResource Theme.TextPrimary}" Width="17" Height="17" Margin="0,0,10,0" />
             <TextBlock Text="选择设备及应用" Classes="sectionTitle" />
           </StackPanel>
           <Button Grid.Column="1" Classes="dialogCloseButton" Content="&#x00D7;" Click="Cancel"
