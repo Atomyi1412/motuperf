@@ -48,6 +48,12 @@ def _load_legacy_ios_device_runtime():
     global InstrumentsBase, InstrumentsService, InstrumentRPCParseError
     global kdbg_extract_all, kperf_data, bpylist2
 
+    # Tests and supported embedders may inject a compatible InstrumentsBase.
+    # Honor that boundary before importing the optional ios_device dependency;
+    # a broken optional installation must not mask the injected runtime.
+    if InstrumentsBase is not None:
+        return
+
     from ios_device.cli.base import InstrumentsBase as imported_instruments_base
     from ios_device.util import bpylist2 as imported_bpylist2
     from ios_device.util.exceptions import InstrumentRPCParseError as imported_parse_error

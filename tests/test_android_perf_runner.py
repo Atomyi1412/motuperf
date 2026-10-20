@@ -13,6 +13,29 @@ import android_perf_runner as runner  # noqa: E402
 
 
 class AndroidPerfRunnerTests(unittest.TestCase):
+    def test_only_exact_ordered_android_frames_export_raw_intervals(self) -> None:
+        frame_metrics = runner.ordered_frame_metrics([20.0, 10.0, 30.0])
+        sample = runner.sample_from_ordered_metrics(frame_metrics, "game", exact_display=True, target_verified=True)
+        payload = runner.frame_sample_payload(sample, "adb-surfaceflinger-latency", "surface", "actual-present")
+        self.assertEqual((20.0, 10.0, 30.0), payload["frame_intervals_ms"])
+        degraded = runner.sample_from_ordered_metrics(frame_metrics, "game", exact_display=True, integrity_lost=True)
+        self.assertNotIn("frame_intervals_ms", runner.frame_sample_payload(degraded, "adb", "surface", "actual-present"))
+        approximate = runner.sample_from_ordered_metrics(frame_metrics, "game", exact_display=False)
+        self.assertNotIn("frame_intervals_ms", runner.frame_sample_payload(approximate, "adb", "app", "gfxinfo"))
+
+    def test_frame_source_reset_is_exported_as_a_quality_boundary(self) -> None:
+        sample = runner.TimestatsSample(
+            fps=60.0,
+            target="game",
+            source_gap_sec=8.5,
+            source_reset_reason="poll_gap",
+        )
+
+        payload = runner.frame_sample_payload(sample, "adb-gfxinfo-framestats", "app", "display-present")
+
+        self.assertEqual(payload["source_gap_sec"], 8.5)
+        self.assertEqual(payload["source_reset_reason"], "poll_gap")
+
     def test_adb_uses_the_explicit_packaged_executable(self) -> None:
         observed: list[list[str]] = []
         original_run = runner.subprocess.run
@@ -2408,6 +2431,7 @@ present2present histogram is as below:
             4,
             ((0, 1_000), (1, 1_000), (2, 1_000), (3, 1_000)),
             (0, 1, 2, 3),
+            ((0, 1_000), (1, 1_000), (2, 1_000), (3, 1_000)),
         )
         current = runner.CpuSnapshot(
             10_400,
@@ -2415,6 +2439,7 @@ present2present histogram is as below:
             4,
             ((0, 1_100), (1, 1_000), (2, 1_000), (3, 1_000)),
             (0, 1, 2, 3),
+            ((0, 1_100), (1, 1_100), (2, 1_100), (3, 1_100)),
         )
 
         self.assertAlmostEqual(runner.cpu_percent_from_snapshots(previous, current) or 0, 100.0)
@@ -2425,10 +2450,26 @@ present2present histogram is as below:
         self.assertAlmostEqual(core_values[0], 100.0)
         self.assertEqual(core_values[1:], [0.0, 0.0, 0.0])
 
+    def test_android_cpu_core_values_use_each_core_total_delta(self) -> None:
+        previous = runner.CpuSnapshot(
+            10_000, 1_000, 2,
+            ((0, 1_000), (1, 2_000)), (0, 1),
+            ((0, 1_000), (1, 2_000)),
+        )
+        current = runner.CpuSnapshot(
+            10_200, 1_100, 2,
+            ((0, 1_050), (1, 2_100)), (0, 1),
+            ((0, 1_100), (1, 2_200)),
+        )
+
+        values = runner.core_percent_from_snapshots(previous, current)
+
+        self.assertEqual(values, [50.0, 50.0])
+
     def test_android_cpu_core_values_are_unavailable_when_core_set_changes_or_rolls_back(self) -> None:
-        previous = runner.CpuSnapshot(10_000, 1_000, 2, ((0, 1_000), (1, 1_000)), (0, 1))
-        changed = runner.CpuSnapshot(10_200, 1_100, 2, ((0, 1_100), (2, 1_000)), (0, 2))
-        rollback = runner.CpuSnapshot(10_200, 1_100, 2, ((0, 900), (1, 1_000)), (0, 1))
+        previous = runner.CpuSnapshot(10_000, 1_000, 2, ((0, 1_000), (1, 1_000)), (0, 1), ((0, 1_000), (1, 1_000)))
+        changed = runner.CpuSnapshot(10_200, 1_100, 2, ((0, 1_100), (2, 1_000)), (0, 2), ((0, 1_100), (2, 1_000)))
+        rollback = runner.CpuSnapshot(10_200, 1_100, 2, ((0, 900), (1, 1_000)), (0, 1), ((0, 900), (1, 1_000)))
         self.assertIsNone(runner.core_percent_from_snapshots(previous, changed))
         self.assertIsNone(runner.core_percent_from_snapshots(previous, rollback))
 
@@ -2449,6 +2490,7 @@ present2present histogram is as below:
         self.assertEqual(snapshot.total_jiffies, 344)
         self.assertEqual(snapshot.process_jiffies, 15)
         self.assertEqual(snapshot.core_jiffies, ((0, 6),))
+        self.assertEqual(snapshot.core_total_jiffies, ((0, 8),))
 
     def test_android_cpu_reset_or_nonadvancing_clock_is_unavailable(self) -> None:
         previous = runner.CpuSnapshot(total_jiffies=10_000, process_jiffies=1_000, online_cpus=8)

@@ -84,9 +84,9 @@
               <TextBlock Classes="helpItemTitle" Text="1. FPS 与 FrameTime" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="FPS 来自设备实际提供的显示帧；高刷新率设备可能超过 60。iOS 通常是屏幕级数据，不按所选 PID 过滤；Android 取决于可用帧源；鸿蒙要求唯一确认所选 PID 的 Surface。FrameTime 是相邻显示帧的实际间隔，曲线使用当前采样窗口的最大值，CSV 还提供 Mean 和 P95。" />
               <TextBlock Classes="helpItemTitle" Text="2. Jank 与 BigJank" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="Jank 和 BigJank 基于采集器获得的真实显示帧事件，分别表示普通和严重卡顿。没有有效帧事件时保持空缺，不用 FPS 波动推算，不平滑、不插值。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="Jank：帧间隔同时超过前 3 帧平均值的 2 倍和 83.33ms；BigJank：在此基础上超过 125ms。Jank 是总次数，包含 BigJank；普通 Jank = Jank - BigJank，CSV 会分别导出，不能把 Jank 和 BigJank 相加。没有可信有序帧时保持缺测，不从 FPS 波动或无序直方图推算。" />
               <TextBlock Classes="helpItemTitle" Text="3. CPU 与内存" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="Process CPU Raw 是所选 PID 的原始 CPU 使用率，多核设备可能超过 100%；Normalized 是按设备总 CPU 能力归一化的视图；Core 曲线是各 CPU 核使用率。Process Memory 是所选 PID 的进程内存，优先使用 PSS，否则明确标明 RSS。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="Process CPU Raw 是所选 PID 的原始 CPU 使用率，占满一核约为 100%，多核可能超过 100%；Normalized 是按设备总 CPU 能力归一化的视图；Core 是每个 CPU 核心使用自身工作时间/总时间增量计算的设备逐核负载，不是所选进程的逐核 CPU。Android/鸿蒙内存优先 PSS，iOS 优先 Physical Footprint；RSS 仅为明确标注的备用口径，不与 PSS/Footprint 混合统计。" />
               <TextBlock Classes="helpItemTitle" Text="4. 温度与系统状态" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="Device Temperature 是设备传感器温度，属于设备级数据。Thermal State（iOS）为 0 正常、1 升温、2 严重、3 临界；Thermal Status（Android）为 0 正常、1 轻微、2 中度、3 严重、4 临界、5 紧急、6 关机。鸿蒙系统热状态暂未接入。" />
               <TextBlock Classes="helpItemTitle" Text="5. 鸿蒙温度传感器" />
@@ -95,14 +95,16 @@
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="shell_back：机身背部区域；shell_frame：机身中框/边框区域；shell_front：机身正面/屏幕侧区域；system_h：系统级/主板附近传感器。" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="传感器名称和具体物理位置由设备厂商定义，不同型号可能缺失、改名或复用。适合观察同一设备的温度趋势，不建议跨设备直接比较绝对值。" />
               <TextBlock Classes="helpItemTitle" Text="6. 汇总与缺测" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="CSV 默认按秒汇总：FrameTime Mean 按各窗口的帧数加权；WindowP95Max 是这一秒各采样窗口 P95 的最大值，不是整秒 P95。原始明细保留每个窗口的 Mean、P95 和 Max；曲线与原始采样不受汇总影响。平台不提供某项数据时显示 --，不补零、不猜测。数据的 Source、Scope 和 Updated 字段用于确认来源与范围。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="CSV 默认按秒汇总：FrameTime Mean 按帧数加权；WindowP95Max 是这一秒各窗口 P95 的最大值，不是整秒 P95。Stat 的 FrameTime P95 仅在完整逐帧记录存在时计算，表示至少 95% 的帧间隔不超过该值。原始明细新增逐帧间隔列；现场文件保留原始帧，旧文件无法恢复的最小值/P95 显示 --。" />
+              <TextBlock Classes="helpItemTitle" Text="7. 分析数据与缩放范围" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="FPS 分析与 CSV Stat 使用同一来源筛选和时长加权；CPU、内存、温度等仅统计真实更新。FrameTime 分析为逐帧最大、最小、平均间隔，曲线仍为窗口最大值。缩放后统计结束时刻落入区间的完整窗口，不拆分边界帧；还原后统计全程。缩放不改变采集、保存或全程 CSV。" />
             </StackPanel>
           </Border>
           <Border Classes="helpSection">
             <StackPanel Spacing="2">
               <TextBlock Text="时间线与截图" Classes="helpTitle" />
               <TextBlock Classes="helpItemTitle" Text="1. 定位数据" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="采集开始后横轴从 0 秒计时；未手动定位时曲线跟随最新数据。点击或拖动任意曲线可移动时间游标，并在全部曲线和截图区域同步定位；手动选中历史时刻后不会强制跳回最新。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="采集开始后横轴从 0 秒计时；未手动定位时曲线跟随最新数据。点击或拖动任意曲线可移动时间游标，并在全部曲线和截图区域同步定位；手动选中历史时刻后不会强制跳回最新。Android 帧源发生轮询超时、历史覆盖或 Surface 变化时会重建时间线，日志和 CSV 会记录原因，不跨断点计算 FrameTime/Jank。" />
               <TextBlock Classes="helpItemTitle" Text="2. 缩放曲线" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="勾选“缩放曲线”后，可在曲线上按住鼠标左键框选时间范围，最小查看窗口为 60 秒；点击还原按钮或取消勾选恢复全程视图。缩放只影响查看，不改变正在采集的原始数据、统计结果、保存文件或导出文件。" />
               <TextBlock Classes="helpItemTitle" Text="3. 查看截图" />

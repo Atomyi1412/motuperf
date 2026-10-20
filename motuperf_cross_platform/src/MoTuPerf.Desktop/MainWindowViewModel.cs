@@ -121,7 +121,7 @@ namespace MoTuPerf.Desktop
 
         public event PropertyChangedEventHandler PropertyChanged;
         public event Action<string> CaptureStoppedUnexpectedly;
-        public string Version { get { return "v0.42.1"; } }
+        public string Version { get { return "v0.44.0"; } }
         public IReadOnlyList<AppThemeDefinition> ThemeOptions { get { return AppThemeManager.Themes; } }
         public string CurrentThemeName { get { return AppThemeManager.Current.DisplayName; } }
         public string CurrentThemePreviewColor { get { return AppThemeManager.Current.PreviewColor; } }
@@ -948,18 +948,25 @@ namespace MoTuPerf.Desktop
                 .ToList();
 
             List<AnalysisMetricRowViewModel> rows = new List<AnalysisMetricRowViewModel>();
-            AddAnalysisRow(rows, "FPS", "帧/s", visible.Where(delegate(PerfSample sample) { return sample.HasFps; }).Select(delegate(PerfSample sample) { return sample.Fps; }));
-            AddAnalysisRow(rows, "FrameTime", "ms", visible.Where(FrameTimeChartProjection.IsChartSample).Select(delegate(PerfSample sample) { return sample.FrameTimeMaxMs; }));
-            AddAnalysisRow(rows, "Jank", "次", visible.Where(delegate(PerfSample sample) { return sample.HasJank; }).Select(delegate(PerfSample sample) { return sample.Jank; }));
-            AddAnalysisRow(rows, "BigJank", "次", visible.Where(delegate(PerfSample sample) { return sample.HasJank; }).Select(delegate(PerfSample sample) { return sample.BigJank; }));
+            FpsStatistics fps = MetricStatistics.ComputeFps(visible);
+            rows.Add(new AnalysisMetricRowViewModel("FPS", "帧/s", fps.HasData ? fps.Maximum : (double?)null,
+                fps.HasData ? fps.Minimum : (double?)null, fps.HasData ? fps.Average : (double?)null,
+                "与 CSV Stat 同口径：优先可信有序帧，按真实观测时长加权；排除重复携带值及被恢复长帧覆盖的空闲窗口。"));
+            FrameTimeStatistics frames = MetricStatistics.ComputeFrameTime(visible, includePercentile: false);
+            rows.Add(new AnalysisMetricRowViewModel("FrameTime", "ms", frames.MaximumMs, frames.MinimumMs, frames.AverageMs,
+                frames.HasCompleteRawFrames ? "逐帧间隔的最大、最小和平均值；曲线仍显示窗口最大值。"
+                    : frames.SourceTier == "fallback_summaries" ? "当前仅有备用帧源的窗口汇总；按已知帧数加权计算平均值，最小值未知。请结合来源字段判断可比性。"
+                    : "旧数据按帧数加权计算平均帧间隔；没有完整逐帧记录时，最小值保持 --。曲线仍显示窗口最大值。"));
+            AddAnalysisRow(rows, "Jank", "次/窗", visible.Where(sample => sample.HasJank && sample.FpsUpdated && MetricStatistics.IsReliableJankSample(sample)).Select(sample => sample.Jank));
+            AddAnalysisRow(rows, "BigJank", "次/窗", visible.Where(sample => sample.HasJank && sample.FpsUpdated && MetricStatistics.IsReliableJankSample(sample)).Select(sample => sample.BigJank));
 
             string preferredMemory = MetricStatistics.PreferredMemoryMetric(visible);
             AddAnalysisRow(rows, "Process Memory", "MB", visible.Where(delegate(PerfSample sample)
             {
-                return sample.HasMemory && sample.MemoryMb > 0 && MemoryMetricMatches(sample.MemoryMetric, preferredMemory);
+                return sample.HasMemory && sample.MemoryUpdated && sample.MemoryMb > 0 && MemoryMetricMatches(sample.MemoryMetric, preferredMemory);
             }).Select(delegate(PerfSample sample) { return sample.MemoryMb; }));
-            AddAnalysisRow(rows, "CPU Raw", "%", visible.Where(delegate(PerfSample sample) { return sample.HasCpu; }).Select(delegate(PerfSample sample) { return sample.CpuPercent; }));
-            AddAnalysisRow(rows, "CPU Normalized", "%", visible.Where(delegate(PerfSample sample) { return sample.HasCpuNormalized; }).Select(delegate(PerfSample sample) { return sample.CpuNormalizedPercent; }));
+            AddAnalysisRow(rows, "CPU Raw", "%", visible.Where(delegate(PerfSample sample) { return sample.HasCpu && sample.CpuUpdated; }).Select(delegate(PerfSample sample) { return sample.CpuPercent; }));
+            AddAnalysisRow(rows, "CPU Normalized", "%", visible.Where(delegate(PerfSample sample) { return sample.HasCpuNormalized && sample.CpuNormalizedUpdated; }).Select(delegate(PerfSample sample) { return sample.CpuNormalizedPercent; }));
 
             int coreCount = ordered.Where(delegate(PerfSample sample) { return sample.HasCpuCoreUsage; }).Select(delegate(PerfSample sample) { return sample.CpuCoreCount; }).DefaultIfEmpty(0).Max();
             for (int core = 0; core < coreCount; core++)
@@ -967,7 +974,7 @@ namespace MoTuPerf.Desktop
                 int index = core;
                 AddAnalysisRow(rows, "CPU " + core.ToString(CultureInfo.InvariantCulture), "%", visible.Where(delegate(PerfSample sample)
                 {
-                    return sample.HasCpuCoreUsage && sample.CpuCorePercents != null && sample.CpuCorePercents.Count > index;
+                    return sample.HasCpuCoreUsage && sample.CpuCoreUpdated && sample.CpuCorePercents != null && sample.CpuCorePercents.Count > index;
                 }).Select(delegate(PerfSample sample) { return sample.CpuCorePercents[index]; }));
             }
 
@@ -977,11 +984,11 @@ namespace MoTuPerf.Desktop
                 AddAnalysisRow(rows, "Temperature / " + sensor, "°C", visible.Where(delegate(PerfSample sample)
                 {
                     double value;
-                    return sample.HasTemperature && sample.TemperatureCelsius != null && sample.TemperatureCelsius.TryGetValue(currentSensor, out value)
+                    return sample.HasTemperature && sample.TemperatureUpdated && sample.TemperatureCelsius != null && sample.TemperatureCelsius.TryGetValue(currentSensor, out value)
                         && IsFinite(value) && value >= -20 && value <= 120;
                 }).Select(delegate(PerfSample sample) { return sample.TemperatureCelsius[currentSensor]; }));
             }
-            AddAnalysisRow(rows, ThermalMetricTitle, "级别", visible.Where(HasThermalStateValue).Select(delegate(PerfSample sample) { return (double)sample.ThermalStateLevel; }));
+            AddAnalysisRow(rows, ThermalMetricTitle, "级别", visible.Where(sample => sample.ThermalStateUpdated && HasThermalStateValue(sample)).Select(delegate(PerfSample sample) { return (double)sample.ThermalStateLevel; }));
 
             AnalysisDataRows.Clear();
             foreach (AnalysisMetricRowViewModel row in rows) AnalysisDataRows.Add(row);
@@ -1529,9 +1536,22 @@ namespace MoTuPerf.Desktop
             Maximum = HasData ? Format(valid.Max()) : "--";
             Minimum = HasData ? Format(valid.Min()) : "--";
             Average = HasData ? Format(valid.Average()) : "--";
+            Description = "仅统计当前范围内真实更新的有效值，重复携带的旧值不重复计入。";
+        }
+
+        public AnalysisMetricRowViewModel(string label, string unit, double? maximum, double? minimum, double? average, string description)
+        {
+            Label = label;
+            Unit = unit ?? "";
+            Maximum = maximum.HasValue && double.IsFinite(maximum.Value) ? Format(maximum.Value) : "--";
+            Minimum = minimum.HasValue && double.IsFinite(minimum.Value) ? Format(minimum.Value) : "--";
+            Average = average.HasValue && double.IsFinite(average.Value) ? Format(average.Value) : "--";
+            HasData = Maximum != "--" || Minimum != "--" || Average != "--";
+            Description = description;
         }
 
         public string Label { get; private set; }
+        public string Description { get; private set; }
         public string DisplayLabel { get { return string.IsNullOrWhiteSpace(Unit) ? Label : Label + " (" + Unit + ")"; } }
         public string Unit { get; private set; }
         public string Maximum { get; private set; }

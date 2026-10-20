@@ -588,6 +588,8 @@ namespace CSharpIosPerfMonitor
                         : "Real USB data; pid CPU/memory " + _activeTargetPid + "; FPS scope " + sample.FpsScope + "; target " + config.TargetName;
                     if (sample.ApproximateFrameMetrics) sample.Note += "; frame metrics approximate";
                     if (sample.SourceDegraded) sample.Note += "; frame source degraded";
+                    if (!string.IsNullOrWhiteSpace(sample.FrameSourceResetReason))
+                        sample.Note += "; frame source reset: " + sample.FrameSourceResetReason;
                     if (sample.DuplicateFrameTimestamps > 0
                         || sample.OutOfOrderFrameTimestamps > 0
                         || sample.InvalidFrameIntervals > 0
@@ -831,6 +833,16 @@ namespace CSharpIosPerfMonitor
                     _latestFpsSource = source;
                     _latestFpsScope = Convert.ToString(Get(obj, "scope") ?? "");
                     _latestFrameSource = Convert.ToString(Get(obj, "frame_source") ?? "");
+                    double parsedFrameSourceGapSec;
+                    bool hasFrameSourceGap = TryNonNegativeDouble(Get(obj, "source_gap_sec"), out parsedFrameSourceGapSec);
+                    string frameSourceResetReason = Convert.ToString(Get(obj, "source_reset_reason") ?? "");
+                    if (hasFrameSourceGap || !string.IsNullOrWhiteSpace(frameSourceResetReason))
+                    {
+                        WriteDiagnosticsEvent(
+                            "frame_source_reset",
+                            "Android 帧数据源发生重建" + (string.IsNullOrWhiteSpace(frameSourceResetReason) ? "" : "：" + frameSourceResetReason),
+                            "android_frame_source_reset");
+                    }
                     double parsedSourceElapsed;
                     bool hasSourceElapsed = TryNonNegativeDouble(Get(obj, "source_elapsed_sec"), out parsedSourceElapsed);
                     long parsedSourceSequence;
@@ -881,7 +893,10 @@ namespace CSharpIosPerfMonitor
                     bool derivedFrameMetricsUnavailable = outOfOrderFrameTimestamps > 0
                         || invalidFrameIntervals > 0
                         || frameRingBufferOverrun;
-                    _latestSourceDegraded = AsBool(Get(obj, "source_degraded")) || hasFrameIntegrityDiagnostic;
+                    _latestSourceDegraded = AsBool(Get(obj, "source_degraded"))
+                        || hasFrameIntegrityDiagnostic
+                        || hasFrameSourceGap
+                        || !string.IsNullOrWhiteSpace(frameSourceResetReason);
                     _latestApproximateFrameMetrics = AsBool(Get(obj, "approximate")) || _latestSourceDegraded;
                     bool hasFrameTargetVerification = obj.ContainsKey("target_verified");
                     bool frameTargetVerified = hasFrameTargetVerification && AsBool(Get(obj, "target_verified"));
@@ -987,7 +1002,7 @@ namespace CSharpIosPerfMonitor
                         && TryNonNegativeDouble(Get(obj, "source_lag_sec"), out sourceLag)
                         && sourceLag <= 86400)
                         frameReceivedAt = frameReceivedAt.AddSeconds(-sourceLag);
-                    _pendingFrameSamples.Enqueue(new PerfSample
+                    PerfSample frameSample = new PerfSample
                     {
                         Timestamp = frameReceivedAt,
                         HasFps = true,
@@ -1003,6 +1018,9 @@ namespace CSharpIosPerfMonitor
                         FrameTimeP95Ms = _latestFrameTimeP95Ms ?? 0,
                         HasFrameTimeMax = _latestFrameTimeMaxMs.HasValue,
                         FrameTimeMaxMs = _latestFrameTimeMaxMs ?? 0,
+                        FrameIntervalsMs = !derivedFrameMetricsUnavailable && _latestOrderedFrames
+                            ? ParseFrameIntervals(Get(obj, "frame_intervals_ms"), _latestFrameCount, _latestFrameObservationMs)
+                            : null,
                         HasJank = _nativeJankSeen,
                         Jank = _latestJank,
                         BigJank = _latestBigJank,
@@ -1029,6 +1047,8 @@ namespace CSharpIosPerfMonitor
                         SurfaceOwnerUid = surfaceOwnerUid,
                         FpsScope = _latestFpsScope,
                         FrameSource = _latestFrameSource,
+                        FrameSourceGapSec = hasFrameSourceGap ? parsedFrameSourceGapSec : 0,
+                        FrameSourceResetReason = frameSourceResetReason,
                         HasFrameSourceElapsed = hasSourceElapsed,
                         FrameSourceElapsedSec = hasSourceElapsed ? parsedSourceElapsed : 0,
                         HasFrameSourceSequence = hasSourceSequence,
@@ -1037,7 +1057,9 @@ namespace CSharpIosPerfMonitor
                         MissingFrameSourceWindows = missingFrameSourceWindows,
                         HasFreshnessMetadata = true,
                         Source = _latestFpsSource
-                    });
+                    };
+                    if (!FrameIntervalData.IsUsable(frameSample)) frameSample.FrameIntervalsMs = null;
+                    _pendingFrameSamples.Enqueue(frameSample);
                     SignalSampleLoop();
                 }
                 else if (kind == "memory")
@@ -1320,6 +1342,22 @@ namespace CSharpIosPerfMonitor
             if (value is bool) return (bool)value;
             bool parsed;
             return value != null && bool.TryParse(Convert.ToString(value), out parsed) && parsed;
+        }
+
+        private static double[] ParseFrameIntervals(object value, int frameCount, double observationMs)
+        {
+            System.Collections.ICollection collection = value as System.Collections.ICollection;
+            if (collection == null || collection.Count == 0 || collection.Count != frameCount
+                || collection.Count > FrameIntervalData.MaximumIntervalsPerWindow) return null;
+            double[] intervals = new double[collection.Count];
+            int index = 0;
+            foreach (object item in collection)
+            {
+                double interval;
+                if (!TryAsDouble(item, out interval)) return null;
+                intervals[index++] = interval;
+            }
+            return FrameIntervalData.IsValid(intervals, frameCount, observationMs) ? intervals : null;
         }
 
         private static double? ParseValidFrameTime(object value)

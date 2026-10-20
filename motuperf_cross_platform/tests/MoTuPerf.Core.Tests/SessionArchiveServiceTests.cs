@@ -9,6 +9,34 @@ namespace MoTuPerf.Core.Tests
     public sealed class SessionArchiveServiceTests
     {
         [Fact]
+        public void OptionalRawFramesRoundTripAndInvalidFramesCannotReplaceSavedArchive()
+        {
+            string root = Directory.CreateTempSubdirectory("motuperf-raw-frames-").FullName;
+            try
+            {
+                var document = new SessionDocument { Format = "motuperf-session", Version = 5 };
+                document.Samples.Add(FrameTimeStatisticsTests.Window(20, 10, 30));
+                document.Samples.Add(new PerfSample { HasCpu = true, CpuUpdated = true, CpuPercent = 20 });
+                string path = Path.Combine(root, "frames.motuperf");
+                SessionArchiveService.Save(path, document);
+                byte[] original = File.ReadAllBytes(path);
+                var loaded = SessionArchiveService.Load(path, Path.Combine(root, "loaded"));
+                Assert.Equal(new[] { 20.0, 10, 30 }, loaded.Samples[0].FrameIntervalsMs);
+                Assert.Null(loaded.Samples[1].FrameIntervalsMs);
+                document.Samples[0].FrameIntervalsMs[0] = -20;
+                Assert.Throws<InvalidDataException>(() => SessionArchiveService.Save(path, document));
+                Assert.Equal(original, File.ReadAllBytes(path));
+
+                string malformed = Path.Combine(root, "bad.motuperf");
+                using (ZipArchive archive = ZipFile.Open(malformed, ZipArchiveMode.Create))
+                using (var writer = new StreamWriter(archive.CreateEntry("session.json").Open()))
+                    writer.Write(System.Text.Json.JsonSerializer.Serialize(document));
+                Assert.Throws<InvalidDataException>(() => SessionArchiveService.Load(malformed, Path.Combine(root, "bad")));
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
+        [Fact]
         public void HarmonySessionRoundTripPreservesIdentitySourcesAndMissingFrames()
         {
             string root = Path.Combine(Path.GetTempPath(), "motuperf-harmony-" + Guid.NewGuid().ToString("N"));

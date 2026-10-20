@@ -26,23 +26,23 @@
           <StackPanel Margin="22,10,18,12" Spacing="9">
           <Border Classes="helpSection">
             <StackPanel>
+              <TextBlock Text="v0.44.0" Classes="helpTitle" />
+              <TextBlock Text="2026-10-19" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 优化 Android 帧源连续性：轮询间隔、帧源重建和时间线断点会写入现场数据与诊断日志，不跨断点计算 FrameTime/Jank。&#xA;• 修正 Android 逐核 CPU，改为每个核心使用自身工作时间/总时间增量计算；保留 Raw CPU 和归一化 CPU 的独立口径。&#xA;• 保持 PerfDog 风格的 Jank 总数包含 BigJank，并在 CSV 增加普通 Jank（排除 BigJank）明细，避免与 Gears 的互斥分类混淆。&#xA;• 完善 Android CPU、内存、温度和系统热状态缺测提示；真实来源继续写入导出数据，GPU 暂无可靠来源时保持缺测。&#xA;• 更新帮助说明和相关回归测试，明确采集断点、逐核 CPU、Jank 分类及指标能力边界。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel>
+              <TextBlock Text="v0.43.0" Classes="helpTitle" />
+              <TextBlock Text="2026-10-19" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 参考 PerfDog 已确认的逐帧汇总方式，可信有序帧源新增原始帧间隔保存，随现场文件保留；原始明细 CSV 可导出逐帧间隔供复核。&#xA;• FPS 分析与 CSV Stat 统一来源筛选和观测时长加权，排除重复携带值，避免启动备用帧源、空闲恢复窗口影响统计。&#xA;• FrameTime 分析改为实际逐帧间隔的最大、最小、平均值；CSV Stat 新增整体 P95 和数据完整性口径。旧文件按帧数加权计算平均值，无法还原的最小值和整体 P95 保持缺测。&#xA;• CPU、内存、温度和系统热状态分析仅计入真实更新，保留内存 PSS/Footprint/RSS 区分；补充 Jank 包含 BigJank、iOS 屏幕级帧指标和缩放统计边界的说明。&#xA;• 图表仍显示窗口最大 FrameTime；不改变 Jank 阈值、CPU 原始使用率、采集范围或缺测规则。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel>
               <TextBlock Text="v0.42.1" Classes="helpTitle" />
               <TextBlock Text="2026-10-09" Classes="dialogHint" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复 macOS Apple Silicon 上主界面、设置菜单、工具栏和二级窗口图标显示问号的问题，改用 Avalonia 跨平台路径图标，移除对 Windows 私有图标字体的依赖。&#xA;• 增加跨平台图标契约测试，防止后续重新引入 Windows 私有字形或私有区字符。" />
-            </StackPanel>
-          </Border>
-          <Border Classes="helpSection">
-            <StackPanel>
-              <TextBlock Text="v0.42.0" Classes="helpTitle" />
-              <TextBlock Text="2026-09-30" Classes="dialogHint" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 优化长时间采集性能：采集过程中隐藏“分析数据”页签并停止重复扫描全部历史样本，停止采集或导入现场文件后再计算完整统计；UI 刷新缓冲增加有界无损背压，避免界面卡顿时队列无限增长。&#xA;• 优化参数面板页签布局：采集中隐藏“分析数据”后，“实时数据”和“选中数据”自动各占一半宽度；停止采集或导入数据后恢复三个等宽页签，不再留下空白列。" />
-            </StackPanel>
-          </Border>
-          <Border Classes="helpSection">
-            <StackPanel>
-              <TextBlock Text="v0.41.3" Classes="helpTitle" />
-              <TextBlock Text="2026-09-29" Classes="dialogHint" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复 Windows GitHub Actions 与本地换行格式不一致导致桌面 UI 契约测试误报失败的问题，统一源码读取的换行处理。&#xA;• 发布版本提升至 v0.41.3，重新触发 Windows 安装包和 macOS Apple Silicon DMG 的自动构建。" />
             </StackPanel>
           </Border>
         </StackPanel>

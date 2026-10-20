@@ -575,6 +575,7 @@ namespace CSharpIosPerfMonitor
             Note = "";
             FpsScope = "";
             FrameSource = "";
+            FrameSourceResetReason = "";
             MemoryMetric = "";
             MemorySource = "";
             CpuSource = "";
@@ -606,6 +607,8 @@ namespace CSharpIosPerfMonitor
         public double FrameTimeP95Ms { get; set; }
         public bool HasFrameTimeMax { get; set; }
         public double FrameTimeMaxMs { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public double[] FrameIntervalsMs { get; set; }
         public bool HasJank { get; set; }
         public double Jank { get; set; }
         public double BigJank { get; set; }
@@ -632,6 +635,8 @@ namespace CSharpIosPerfMonitor
         public int SurfaceOwnerUid { get; set; }
         public string FpsScope { get; set; }
         public string FrameSource { get; set; }
+        public double FrameSourceGapSec { get; set; }
+        public string FrameSourceResetReason { get; set; }
         public bool HasFrameSourceElapsed { get; set; }
         public double FrameSourceElapsedSec { get; set; }
         public bool HasFrameSourceSequence { get; set; }

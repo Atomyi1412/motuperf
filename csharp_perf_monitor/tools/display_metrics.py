@@ -25,6 +25,7 @@ class OrderedFrameMetrics:
     big_jank: float
     jank_time_ms: float
     stutter_percent: float
+    frame_intervals_ms: tuple[float, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -230,6 +231,7 @@ def ordered_frame_payload(window: OrderedFrameWindow) -> dict[str, object]:
                 "frame_time_p95_ms": metrics.frame_time_p95_ms,
                 "frame_time_max_ms": metrics.frame_time_max_ms,
                 "frame_time_aggregation": "p95",
+                "frame_intervals_ms": metrics.frame_intervals_ms,
             }
         )
     return payload
@@ -343,4 +345,5 @@ def ordered_frame_metrics(
         big_jank=big_jank,
         jank_time_ms=jank_time_ms,
         stutter_percent=jank_time_ms * 100.0 / observation_ms,
+        frame_intervals_ms=tuple(values),
     )

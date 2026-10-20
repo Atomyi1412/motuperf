@@ -102,6 +102,43 @@ namespace MoTuPerf.Platform.Tests
         }
 
         [Fact]
+        public void AndroidFrameSourceResetIsPersistedAsAQualityDiagnostic()
+        {
+            string directory = Directory.CreateTempSubdirectory("motuperf-frame-reset-").FullName;
+            string path = Path.Combine(directory, "capture.log");
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            try
+            {
+                using var log = new CaptureDiagnosticsLog(path, "frame-reset-session");
+                using var collector = new PerfCollector();
+                typeof(PerfCollector).GetField("_captureGeneration", flags).SetValue(collector, 1);
+                typeof(PerfCollector).GetField("_diagnosticsLog", flags).SetValue(collector, log);
+                MethodInfo parse = typeof(PerfCollector).GetMethod("ParseLine", flags);
+
+                parse.Invoke(collector, new object[]
+                {
+                    "fps " + JsonSerializer.Serialize(new
+                    {
+                        fps = 60.0,
+                        source = "adb-gfxinfo-framestats",
+                        scope = "app",
+                        frame_source = "display-present",
+                        ordered_frames = true,
+                        source_gap_sec = 8.5,
+                        source_reset_reason = "poll_gap"
+                    }),
+                    1,
+                    "android"
+                });
+
+                string text = File.ReadAllText(path);
+                Assert.Contains("frame_source_reset", text, StringComparison.Ordinal);
+                Assert.Contains("poll_gap", text, StringComparison.Ordinal);
+            }
+            finally { Directory.Delete(directory, true); }
+        }
+
+        [Fact]
         public void WritesStructuredSessionEventsAndRedactsSensitiveValues()
         {
             string directory = Directory.CreateTempSubdirectory("motuperf-collector-log-").FullName;

@@ -62,7 +62,8 @@ namespace CSharpIosPerfMonitor
             FpsStatistics fps = MetricStatistics.ComputeFps(samples);
             JankStatistics jank = MetricStatistics.ComputeJank(samples);
             MemoryStatistics memory = MetricStatistics.ComputeMemory(samples);
-            List<PerfSample> cpuSamples = samples.Where(delegate(PerfSample sample) { return sample.HasCpu && sample.CpuUpdated; }).ToList();
+            FrameTimeStatistics frames = MetricStatistics.ComputeFrameTime(samples);
+            List<PerfSample> cpuSamples = samples.Where(delegate(PerfSample sample) { return sample.HasCpu && sample.CpuUpdated && Finite(sample.CpuPercent); }).ToList();
             string memoryName = MemoryMetricName(memory.Metric, document.Device);
             DateTime startedAt = document.StartedAt != default ? document.StartedAt : samples.FirstOrDefault()?.Timestamp ?? DateTime.Now;
 
@@ -70,12 +71,12 @@ namespace CSharpIosPerfMonitor
             builder.WriteLine("Device,OS,CPU,GPU,Resolution");
             builder.WriteLine(Line(DeviceName(document.Device), DeviceOs(document.Device), Value(document.Device?.CpuInfo), Value(document.Device?.GpuInfo), Value(document.Device?.Resolution)));
             builder.WriteLine("Stat");
-            builder.WriteLine("FPS(avg),FPS>=18(%),FPS>=25(%),FPS(var),FPS(std),FPS(drop),FPS(min),FPS(median),FPS(medRange+-20%)[%],Jank(/10min),BigJank(/10min),Stutter(%)," + memoryName + "(avg)[MB]," + memoryName + "(peak)[MB],AppCPU(raw avg)[%],AppCPU(raw<=60%)[%],AppCPU(raw<=80%)[%],Platform,DeviceSerial,TargetBundle,HarmonyUserId,HarmonyAppIndex,HarmonyStartTimeTicks,TargetPid,App,Process,ScreenshotCount,FPSStatsSourceTier,FPSStatsSampleCount,FPSStatsExcludedSampleCount,FPSStatsObservationSec,JankStatsSampleCount,JankStatsExcludedSampleCount,JankStatsObservationSec");
+            builder.WriteLine("FPS(avg),FPS>=18(%),FPS>=25(%),FPS(var),FPS(std),FPS(drop),FPS(min),FPS(median),FPS(medRange+-20%)[%],Jank(/10min),Jank(excluding BigJank)(/10min),BigJank(/10min),Stutter(%)," + memoryName + "(avg)[MB]," + memoryName + "(peak)[MB],AppCPU(raw avg)[%],AppCPU(raw<=60%)[%],AppCPU(raw<=80%)[%],Platform,DeviceSerial,TargetBundle,HarmonyUserId,HarmonyAppIndex,HarmonyStartTimeTicks,TargetPid,App,Process,ScreenshotCount,FPSStatsSourceTier,FPSStatsSampleCount,FPSStatsExcludedSampleCount,FPSStatsObservationSec,JankStatsSampleCount,JankStatsExcludedSampleCount,JankStatsObservationSec,FrameTime(avg)[ms],FrameTime(min)[ms],FrameTime(max)[ms],FrameTime(P95)[ms],FrameTimeStatsMode,FrameTimeStatsFrameCount");
             builder.WriteLine(Line(
                 fps.HasData ? Number(fps.Average) : "-", fps.HasData ? Number(fps.FpsGe18Percent) : "-", fps.HasData ? Number(fps.FpsGe25Percent) : "-",
                 fps.HasData ? Number(fps.Variance) : "-", fps.HasData ? Number(fps.StandardDeviation) : "-", fps.HasData ? Number(fps.DropPerHour) : "-",
                 fps.HasData ? Number(fps.Minimum) : "-", fps.HasData ? Number(fps.Median) : "-", fps.HasData ? Number(fps.MedianRangePercent) : "-",
-                jank.HasRateData ? Number(jank.JankPer10Min) : "-", jank.HasRateData ? Number(jank.BigJankPer10Min) : "-", jank.HasStutterData ? Number(jank.StutterPercent) : "-",
+                jank.HasRateData ? Number(jank.JankPer10Min) : "-", jank.HasRateData ? Number(Math.Max(0, jank.JankPer10Min - jank.BigJankPer10Min)) : "-", jank.HasRateData ? Number(jank.BigJankPer10Min) : "-", jank.HasStutterData ? Number(jank.StutterPercent) : "-",
                 memory.HasData ? Number(memory.AverageMb) : "-", memory.HasData ? Number(memory.PeakMb) : "-",
                 cpuSamples.Count > 0 ? Number(cpuSamples.Average(delegate(PerfSample sample) { return sample.CpuPercent; })) : "-",
                 cpuSamples.Count > 0 ? Number(cpuSamples.Count(delegate(PerfSample sample) { return sample.CpuPercent <= 60; }) * 100.0 / cpuSamples.Count) : "-",
@@ -85,11 +86,17 @@ namespace CSharpIosPerfMonitor
                 fps.HasData ? fps.SourceTier : "-", fps.HasData ? fps.SampleCount.ToString(CultureInfo.InvariantCulture) : "-",
                 fps.HasData ? fps.ExcludedSampleCount.ToString(CultureInfo.InvariantCulture) : "-", fps.HasData ? Number(fps.TotalDurationSec) : "-",
                 jank.HasRateData ? jank.SampleCount.ToString(CultureInfo.InvariantCulture) : "-", jank.HasRateData ? jank.ExcludedSampleCount.ToString(CultureInfo.InvariantCulture) : "-",
-                jank.HasRateData ? Number(jank.ObservationSec) : "-"));
+                jank.HasRateData ? Number(jank.ObservationSec) : "-",
+                frames.AverageMs.HasValue ? Number(frames.AverageMs.Value) : "-",
+                frames.MinimumMs.HasValue ? Number(frames.MinimumMs.Value) : "-",
+                frames.MaximumMs.HasValue ? Number(frames.MaximumMs.Value) : "-",
+                frames.P95Ms.HasValue ? Number(frames.P95Ms.Value) : "-",
+                frames.SampleCount == 0 ? "-" : frames.HasCompleteRawFrames ? "raw_frames" : "window_summaries",
+                frames.FrameCount.ToString(CultureInfo.InvariantCulture)));
             builder.WriteLine();
             builder.WriteLine("Data");
             string p95Column = mode == CsvExportMode.RawDetail ? "DisplayFrameTime-P95[ms]" : "DisplayFrameTime-WindowP95Max[ms]";
-            builder.WriteLine("Index,Time,FPS-FPS[frame/s],FPS-Jank[frame/s],FPS-BigJank[frame/s]," + p95Column + ",MemoryDetail-" + memoryName + " Total[KB],MemoryRSSRaw[KB],CPUUsage-Process Raw[%],CPUUsage-Process Normalized[%],CPUUsage-Device Core[%],CPU-Core-Count,Target-PID,Screenshot-Path,Source,Note,Stutter[%],DisplayFrameTime-Mean[ms],DisplayFrameTime-Max[ms],JankTime[ms],FrameObservation[ms],DisplayFrameCount,RefreshRate[Hz],MemoryMetric,MemorySource,CPU Source,FPS Scope,Frame Source,OrderedFrames,ApproximateFrameMetrics,SourceDegraded,FPS Updated,Memory Updated,CPU Updated,CPU Normalized Updated,CPU Core Updated,Temperature-All[C],TemperatureSource,TemperatureScope,Temperature Updated,ThermalState-Level,ThermalState-Name,ThermalStateSource,ThermalStateScope,ThermalStateUpdated,FrameTargetVerified,SurfaceOwnerPid,SurfaceOwnerUid,FrameSourceSequence,FrameSourceSequenceDiscontinuity,MissingFrameSourceWindows,NoPresentFrames,ResumeGap[ms]");
+            builder.WriteLine("Index,Time,FPS-FPS[frame/s],FPS-Jank[frame/s],FPS-JankExcludingBig[frame/s],FPS-BigJank[frame/s]," + p95Column + ",MemoryDetail-" + memoryName + " Total[KB],MemoryRSSRaw[KB],CPUUsage-Process Raw[%],CPUUsage-Process Normalized[%],CPUUsage-Device Core[%],CPU-Core-Count,Target-PID,Screenshot-Path,Source,Note,Stutter[%],DisplayFrameTime-Mean[ms],DisplayFrameTime-Max[ms],JankTime[ms],FrameObservation[ms],DisplayFrameCount,RefreshRate[Hz],MemoryMetric,MemorySource,CPU Source,FPS Scope,Frame Source,OrderedFrames,ApproximateFrameMetrics,SourceDegraded,FPS Updated,Memory Updated,CPU Updated,CPU Normalized Updated,CPU Core Updated,Temperature-All[C],TemperatureSource,TemperatureScope,Temperature Updated,ThermalState-Level,ThermalState-Name,ThermalStateSource,ThermalStateScope,ThermalStateUpdated,FrameTargetVerified,SurfaceOwnerPid,SurfaceOwnerUid,FrameSourceSequence,FrameSourceSequenceDiscontinuity,MissingFrameSourceWindows,NoPresentFrames,ResumeGap[ms],FrameSourceGap[s],FrameSourceResetReason,DisplayFrameIntervals[ms]");
             string preferredMemory = MetricStatistics.PreferredMemoryMetric(samples);
             List<PerfSample> exportSamples = mode == CsvExportMode.RawDetail ? samples : PerSecondSamples(samples, screenshots, preferredMemory);
             for (int index = 0; index < exportSamples.Count; index++)
@@ -98,7 +105,7 @@ namespace CSharpIosPerfMonitor
                 string screenshotPath = ScreenshotPath(screenshots, sample.ElapsedSec, mode);
                 builder.WriteLine(Line(
                     index.ToString(CultureInfo.InvariantCulture), mode == CsvExportMode.RawDetail ? sample.ElapsedSec.ToString("0.000000", CultureInfo.InvariantCulture) : sample.ElapsedSec.ToString("0", CultureInfo.InvariantCulture),
-                    Fresh(sample.HasFps && sample.FpsUpdated, sample.Fps), Fresh(sample.HasJank && sample.FpsUpdated, sample.Jank), Fresh(sample.HasJank && sample.FpsUpdated, sample.BigJank),
+                    Fresh(sample.HasFps && sample.FpsUpdated, sample.Fps), Fresh(sample.HasJank && sample.FpsUpdated, sample.Jank), Fresh(sample.HasJank && sample.FpsUpdated, Math.Max(0, sample.Jank - sample.BigJank)), Fresh(sample.HasJank && sample.FpsUpdated, sample.BigJank),
                     Fresh(sample.HasFrameTimeP95 && sample.FpsUpdated, sample.FrameTimeP95Ms),
                     Fresh(MetricStatistics.IsPreferredMemorySample(sample, preferredMemory), sample.MemoryMb * 1024), Fresh(sample.HasMemoryRss && sample.MemoryUpdated, sample.MemoryRssMb * 1024),
                     Fresh(sample.HasCpu && sample.CpuUpdated, sample.CpuPercent), Fresh(sample.HasCpuNormalized && sample.CpuNormalizedUpdated, sample.CpuNormalizedPercent),
@@ -114,7 +121,9 @@ namespace CSharpIosPerfMonitor
                     sample.HasThermalState && sample.ThermalStateUpdated ? Value(sample.ThermalStateSource) : "-", sample.HasThermalState && sample.ThermalStateUpdated ? Value(sample.ThermalStateScope) : "-", Bool(sample.ThermalStateUpdated),
                     sample.HasFrameTargetVerification ? Bool(sample.FrameTargetVerified) : "-", sample.SurfaceOwnerPid > 0 ? sample.SurfaceOwnerPid.ToString(CultureInfo.InvariantCulture) : "-",
                     sample.SurfaceOwnerUid > 0 ? sample.SurfaceOwnerUid.ToString(CultureInfo.InvariantCulture) : "-", sample.HasFrameSourceSequence ? sample.FrameSourceSequence.ToString(CultureInfo.InvariantCulture) : "-",
-                    Bool(sample.FrameSourceSequenceDiscontinuity), sample.MissingFrameSourceWindows.ToString(CultureInfo.InvariantCulture), Bool(sample.NoPresentFrames), Fresh(sample.ResumeGapMs > 0, sample.ResumeGapMs)));
+                    Bool(sample.FrameSourceSequenceDiscontinuity), sample.MissingFrameSourceWindows.ToString(CultureInfo.InvariantCulture), Bool(sample.NoPresentFrames), Fresh(sample.ResumeGapMs > 0, sample.ResumeGapMs), Fresh(sample.FrameSourceGapSec > 0, sample.FrameSourceGapSec), Value(sample.FrameSourceResetReason),
+                    mode == CsvExportMode.RawDetail && FrameIntervalData.IsUsable(sample)
+                        ? string.Join(";", sample.FrameIntervalsMs.Select(value => value.ToString("R", CultureInfo.InvariantCulture))) : "-"));
             }
         }
 
@@ -257,6 +266,8 @@ namespace CSharpIosPerfMonitor
             result.RefreshRateHz = last.RefreshRateHz;
             result.FpsScope = last.FpsScope;
             result.FrameSource = last.FrameSource;
+            result.FrameSourceGapSec = samples.Select(delegate(PerfSample sample) { return sample.FrameSourceGapSec; }).DefaultIfEmpty(0).Max();
+            result.FrameSourceResetReason = LastNonEmpty(samples.Select(delegate(PerfSample sample) { return sample.FrameSourceResetReason; }));
             result.OrderedFrames = samples.All(delegate(PerfSample sample) { return sample.OrderedFrames; });
             result.ApproximateFrameMetrics = samples.Any(delegate(PerfSample sample) { return sample.ApproximateFrameMetrics; });
             result.SourceDegraded = samples.Any(delegate(PerfSample sample) { return sample.SourceDegraded; });

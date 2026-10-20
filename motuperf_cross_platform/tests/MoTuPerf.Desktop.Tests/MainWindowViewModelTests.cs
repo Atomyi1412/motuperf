@@ -64,9 +64,9 @@ namespace MoTuPerf.Desktop.Tests
         {
             using (MainWindowViewModel viewModel = new MainWindowViewModel())
             {
-                viewModel.ApplySample(new PerfSample { ElapsedSec = 1, HasFps = true, Fps = 0, HasCpu = true, CpuPercent = 20, HasMemory = true, MemoryMb = 100, MemoryMetric = "rss" });
-                viewModel.ApplySample(new PerfSample { ElapsedSec = 2, HasFps = true, Fps = 60, HasCpu = true, CpuPercent = 40, HasMemory = true, MemoryMb = 200, MemoryMetric = "rss" });
-                viewModel.ApplySample(new PerfSample { ElapsedSec = 90, HasFps = true, Fps = 30, HasCpu = true, CpuPercent = 80, HasMemory = true, MemoryMb = 300, MemoryMetric = "rss" });
+                viewModel.ApplySample(new PerfSample { ElapsedSec = 1, HasFps = true, FpsUpdated = true, HasFrameObservation = true, FrameObservationMs = 1000, FrameCount = 0, Fps = 0, HasCpu = true, CpuUpdated = true, CpuPercent = 20, HasMemory = true, MemoryUpdated = true, MemoryMb = 100, MemoryMetric = "rss" });
+                viewModel.ApplySample(new PerfSample { ElapsedSec = 2, HasFps = true, FpsUpdated = true, HasFrameObservation = true, FrameObservationMs = 1000, FrameCount = 60, Fps = 60, HasCpu = true, CpuUpdated = true, CpuPercent = 40, HasMemory = true, MemoryUpdated = true, MemoryMb = 200, MemoryMetric = "rss" });
+                viewModel.ApplySample(new PerfSample { ElapsedSec = 90, HasFps = true, FpsUpdated = true, HasFrameObservation = true, FrameObservationMs = 1000, FrameCount = 30, Fps = 30, HasCpu = true, CpuUpdated = true, CpuPercent = 80, HasMemory = true, MemoryUpdated = true, MemoryMb = 300, MemoryMetric = "rss" });
 
                 AnalysisMetricRowViewModel fps = viewModel.AnalysisDataRows.First(delegate(AnalysisMetricRowViewModel row) { return row.Label == "FPS"; });
                 Assert.Equal("60", fps.Maximum);
@@ -92,8 +92,8 @@ namespace MoTuPerf.Desktop.Tests
         {
             using (MainWindowViewModel viewModel = new MainWindowViewModel())
             {
-                viewModel.ApplySample(new PerfSample { ElapsedSec = 1, HasFps = true, Fps = 10 });
-                viewModel.ApplySample(new PerfSample { ElapsedSec = 2, HasFps = true, Fps = 30 });
+                viewModel.ApplySample(new PerfSample { ElapsedSec = 1, HasFps = true, FpsUpdated = true, Fps = 10 });
+                viewModel.ApplySample(new PerfSample { ElapsedSec = 2, HasFps = true, FpsUpdated = true, Fps = 30 });
                 viewModel.SelectTimeFromChart(1);
 
                 AnalysisMetricRowViewModel fps = viewModel.AnalysisDataRows.First(delegate(AnalysisMetricRowViewModel row) { return row.Label == "FPS"; });
@@ -101,6 +101,51 @@ namespace MoTuPerf.Desktop.Tests
                 Assert.Equal("10", fps.Minimum);
                 Assert.Equal("20", fps.Average);
             }
+        }
+
+        [Fact]
+        public void AnalysisUsesWeightedFpsRawIntervalsAndOnlyRealScalarUpdates()
+        {
+            using var viewModel = new MainWindowViewModel();
+            var first = new PerfSample
+            {
+                ElapsedSec = 1, HasFps = true, FpsUpdated = true, Fps = 50, OrderedFrames = true,
+                HasFrameObservation = true, FrameObservationMs = 60, FrameCount = 3,
+                FrameIntervalsMs = new[] { 20.0, 10, 30 }, HasFrameTimeMax = true, FrameTimeMaxMs = 30,
+                HasCpu = true, CpuUpdated = true, CpuPercent = 10,
+                HasMemory = true, MemoryUpdated = true, MemoryMb = 100, MemoryMetric = "physical_footprint"
+            };
+            var second = new PerfSample
+            {
+                ElapsedSec = 90, HasFps = true, FpsUpdated = true, Fps = 10, OrderedFrames = true,
+                HasFrameObservation = true, FrameObservationMs = 100, FrameCount = 1,
+                FrameIntervalsMs = new[] { 100.0 }, HasFrameTimeMax = true, FrameTimeMaxMs = 100,
+                HasCpu = true, CpuUpdated = true, CpuPercent = 30,
+                HasMemory = true, MemoryUpdated = true, MemoryMb = 200, MemoryMetric = "physical_footprint"
+            };
+            var carried = new PerfSample
+            {
+                ElapsedSec = 91, HasFps = true, FpsUpdated = false, Fps = 1,
+                HasCpu = true, CpuUpdated = false, CpuPercent = 999,
+                HasMemory = true, MemoryUpdated = false, MemoryMb = 999, MemoryMetric = "physical_footprint"
+            };
+            viewModel.ApplySamples(new[] { first, second, carried });
+            AnalysisMetricRowViewModel Row(string name) => viewModel.AnalysisDataRows.Single(row => row.Label == name);
+            Assert.Equal("25", Row("FPS").Average);
+            Assert.Equal("40", Row("FrameTime").Average);
+            Assert.Equal("10", Row("FrameTime").Minimum);
+            Assert.Equal("100.0", Row("FrameTime").Maximum);
+            Assert.Equal("20", Row("CPU Raw").Average);
+            Assert.Equal("150.0", Row("Process Memory").Average);
+
+            viewModel.IsChartZoomEnabled = true;
+            viewModel.ApplyChartZoom(31, 91);
+            Assert.Equal("10", Row("FPS").Average);
+            Assert.Equal("100.0", Row("FrameTime").Minimum);
+            Assert.Equal("30", Row("CPU Raw").Average);
+            Assert.Equal(3, viewModel.BuildSessionDocument().Samples.Count);
+            viewModel.ResetChartZoom();
+            Assert.Equal("40", Row("FrameTime").Average);
         }
 
         [Fact]

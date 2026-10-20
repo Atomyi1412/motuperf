@@ -187,7 +187,7 @@
                           <DataTemplate x:DataType="vm:AnalysisMetricRowViewModel">
                             <Border Classes="analysisRow" Padding="6,5" Margin="0,0,0,3">
                               <Grid ColumnDefinitions="1.6*,*,*,*">
-                                <TextBlock Text="{Binding DisplayLabel}" Classes="analysisValueText" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{Binding DisplayLabel}" Classes="analysisValueText" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Description}" />
                                 <TextBlock Grid.Column="1" Text="{Binding Maximum}" Classes="analysisValueText" HorizontalAlignment="Right" />
                                 <TextBlock Grid.Column="2" Text="{Binding Minimum}" Classes="analysisValueText" HorizontalAlignment="Right" />
                                 <TextBlock Grid.Column="3" Text="{Binding Average}" Classes="analysisValueText" HorizontalAlignment="Right" />

@@ -13,6 +13,14 @@ import display_metrics as metrics  # noqa: E402
 
 
 class DisplayMetricsTests(unittest.TestCase):
+    def test_raw_intervals_survive_payload_without_sorting_or_reconstruction(self) -> None:
+        frame_metrics = metrics.ordered_frame_metrics([20.0, 10.0, 30.0])
+        window = metrics.OrderedFrameWindow(frame_metrics, 0, 0, 0)
+        self.assertEqual((20.0, 10.0, 30.0), metrics.ordered_frame_payload(window)["frame_intervals_ms"])
+        degraded = metrics.OrderedFrameWindow(frame_metrics, 0, 1, 0)
+        self.assertNotIn("frame_intervals_ms", metrics.ordered_frame_payload(degraded))
+        self.assertNotIn("frame_intervals_ms", metrics.ordered_zero_fps_payload(1.0))
+
     def test_accumulator_reports_whether_latest_timestamp_advanced_a_valid_sequence(self) -> None:
         accumulator = metrics.OrderedTimestampAccumulator(
             tick_to_nanoseconds=1_000_000.0,

@@ -70,6 +70,7 @@ namespace CSharpIosPerfMonitor
             if (!string.IsNullOrWhiteSpace(parent)) Directory.CreateDirectory(parent);
             if ((document.Screenshots ?? new List<SessionScreenshot>()).Count > MaximumScreenshots)
                 throw new InvalidDataException("现场文件截图数量异常。");
+            ValidateFrameIntervals(document);
             string tempPath = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try
             {
@@ -146,6 +147,7 @@ namespace CSharpIosPerfMonitor
                         throw new InvalidDataException("不是受支持的 MoTuPerf 现场文件。");
                     }
                     if (document.Version < 0 || document.Version > 5) throw new InvalidDataException("现场文件版本不受支持：" + document.Version);
+                    ValidateFrameIntervals(document);
                     List<SessionScreenshot> screenshots = document.Screenshots ?? new List<SessionScreenshot>();
                     if (screenshots.Count > MaximumScreenshots) throw new InvalidDataException("现场文件截图数量异常。");
                     HashSet<string> entryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "session.json" };
@@ -178,6 +180,15 @@ namespace CSharpIosPerfMonitor
             {
                 foreach (string file in extractedFiles) TryDelete(file);
                 throw;
+            }
+        }
+
+        private static void ValidateFrameIntervals(SessionDocument document)
+        {
+            foreach (PerfSample sample in document.Samples ?? new List<PerfSample>())
+            {
+                if (sample?.FrameIntervalsMs != null && !FrameIntervalData.IsUsable(sample))
+                    throw new InvalidDataException("现场文件的逐帧间隔与帧数、观测时长或帧来源不一致。");
             }
         }
 

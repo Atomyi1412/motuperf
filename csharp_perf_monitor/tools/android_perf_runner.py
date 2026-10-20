@@ -82,6 +82,9 @@ class TimestatsSample:
     idle_window: bool = False
     no_present_frames: bool = False
     resume_gap_ms: float | None = None
+    source_gap_sec: float | None = None
+    source_reset_reason: str = ""
+    frame_intervals_ms: tuple[float, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -186,6 +189,7 @@ class CpuSnapshot:
     online_cpus: int
     core_jiffies: tuple[tuple[int, int], ...] = ()
     online_cpu_ids: tuple[int, ...] = ()
+    core_total_jiffies: tuple[tuple[int, int], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -329,6 +333,7 @@ def parse_cpu_snapshot(stdout: str, pid: int) -> CpuSnapshot | None:
     online_cpus: int | None = None
     online_cpu_ids: tuple[int, ...] | None = None
     core_jiffies: dict[int, int] = {}
+    core_total_jiffies: dict[int, int] = {}
     configured_cpu_lines = 0
     for raw in stdout.splitlines():
         line = raw.strip()
@@ -346,6 +351,9 @@ def parse_cpu_snapshot(stdout: str, pid: int) -> CpuSnapshot | None:
                 core_id = int(parts[0][3:])
                 # Core utilization excludes idle and iowait. Guest ticks are already in user/nice.
                 core_jiffies[core_id] = sum(int(parts[index]) for index in (1, 2, 3, 6, 7, 8))
+                # Keep each core's own denominator. Using the aggregate /proc/stat
+                # total makes a busy core look artificially low on big.LITTLE devices.
+                core_total_jiffies[core_id] = sum(int(value) for value in parts[1:9])
             except (ValueError, IndexError):
                 return None
         elif line.startswith(f"{pid} ("):
@@ -361,12 +369,14 @@ def parse_cpu_snapshot(stdout: str, pid: int) -> CpuSnapshot | None:
     ids = online_cpu_ids or tuple(sorted(core_jiffies))
     if ids:
         core_jiffies = {core_id: core_jiffies[core_id] for core_id in ids if core_id in core_jiffies}
+        core_total_jiffies = {core_id: core_total_jiffies[core_id] for core_id in ids if core_id in core_total_jiffies}
     return CpuSnapshot(
         total,
         process,
         max(1, core_count),
         tuple(sorted(core_jiffies.items())),
         tuple(ids),
+        tuple(sorted(core_total_jiffies.items())),
     )
 
 
@@ -402,18 +412,25 @@ def core_percent_from_snapshots(previous: CpuSnapshot, current: CpuSnapshot) -> 
     current_cores = dict(current.core_jiffies)
     previous_ids = previous.online_cpu_ids or tuple(sorted(previous_cores))
     current_ids = current.online_cpu_ids or tuple(sorted(current_cores))
-    if not previous_ids or previous_ids != current_ids or set(previous_cores) != set(current_cores):
+    previous_totals = dict(previous.core_total_jiffies)
+    current_totals = dict(current.core_total_jiffies)
+    if (
+        not previous_ids
+        or previous_ids != current_ids
+        or set(previous_cores) != set(current_cores)
+        or set(previous_totals) != set(current_totals)
+    ):
         return None
-    total_delta = current.total_jiffies - previous.total_jiffies
-    if total_delta <= 0:
-        return None
-    scale = 100.0 * average_online_cpu_count(previous, current) / total_delta
     values: list[float] = []
     for core_id in current_ids:
-        delta = current_cores[core_id] - previous_cores[core_id]
-        if delta < 0:
+        work_delta = current_cores[core_id] - previous_cores[core_id]
+        total_delta = current_totals[core_id] - previous_totals[core_id]
+        if work_delta < 0 or total_delta <= 0:
             return None
-        values.append(delta * scale)
+        value = work_delta * 100.0 / total_delta
+        if not math.isfinite(value) or value < 0 or value > 100:
+            return None
+        values.append(value)
     return values
 
 
@@ -787,7 +804,12 @@ def read_gfxinfo_sample(
         return None
     previous_success_value = summary_state.get("last_successful_poll_time")
     previous_success = float(previous_success_value) if isinstance(previous_success_value, (int, float)) else None
-    source_poll_gap = previous_success is not None and poll_started_at - previous_success > ORDERED_SOURCE_MAX_POLL_GAP_SECONDS
+    source_gap_sec = (
+        poll_started_at - previous_success
+        if previous_success is not None and poll_started_at - previous_success > ORDERED_SOURCE_MAX_POLL_GAP_SECONDS
+        else None
+    )
+    source_poll_gap = source_gap_sec is not None
     blocks = parse_framestats_blocks(result.stdout)
     selected_block = max(
         blocks,
@@ -796,6 +818,16 @@ def read_gfxinfo_sample(
     )
     rows = list(selected_block.rows) if selected_block is not None else []
     previous_block = str(summary_state.get("frame_block") or "")
+    source_reset_reason = ""
+    if selected_block is None and previous_block:
+        source_reset_reason = "frame_block_missing"
+    elif previous_block and selected_block is not None and previous_block != selected_block.key:
+        source_reset_reason = "frame_block_changed"
+    elif source_poll_gap:
+        source_reset_reason = "poll_gap"
+    if source_reset_reason:
+        summary_state["last_source_reset_reason"] = source_reset_reason
+        summary_state["source_gap_sec"] = source_gap_sec
     if selected_block is None or (previous_block and previous_block != selected_block.key) or source_poll_gap:
         _reset_gfxinfo_ordered_state(seen, summary_state)
     summary_state["last_successful_poll_time"] = poll_started_at
@@ -897,6 +929,8 @@ def read_gfxinfo_sample(
                     source_sequence=source_sequence,
                     idle_window=True,
                     no_present_frames=True,
+                    source_gap_sec=source_gap_sec,
+                    source_reset_reason=source_reset_reason,
                 ),
                 package_name,
                 "gfxinfo-display-present",
@@ -932,6 +966,8 @@ def read_gfxinfo_sample(
                 ordered_frames=False,
                 approximate=True,
                 target_verified=True,
+                source_gap_sec=source_gap_sec,
+                source_reset_reason=source_reset_reason,
             ),
             package_name,
             "gfxinfo-rendered-frame-count",
@@ -972,6 +1008,8 @@ def read_gfxinfo_sample(
             source_sequence=source_sequence,
             resume_gap_ms=resume_gap_ms,
         )
+    sample.source_gap_sec = source_gap_sec
+    sample.source_reset_reason = source_reset_reason
     summary_state.pop("last_zero_emit_time", None)
     return GfxInfoResult(
         sample,
@@ -1836,6 +1874,7 @@ def sample_from_ordered_metrics(
         frame_time_mean_ms=metrics.frame_time_mean_ms if derived_available else None,
         frame_time_p95_ms=metrics.frame_time_p95_ms if derived_available else None,
         frame_time_max_ms=metrics.frame_time_max_ms if derived_available else None,
+        frame_intervals_ms=metrics.frame_intervals_ms if derived_available else (),
         jank_time_ms=metrics.jank_time_ms if derived_available else None,
         stutter_percent=metrics.stutter_percent if derived_available else None,
         has_frame_observation=True,
@@ -2648,6 +2687,8 @@ def frame_sample_payload(
         })
     if sample.jank_time_ms is not None:
         payload["jank_time_ms"] = sample.jank_time_ms
+    if sample.ordered_frames and sample.frame_intervals_ms and sample.has_jank_metrics:
+        payload["frame_intervals_ms"] = sample.frame_intervals_ms
     if sample.stutter_percent is not None:
         payload["stutter_percent"] = sample.stutter_percent
     if sample.refresh_period_ns is not None and sample.refresh_period_ns > 0:
@@ -2677,6 +2718,10 @@ def frame_sample_payload(
         payload["no_present_frames"] = True
     if sample.resume_gap_ms is not None and sample.resume_gap_ms > 0:
         payload["resume_gap_ms"] = sample.resume_gap_ms
+    if sample.source_gap_sec is not None and sample.source_gap_sec > 0:
+        payload["source_gap_sec"] = sample.source_gap_sec
+    if sample.source_reset_reason:
+        payload["source_reset_reason"] = sample.source_reset_reason
     return payload
 
 
@@ -2743,6 +2788,20 @@ def fps_loop(serial: str, pid: int, package_name: str, interval: float, stop_eve
                         state_by_target[target],
                         app_package=package_name,
                     )
+                    reset_reason = str(state_by_target[target].get("last_source_reset_reason") or "")
+                    if reset_reason:
+                        gap_value = state_by_target[target].get("source_gap_sec")
+                        gap_text = f"（轮询间隔 {float(gap_value):.1f} 秒）" if isinstance(gap_value, (int, float)) else ""
+                        notice_key = reset_reason + gap_text
+                        if state_by_target[target].get("last_source_reset_notice") != notice_key:
+                            state_by_target[target]["last_source_reset_notice"] = notice_key
+                            emit(
+                                "status",
+                                {
+                                    "code": "android_frame_source_reset",
+                                    "message": f"Android 帧数据源已重建：{reset_reason}{gap_text}；本段不跨源计算 FrameTime/Jank。",
+                                },
+                            )
                     exact_display = bool(state_by_target[target].get("frame_exact_display")) or bool(
                         gfxinfo is not None and gfxinfo.sample.has_jank_metrics
                     )
@@ -3013,6 +3072,8 @@ def read_process_uid(serial: str, pid: int) -> int | None:
 
 def cpu_loop(serial: str, pid: int, interval: float, stop_event: threading.Event) -> None:
     previous_cpu: CpuSnapshot | None = None
+    unavailable_count = 0
+    unavailable_notice_shown = False
     while not stop_event.is_set():
         loop_started_at = time.monotonic()
         try:
@@ -3020,6 +3081,7 @@ def cpu_loop(serial: str, pid: int, interval: float, stop_event: threading.Event
             cpu, current_cpu = read_cpu(serial, pid, previous_cpu)
             previous_cpu = current_cpu
             if cpu is not None:
+                unavailable_count = 0
                 normalized = None
                 core_values = None
                 if prior_cpu is not None and current_cpu is not None:
@@ -3047,18 +3109,32 @@ def cpu_loop(serial: str, pid: int, interval: float, stop_event: threading.Event
                     payload["core_count"] = len(core_values)
                     payload["core_source"] = "adb-proc-stat-per-core"
                     payload["core_scope"] = "device"
-                    payload["core_semantics"] = "device_core_cpu"
+                    payload["core_semantics"] = "device_core_cpu_per_core_total_delta"
                 emit(
                     "cpu",
                     payload,
                 )
+            else:
+                unavailable_count += 1
+                if unavailable_count >= 3 and not unavailable_notice_shown:
+                    emit(
+                        "status",
+                        {
+                            "code": "android_cpu_unavailable",
+                            "message": "Android 进程 CPU 暂无可用采样，可能是 PID 已退出、权限不足或设备通信暂时中断；缺测保持 --。",
+                        },
+                    )
+                    unavailable_notice_shown = True
         except (OSError, subprocess.SubprocessError) as exc:
-            emit("status", {"message": f"Android PID CPU sample unavailable: {exc}"})
+            if not unavailable_notice_shown:
+                emit("status", {"code": "android_cpu_unavailable", "message": f"Android 进程 CPU 暂不可用：{exc}；缺测保持 --。"})
+                unavailable_notice_shown = True
         stop_event.wait(remaining_poll_delay(loop_started_at, max(0.5, interval)))
 
 
 def memory_loop(serial: str, pid: int, interval: float, stop_event: threading.Event) -> None:
     probe_state = MemoryProbeState()
+    unavailable_notice_shown = False
     while not stop_event.is_set():
         loop_started_at = time.monotonic()
         try:
@@ -3077,8 +3153,20 @@ def memory_loop(serial: str, pid: int, interval: float, stop_event: threading.Ev
                 if memory.rss_mb is not None:
                     payload["rss_value"] = memory.rss_mb
                 emit("memory", payload)
+                unavailable_notice_shown = False
+            elif not unavailable_notice_shown:
+                emit(
+                    "status",
+                    {
+                        "code": "android_memory_unavailable",
+                        "message": "Android 进程内存暂无可用采样，PSS/RSS 均未返回；缺测保持 --。",
+                    },
+                )
+                unavailable_notice_shown = True
         except (OSError, subprocess.SubprocessError) as exc:
-            emit("status", {"message": f"Android PID memory sample unavailable: {exc}"})
+            if not unavailable_notice_shown:
+                emit("status", {"code": "android_memory_unavailable", "message": f"Android 进程内存暂不可用：{exc}；缺测保持 --。"})
+                unavailable_notice_shown = True
         stop_event.wait(remaining_poll_delay(loop_started_at, max(0.5, interval)))
 
 
@@ -3141,7 +3229,7 @@ def temperature_loop(
                 )
                 temperature_notice_shown = False
             elif collect_temperature and not temperature_notice_shown:
-                emit("status", {"message": "Android 设备未开放可读取的温度传感器数据。"})
+                emit("status", {"code": "android_temperature_unavailable", "message": "Android 设备未开放可读取的温度传感器数据，缺测保持 --。"})
                 temperature_notice_shown = True
             if collect_thermal_state and thermal_status is not None:
                 level, name = thermal_status
@@ -3158,11 +3246,11 @@ def temperature_loop(
                 )
                 thermal_status_notice_shown = False
             elif collect_thermal_state and not thermal_status_notice_shown:
-                emit("status", {"message": "Android 设备未开放系统热状态数据。"})
+                emit("status", {"code": "android_thermal_state_unavailable", "message": "Android 设备未开放系统热状态数据，缺测保持 --。"})
                 thermal_status_notice_shown = True
         except (OSError, subprocess.SubprocessError) as exc:
             if not temperature_notice_shown or not thermal_status_notice_shown:
-                emit("status", {"message": f"Android 设备温度与热状态暂不可用：{exc}"})
+                emit("status", {"code": "android_thermal_metrics_unavailable", "message": f"Android 设备温度与热状态暂不可用：{exc}；缺测保持 --。"})
                 temperature_notice_shown = True
                 thermal_status_notice_shown = True
         stop_event.wait(remaining_poll_delay(loop_started_at, max(TEMPERATURE_INTERVAL_SECONDS, interval)))

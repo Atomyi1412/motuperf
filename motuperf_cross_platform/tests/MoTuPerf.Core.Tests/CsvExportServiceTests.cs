@@ -11,6 +11,28 @@ namespace MoTuPerf.Core.Tests
     public sealed class CsvExportServiceTests
     {
         [Fact]
+        public void CsvStatisticsUsePooledFrameDataAndRawExportKeepsOrder()
+        {
+            var document = new SessionDocument();
+            document.Samples.Add(FrameTimeStatisticsTests.Window(20, 10, 30));
+            document.Samples.Add(FrameTimeStatisticsTests.Window(100));
+            string raw = CsvExportService.Build(document, CsvExportMode.RawDetail);
+            string summary = CsvExportService.Build(document, CsvExportMode.PerSecondSummary);
+            string[] lines = raw.Replace("\r\n", "\n").Split('\n');
+            int stat = Array.IndexOf(lines, "Stat");
+            var headers = ParseLine(lines[stat + 1]).ToArray();
+            var values = ParseLine(lines[stat + 2]).ToArray();
+            Assert.Equal(headers.Length, values.Length);
+            Assert.Equal("40.00", values[Array.IndexOf(headers, "FrameTime(avg)[ms]")]);
+            Assert.Equal("10.00", values[Array.IndexOf(headers, "FrameTime(min)[ms]")]);
+            Assert.Equal("100.00", values[Array.IndexOf(headers, "FrameTime(P95)[ms]")]);
+            Assert.Equal("raw_frames", values[Array.IndexOf(headers, "FrameTimeStatsMode")]);
+            Assert.Equal(raw.Substring(0, raw.IndexOf("Data", StringComparison.Ordinal)), summary.Substring(0, summary.IndexOf("Data", StringComparison.Ordinal)));
+            Assert.Equal("20;10;30", ParseData(raw).Value(0, "DisplayFrameIntervals[ms]"));
+            Assert.Equal("-", ParseData(summary).Value(0, "DisplayFrameIntervals[ms]"));
+        }
+
+        [Fact]
         public void ExportKeepsMeasuredZeroFpsAndDeviceMetadata()
         {
             SessionDocument document = new SessionDocument
@@ -102,6 +124,7 @@ namespace MoTuPerf.Core.Tests
             Assert.Equal("1", table.Value(1, "Time"));
             Assert.Equal("60.000000", table.Value(0, "FPS-FPS[frame/s]"));
             Assert.Equal("2.000000", table.Value(0, "FPS-Jank[frame/s]"));
+            Assert.Equal("1.000000", table.Value(0, "FPS-JankExcludingBig[frame/s]"));
             Assert.Equal("1.000000", table.Value(0, "FPS-BigJank[frame/s]"));
             Assert.Equal("150.000000", table.Value(0, "CPUUsage-Process Raw[%]"));
             Assert.Equal("30.000000", table.Value(0, "CPUUsage-Process Normalized[%]"));

@@ -20,6 +20,7 @@ namespace CSharpIosPerfMonitor
         public double Variance { get; set; }
         public double StandardDeviation { get; set; }
         public double Minimum { get; set; }
+        public double Maximum { get; set; }
         public double Median { get; set; }
         public double MedianRangePercent { get; set; }
         public double FpsGe18Percent { get; set; }
@@ -52,6 +53,18 @@ namespace CSharpIosPerfMonitor
         public double JankPer10Min { get; set; }
         public double BigJankPer10Min { get; set; }
         public double StutterPercent { get; set; }
+    }
+
+    public sealed class FrameTimeStatistics
+    {
+        public string SourceTier { get; set; } = "";
+        public double? AverageMs { get; set; }
+        public double? MinimumMs { get; set; }
+        public double? MaximumMs { get; set; }
+        public double? P95Ms { get; set; }
+        public long FrameCount { get; set; }
+        public int SampleCount { get; set; }
+        public bool HasCompleteRawFrames { get; set; }
     }
 
     public static class MetricStatistics
@@ -139,6 +152,7 @@ namespace CSharpIosPerfMonitor
             }) / totalWeightMs;
             result.StandardDeviation = Math.Sqrt(result.Variance);
             result.Minimum = points.Min(delegate(WeightedFpsPoint point) { return point.Fps; });
+            result.Maximum = points.Max(delegate(WeightedFpsPoint point) { return point.Fps; });
             result.Median = WeightedMedian(points, totalWeightMs);
             double medianRangeLow = result.Median * 0.8;
             double medianRangeHigh = result.Median * 1.2;
@@ -166,6 +180,69 @@ namespace CSharpIosPerfMonitor
             result.DropPerHour = result.TotalDurationSec > 0
                 ? dropCount * 3600.0 / result.TotalDurationSec
                 : 0;
+            return result;
+        }
+
+        public static FrameTimeStatistics ComputeFrameTime(IEnumerable<PerfSample> source, bool includePercentile = true)
+        {
+            List<PerfSample> available = (source ?? Enumerable.Empty<PerfSample>())
+                .Where(sample => sample != null && sample.FpsUpdated && sample.OutOfOrderFrameTimestamps == 0
+                    && sample.InvalidFrameIntervals == 0 && !sample.FrameRingBufferOverrun
+                    && (sample.HasFrameTimeMean || sample.HasFrameTimeMax || FrameIntervalData.IsUsable(sample)))
+                .ToList();
+            List<PerfSample> samples = available.Where(sample => IsReliableJankSample(sample) && sample.FrameCount > 0).ToList();
+            bool ordered = samples.Count > 0;
+            if (!ordered) samples = available;
+            FrameTimeStatistics result = new FrameTimeStatistics
+            {
+                SampleCount = samples.Count,
+                SourceTier = samples.Count == 0 ? "" : ordered ? "exact_ordered" : "fallback_summaries"
+            };
+            if (samples.Count == 0) return result;
+
+            result.FrameCount = samples.Where(sample => sample.HasFrameObservation).Sum(sample => (long)Math.Max(0, sample.FrameCount));
+            result.HasCompleteRawFrames = samples.All(FrameIntervalData.IsUsable);
+            if (result.HasCompleteRawFrames)
+            {
+                List<double> intervals = includePercentile ? new List<double>() : null;
+                double sum = 0;
+                double minimum = double.MaxValue;
+                double maximum = 0;
+                foreach (PerfSample sample in samples)
+                {
+                    foreach (double interval in sample.FrameIntervalsMs)
+                    {
+                        sum += interval;
+                        minimum = Math.Min(minimum, interval);
+                        maximum = Math.Max(maximum, interval);
+                        intervals?.Add(interval);
+                    }
+                }
+                result.AverageMs = sum / result.FrameCount;
+                result.MinimumMs = minimum;
+                result.MaximumMs = maximum;
+                if (intervals != null)
+                {
+                    intervals.Sort();
+                    result.P95Ms = intervals[(int)Math.Ceiling(intervals.Count * 0.95) - 1];
+                }
+                return result;
+            }
+
+            // Old sessions cannot reconstruct a minimum or pooled percentile from window summaries.
+            if (result.FrameCount > 0 && samples.All(sample => sample.HasFrameObservation && sample.FrameCount > 0
+                && (FrameIntervalData.IsUsable(sample)
+                || (sample.HasFrameTimeMean && IsFinite(sample.FrameTimeMeanMs) && sample.FrameTimeMeanMs > 0 && sample.FrameTimeMeanMs <= 60000))))
+            {
+                result.AverageMs = samples.Sum(sample => FrameIntervalData.IsUsable(sample)
+                    ? sample.FrameIntervalsMs.Sum() : sample.FrameTimeMeanMs * sample.FrameCount) / result.FrameCount;
+            }
+            if (samples.All(sample => FrameIntervalData.IsUsable(sample)
+                || (sample.HasFrameTimeMax && IsFinite(sample.FrameTimeMaxMs) && sample.FrameTimeMaxMs > 0 && sample.FrameTimeMaxMs <= 60000)))
+            {
+                result.MaximumMs = samples.Max(sample => FrameIntervalData.IsUsable(sample)
+                    ? sample.FrameIntervalsMs.Max() : sample.FrameTimeMaxMs);
+            }
             return result;
         }
 
