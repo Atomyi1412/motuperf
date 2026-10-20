@@ -189,6 +189,8 @@ namespace CSharpIosPerfMonitor
         public string Version { get; set; }
         public string Platform { get; set; }
         public bool Recommended { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string PickerBadge => Recommended ? "当前前台" : BundleId == "com.tencent.mm" || BundleId == "com.tencent.xin" ? "常用宿主" : "";
         public string Reason { get; set; }
         public string IconKey { get; set; }
         public string IconPath { get; set; }
@@ -510,6 +512,36 @@ namespace CSharpIosPerfMonitor
         /// </summary>
         [System.Text.Json.Serialization.JsonIgnore]
         public bool ShowHarmonyUserScope { get; set; }
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string PickerGroupHeader { get; set; }
+
+        public string PickerRole
+        {
+            get
+            {
+                if (ProcessTargetMatcher.IsIosWebKitProcessRole(Name))
+                    return Name == "com.apple.WebKit.WebContent" ? "WebContent 内容进程"
+                        : Name == "com.apple.WebKit.GPU" ? "WebKit GPU 进程" : "WebKit 网络进程";
+                if ((Name ?? "").StartsWith("com.tencent.mm:appbrand", StringComparison.Ordinal)) return "小游戏进程";
+                if (!string.IsNullOrWhiteSpace(BundleId) && Name == BundleId) return "主进程";
+                return string.IsNullOrWhiteSpace(BundleId) ? "其他进程" : "子进程";
+            }
+        }
+
+        public string PickerBadge => ForegroundApplication ? "当前前台" : "";
+
+        public string PickerDetails
+        {
+            get
+            {
+                string state = ForegroundApplication ? "前台" : "前台状态未确认";
+                string owner = ProcessTargetMatcher.IsIosWebKitProcessRole(Name)
+                    ? OwnershipVerified && !OwnershipAmbiguous ? "宿主已确认 · " + OwnerBundleId : "宿主未确认"
+                    : "";
+                return string.Join(" · ", new[] { PickerRole, state, owner, PickerSubtitle }.Where(value => !string.IsNullOrWhiteSpace(value)));
+            }
+        }
 
         public string PickerSubtitle
         {

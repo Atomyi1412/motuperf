@@ -39,6 +39,7 @@ namespace MoTuPerf.Desktop
         private Image SelectedAppIcon;
         private Button ProcessTab;
         private Button LaunchTab;
+        private Button ConfirmButton;
         private CheckBox HarmonyShowAllCheckBox;
         private Grid ProcessPanel;
         private Grid LaunchPanel;
@@ -46,7 +47,7 @@ namespace MoTuPerf.Desktop
         private bool _launchMode;
         private bool _showAllHarmonyTargets;
         private bool _synchronizingSelections;
-        private readonly DeviceLookupService _lookup = new DeviceLookupService();
+        private readonly IDevicePickerLookup _lookup;
         private readonly DeviceSelection _initialSelection;
         private readonly List<AppInfo> _apps = new List<AppInfo>();
         private readonly List<ProcessInfo> _processes = new List<ProcessInfo>();
@@ -62,7 +63,7 @@ namespace MoTuPerf.Desktop
         private string _appleDriverButtonIdleText = "下载苹果设备驱动";
         private string _deviceCountStatus = "正在检测设备...";
         private DeviceDiagnosticsSnapshot _deviceDiagnostics = DeviceDiagnosticsFormatter.Loading();
-        private string _loadedDeviceUdid = "";
+        private string _loadedDeviceKey = "";
         private string _preferredAppBundleId = "";
         private int _preferredHarmonyUserId = -1;
         private int _preferredHarmonyAppIndex = -1;
@@ -70,6 +71,18 @@ namespace MoTuPerf.Desktop
         private int _pendingHarmonyLaunchUserId = -1;
         private int _pendingHarmonyLaunchAppIndex = -1;
         private string _launchTargetDeviceUdid = "";
+        private CancellationTokenSource _discoveryCancellation;
+        private readonly CancellationTokenSource _monitorCancellation = new CancellationTokenSource();
+        private long _discoveryGeneration;
+        private bool _discoveryRunning;
+        private bool _hadDeviceSelection;
+        private bool _appsLoading;
+        private bool _processesLoading;
+        private bool _confirming;
+        private bool _connectionCheckRejected;
+        private bool _needsDeviceDetails;
+        private readonly Dictionary<string, AppInfo> _lastApps = new Dictionary<string, AppInfo>();
+        private readonly Dictionary<string, ProcessInfo> _lastProcesses = new Dictionary<string, ProcessInfo>();
 
         public DevicePickerWindow()
             : this(null)
@@ -77,13 +90,21 @@ namespace MoTuPerf.Desktop
         }
 
         public DevicePickerWindow(DeviceSelection initialSelection)
+            : this(initialSelection, new DeviceLookupService())
         {
+        }
+
+        internal DevicePickerWindow(DeviceSelection initialSelection, IDevicePickerLookup lookup)
+        {
+            _lookup = lookup;
             _initialSelection = initialSelection;
             InitializeComponent();
-            Opened += async delegate { await LoadDevicesAsync(); };
+            Opened += async delegate { await LoadDevicesAsync(); _ = MonitorConnectionsAsync(); };
             Closed += delegate
             {
                 _closed = true;
+                _monitorCancellation.Cancel();
+                _discoveryCancellation?.Cancel();
                 CancelLoad();
                 CancelDriverDownload();
                 if (SelectedAppIcon != null) SelectedAppIcon.Source = null;
@@ -110,6 +131,7 @@ namespace MoTuPerf.Desktop
             SelectedAppIcon = this.FindControl<Image>("SelectedAppIcon");
             ProcessTab = this.FindControl<Button>("ProcessTab");
             LaunchTab = this.FindControl<Button>("LaunchTab");
+            ConfirmButton = this.FindControl<Button>("ConfirmButton");
             HarmonyShowAllCheckBox = this.FindControl<CheckBox>("HarmonyShowAllCheckBox");
             ProcessPanel = this.FindControl<Grid>("ProcessPanel");
             LaunchPanel = this.FindControl<Grid>("LaunchPanel");
@@ -124,38 +146,140 @@ namespace MoTuPerf.Desktop
             if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) BeginMoveDrag(e);
         }
 
-        private async Task LoadDevicesAsync()
+        internal async Task LoadDevicesAsync(bool monitor = false)
         {
             if (_closed) return;
-            long generation;
-            CancellationToken token = NewLoadToken(out generation);
-            ApplyDeviceDiagnostics(DeviceDiagnosticsFormatter.Loading());
-            AppleDriverButton.IsVisible = false;
-            HarmonyHdcButton.IsVisible = false;
+            if (monitor && _discoveryRunning) return;
+            _discoveryCancellation?.Cancel();
+            _discoveryCancellation?.Dispose();
+            _discoveryCancellation = CancellationTokenSource.CreateLinkedTokenSource(_monitorCancellation.Token);
+            CancellationToken token = _discoveryCancellation.Token;
+            long generation = ++_discoveryGeneration;
+            _discoveryRunning = true;
+            bool completed = false;
+            if (!monitor)
+            {
+                ApplyDeviceDiagnostics(DeviceDiagnosticsFormatter.Loading());
+                AppleDriverButton.IsVisible = false;
+                HarmonyHdcButton.IsVisible = false;
+            }
             try
             {
-                DeviceDiscoveryReport report = await _lookup.DiscoverDevicesAsync(token);
-                if (!IsCurrentLoad(generation)) return;
-                DeviceList.ItemsSource = report.Devices;
+                DeviceDiscoveryReport report = await _lookup.DiscoverDevicesAsync(token,
+                    monitor ? null : partial => Dispatcher.UIThread.Post(() =>
+                    {
+                        if (!_closed && !completed && generation == _discoveryGeneration && !token.IsCancellationRequested)
+                            ApplyDiscoveredDevices(partial, false);
+                    }), includeDetails: !monitor);
+                if (_closed || generation != _discoveryGeneration || token.IsCancellationRequested) return;
+                completed = true;
+                DeviceInfo selectedDevice = DeviceList.SelectedItem as DeviceInfo;
+                if (selectedDevice != null && !report.Devices.Any(item => DeviceKey(item) == DeviceKey(selectedDevice)))
+                {
+                    bool? online = await _lookup.IsDeviceOnlineAsync(selectedDevice.Udid, selectedDevice.Platform, token);
+                    if (_closed || generation != _discoveryGeneration || token.IsCancellationRequested) return;
+                    if (online != false)
+                    {
+                        // Failed inventory is not evidence of a disconnect. Confirmation still probes online.
+                        report.Devices.Add(selectedDevice);
+                        StatusText.Text = "设备清单暂不可用，已保留当前选择，请查看检测详情。";
+                    }
+                }
+                ApplyDiscoveredDevices(report, true, preserveDetails: monitor);
+                string previousStatus = StatusText.Text;
                 ApplyDeviceDiagnostics(DeviceDiagnosticsFormatter.FromReport(report));
+                if (monitor && DeviceList.SelectedItem != null) StatusText.Text = previousStatus;
+                if (_hadDeviceSelection && DeviceList.SelectedItem == null)
+                    StatusText.Text = "所选设备已断开，请重新连接并选择设备。";
                 AppleDriverButton.IsVisible = report.AppleDriverActionAvailable;
                 HarmonyHdcButton.IsVisible = _deviceDiagnostics.HarmonyHdcActionAvailable;
                 _appleDriverButtonIdleText = report.AppleDriverMissing ? "下载苹果设备驱动" : "修复苹果设备驱动";
                 AppleDriverButton.Content = _appleDriverButtonIdleText;
-                DeviceInfo preferred = report.Devices.FirstOrDefault(delegate(DeviceInfo device)
-                {
-                    return _initialSelection != null && _initialSelection.Device != null && device.Udid == _initialSelection.Device.Udid;
-                }) ?? report.Devices.FirstOrDefault(delegate(DeviceInfo device) { return device.Recommended; }) ?? report.Devices.FirstOrDefault();
-                DeviceList.SelectedItem = preferred;
-                UpdateHarmonyTargetFilterVisibility(preferred, true);
             }
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
+                if (_closed || generation != _discoveryGeneration) return;
                 ApplyDeviceDiagnostics(DeviceDiagnosticsFormatter.Error("设备检测失败：" + ex.Message, ex.Message, ex.Message));
                 AppleDriverButton.IsVisible = false;
                 HarmonyHdcButton.IsVisible = false;
             }
+            finally { completed = true; if (generation == _discoveryGeneration) _discoveryRunning = false; }
+        }
+
+        private async Task MonitorConnectionsAsync()
+        {
+            try
+            {
+                while (!_closed)
+                {
+                    await Task.Delay(5000, _monitorCancellation.Token);
+                    if (!_launchInProgress && !_driverDownloadInProgress && !_confirming)
+                    {
+                        await LoadDevicesAsync(monitor: true);
+                        if (_needsDeviceDetails && !_closed) { _needsDeviceDetails = false; await LoadDevicesAsync(); }
+                    }
+                }
+            }
+            catch (OperationCanceledException) { }
+        }
+
+        internal static string DeviceKey(DeviceInfo device)
+        {
+            return device == null ? "" : (device.Platform ?? "").ToLowerInvariant() + ":" + device.Udid;
+        }
+
+        private void ApplyDiscoveredDevices(DeviceDiscoveryReport report, bool complete, bool preserveDetails = false)
+        {
+            DeviceInfo current = DeviceList.SelectedItem as DeviceInfo;
+            var existing = (DeviceList.ItemsSource as IEnumerable<DeviceInfo> ?? Enumerable.Empty<DeviceInfo>()).ToList();
+            var devices = complete ? report.Devices.ToList() : existing.ToList();
+            foreach (DeviceInfo discovered in report.Devices)
+            {
+                DeviceInfo old = existing.FirstOrDefault(item => DeviceKey(item) == DeviceKey(discovered));
+                if (preserveDetails && old == null) _needsDeviceDetails = true;
+                // A connection probe must not replace enriched metadata with basic fields.
+                DeviceInfo item = preserveDetails && old != null ? old : discovered;
+                devices.RemoveAll(value => DeviceKey(value) == DeviceKey(item));
+                devices.Add(item);
+            }
+            devices = devices.OrderBy(item => DeviceKey(item), StringComparer.Ordinal).ToList();
+            DeviceInfo selected = devices.FirstOrDefault(item => DeviceKey(item) == DeviceKey(current));
+            if (current == null && !_hadDeviceSelection)
+            {
+                selected = devices.FirstOrDefault(item => DeviceKey(item) == DeviceKey(_initialSelection?.Device));
+                if (selected == null && (complete || _initialSelection?.Device == null)) selected = devices.FirstOrDefault();
+            }
+            bool changed = DeviceKey(current) != DeviceKey(selected);
+            RunSelectionSync(() => { DeviceList.ItemsSource = devices; DeviceList.SelectedItem = selected; });
+            if (selected != null) _hadDeviceSelection = true;
+            UpdateHarmonyTargetFilterVisibility(selected, changed);
+            if (changed)
+            {
+                if (selected == null)
+                {
+                    CancelLoad();
+                    _apps.Clear(); _processes.Clear();
+                    _appsLoading = _processesLoading = _targetsLoading = false;
+                    RunSelectionSync(() => { AppList.ItemsSource = null; ProcessList.ItemsSource = null; });
+                    UpdateSelectedAppSummary(null);
+                    StatusText.Text = "所选设备已断开，请重新连接并选择设备。";
+                }
+                else _ = LoadTargetsAsync();
+            }
+            UpdateActionState();
+        }
+
+        private void UpdateActionState()
+        {
+            if (ConfirmButton == null) return;
+            ProcessInfo target = _launchMode ? FindProcessForApp(AppList.SelectedItem as AppInfo) : ProcessList.SelectedItem as ProcessInfo;
+            ConfirmButton.IsEnabled = !_closed && !_confirming && !_launchInProgress && !_connectionCheckRejected
+                && DeviceList.SelectedItem != null && !_processesLoading
+                && ProcessTargetMatcher.IsValidTarget(target);
+            Button launch = this.FindControl<Button>("LaunchButton");
+            if (launch != null) launch.IsEnabled = !_launchInProgress && !_appsLoading && !_confirming
+                && DeviceList.SelectedItem != null && AppList.SelectedItem != null;
         }
 
         private void ApplyDeviceDiagnostics(DeviceDiagnosticsSnapshot snapshot)
@@ -235,7 +359,12 @@ namespace MoTuPerf.Desktop
             }
         }
 
-        private async void DeviceSelectionChanged(object sender, SelectionChangedEventArgs e) { await LoadTargetsAsync(); }
+        private async void DeviceSelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_synchronizingSelections) return;
+            if (DeviceList.SelectedItem != null) _hadDeviceSelection = true;
+            await LoadTargetsAsync();
+        }
         private void AppSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_synchronizingSelections) return;
@@ -245,6 +374,8 @@ namespace MoTuPerf.Desktop
             ClearPendingHarmonyLaunchTarget();
             UpdateSelectedAppSummary(app);
             if (!_launchMode) RunSelectionSync(ApplyProcessFilter);
+            RememberSelection();
+            UpdateActionState();
         }
 
         private void ProcessSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -261,6 +392,16 @@ namespace MoTuPerf.Desktop
             });
             ClearPendingHarmonyLaunchTarget();
             UpdateSelectedAppSummary(app);
+            RememberSelection();
+            UpdateActionState();
+        }
+
+        private void RememberSelection()
+        {
+            string key = DeviceKey(DeviceList.SelectedItem as DeviceInfo);
+            if (key.Length == 0) return;
+            _lastApps[key] = AppList.SelectedItem as AppInfo;
+            _lastProcesses[key] = ProcessList.SelectedItem as ProcessInfo;
         }
 
         private void ShowProcessTab(object sender, Avalonia.Interactivity.RoutedEventArgs e) { SetLaunchMode(false); }
@@ -270,7 +411,7 @@ namespace MoTuPerf.Desktop
             await LoadTargetsAsync();
         }
 
-        private async Task<bool> LoadTargetsAsync()
+        internal async Task<bool> LoadTargetsAsync()
         {
             if (_closed) return false;
             DeviceInfo device = DeviceList.SelectedItem as DeviceInfo;
@@ -278,8 +419,13 @@ namespace MoTuPerf.Desktop
             {
                 CancelLoad();
                 _targetsLoading = false;
+                _appsLoading = _processesLoading = false;
+                _apps.Clear(); _processes.Clear();
+                RunSelectionSync(() => { AppList.ItemsSource = null; ProcessList.ItemsSource = null; });
+                UpdateSelectedAppSummary(null);
                 ClearPendingHarmonyLaunchTarget();
                 UpdateHarmonyTargetFilterVisibility(null, true);
+                UpdateActionState();
                 return false;
             }
             string deviceUdid = device.Udid ?? "";
@@ -293,21 +439,35 @@ namespace MoTuPerf.Desktop
             int harmonyTargetAppIndex = !string.IsNullOrWhiteSpace(_preferredAppBundleId)
                 ? _preferredHarmonyAppIndex : _pendingHarmonyLaunchAppIndex;
             bool waitForLaunch = !string.IsNullOrWhiteSpace(_preferredAppBundleId);
-            AppInfo previousApp = string.Equals(_loadedDeviceUdid, deviceUdid, StringComparison.OrdinalIgnoreCase)
+            AppInfo previousApp = string.Equals(_loadedDeviceKey, DeviceKey(device), StringComparison.OrdinalIgnoreCase)
                 ? AppList.SelectedItem as AppInfo
                 : null;
-            ProcessInfo previousProcess = string.Equals(_loadedDeviceUdid, deviceUdid, StringComparison.OrdinalIgnoreCase)
+            ProcessInfo previousProcess = string.Equals(_loadedDeviceKey, DeviceKey(device), StringComparison.OrdinalIgnoreCase)
                 ? ProcessList.SelectedItem as ProcessInfo
                 : null;
+            string selectionKey = DeviceKey(device);
+            if (previousApp == null) _lastApps.TryGetValue(selectionKey, out previousApp);
+            if (previousProcess == null) _lastProcesses.TryGetValue(selectionKey, out previousProcess);
+            if (DeviceKey(device) == DeviceKey(_initialSelection?.Device))
+            {
+                if (!_lastApps.ContainsKey(selectionKey)) previousApp = previousApp ?? _initialSelection?.App;
+                if (!_lastProcesses.ContainsKey(selectionKey)) previousProcess = previousProcess ?? _initialSelection?.Process;
+            }
             long generation;
             CancellationToken token = NewLoadToken(out generation);
+            _connectionCheckRejected = false;
             _targetsLoading = true;
+            _appsLoading = _processesLoading = true;
+            UpdateActionState();
             StatusText.Text = "正在读取 " + device.PickerLabel + " 的 APP 和进程...";
             RunSelectionSync(delegate
             {
                 AppList.ItemsSource = null;
                 ProcessList.ItemsSource = null;
             });
+            UpdateActionState();
+            if (!DeviceLookupService.IsHarmony(device))
+                return await LoadIndependentTargetsAsync(device, previousApp, previousProcess, token, generation);
             try
             {
                 List<AppInfo> loadedApps = null;
@@ -399,8 +559,8 @@ namespace MoTuPerf.Desktop
                 if (!preserveHarmonyAppPreference)
                 {
                     selectedApp = selectedApp
-                        ?? FindInitialApp()
                         ?? (previousApp == null ? null : _apps.FirstOrDefault(delegate(AppInfo app) { return SameAppSelection(app, previousApp); }))
+                        ?? (previousApp == null ? FindInitialApp() : null)
                         ?? _apps.FirstOrDefault(delegate(AppInfo app) { return app.Recommended; })
                         ?? _apps.FirstOrDefault(delegate(AppInfo app) { return !string.IsNullOrWhiteSpace(app.BundleId); })
                         ?? _apps.FirstOrDefault();
@@ -412,7 +572,7 @@ namespace MoTuPerf.Desktop
                 if (DeviceLookupService.IsHarmony(device) && !preserveHarmonyAppPreference && !_launchMode)
                 {
                     ProcessInfo restoredProcess = previousProcess == null ? null : _processes.FirstOrDefault(process => SameProcessSelection(process, previousProcess));
-                    restoredProcess = restoredProcess ?? FindInitialProcess();
+                    if (previousProcess == null) restoredProcess = FindInitialProcess();
                     if (restoredProcess != null)
                     {
                         selectedProcess = restoredProcess;
@@ -425,14 +585,14 @@ namespace MoTuPerf.Desktop
                     selectedApp,
                     selectedProcess))
                 {
-                    selectedProcess = FindInitialProcess()
-                        ?? (previousProcess == null ? null : _processes.FirstOrDefault(delegate(ProcessInfo process)
+                    selectedProcess = (previousProcess == null ? null : _processes.FirstOrDefault(delegate(ProcessInfo process)
                         {
                             return SameProcessSelection(process, previousProcess);
                         }))
-                        ?? _processes.FirstOrDefault(delegate(ProcessInfo process) { return process.Recommended; })
-                        ?? _processes.FirstOrDefault();
+                        ?? (previousProcess == null ? _processes.FirstOrDefault(delegate(ProcessInfo process) { return process.Recommended; }) : null);
                 }
+                if (!waitForLaunch && previousProcess != null && !_launchMode)
+                    selectedProcess = _processes.FirstOrDefault(process => SameProcessSelection(process, previousProcess));
                 bool launchProcessMissing = DeviceLookupService.IsHarmony(device)
                     && !string.IsNullOrWhiteSpace(harmonyTargetBundleId)
                     && selectedProcess == null;
@@ -454,6 +614,7 @@ namespace MoTuPerf.Desktop
                     ProcessList.SelectedItem = selectedProcess;
                 });
                 UpdateSelectedAppSummary(selectedApp ?? FindAppForProcess(selectedProcess));
+                RememberSelection();
                 StatusText.Text = launchProcessMissing
                     ? string.IsNullOrWhiteSpace(harmonyProcessInventoryError)
                         ? "APP 已启动，但暂未检测到唯一匹配进程，请刷新或手动选择真实 PID。"
@@ -473,7 +634,7 @@ namespace MoTuPerf.Desktop
                                     ? "，请刷新或检查 HDC 进程权限。"
                                     : "：" + harmonyUserInventoryError + ""
                                 : "：" + harmonyProcessInventoryError + "。请刷新或检查 HDC 进程权限。");
-                _loadedDeviceUdid = deviceUdid;
+                _loadedDeviceKey = DeviceKey(device);
                 _preferredAppBundleId = "";
                 _preferredHarmonyUserId = -1;
                 _preferredHarmonyAppIndex = -1;
@@ -494,7 +655,119 @@ namespace MoTuPerf.Desktop
             }
             finally
             {
-                if (IsCurrentLoad(generation, deviceUdid)) _targetsLoading = false;
+                if (IsCurrentLoad(generation, deviceUdid))
+                {
+                    _appsLoading = _processesLoading = _targetsLoading = false;
+                    UpdateActionState();
+                }
+            }
+        }
+
+        private async Task<bool> LoadIndependentTargetsAsync(DeviceInfo device, AppInfo previousApp,
+            ProcessInfo previousProcess, CancellationToken token, long generation)
+        {
+            string udid = device.Udid;
+            string key = DeviceKey(device);
+            string launchBundle = _preferredAppBundleId;
+            _apps.Clear(); _processes.Clear();
+            _loadedDeviceKey = DeviceKey(device);
+            Exception appsError = null, processesError = null;
+            async Task ReadApps()
+            {
+                try
+                {
+                    List<AppInfo> apps = await _lookup.ListAppsAsync(device, token);
+                    if (!IsCurrentLoad(generation, udid)) return;
+                    AppInfo selected = AppList.SelectedItem as AppInfo ?? previousApp;
+                    _apps.Clear(); _apps.AddRange(apps ?? new List<AppInfo>());
+                    UpdateAppRecommendations();
+                    ProcessInfo process = ProcessList.SelectedItem as ProcessInfo;
+                    if (!_launchMode && process != null) selected = FindAppForProcess(process);
+                    AppInfo restored = selected == null ? null : _apps.FirstOrDefault(item => SameAppSelection(item, selected));
+                    if (!string.IsNullOrWhiteSpace(launchBundle)) restored = FindAppByBundle(launchBundle);
+                    if (selected == null && restored == null) restored = _apps.FirstOrDefault(item => item.Recommended) ?? _apps.FirstOrDefault();
+                    RunSelectionSync(() =>
+                    {
+                        ApplyAppFilter(); AppList.SelectedItem = restored;
+                        if (!_launchMode) { ApplyProcessFilter(); ProcessList.SelectedItem = process; }
+                    });
+                    UpdateSelectedAppSummary(_launchMode ? restored : FindAppForProcess(process));
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex) { appsError = ex; }
+                finally
+                {
+                    if (IsCurrentLoad(generation, udid)) { _appsLoading = false; ShowLoadStatus(); UpdateActionState(); }
+                }
+            }
+            async Task ReadProcesses()
+            {
+                try
+                {
+                    List<ProcessInfo> processes = await _lookup.ListProcessesAsync(device, token);
+                    if (!IsCurrentLoad(generation, udid)) return;
+                    _processes.Clear(); _processes.AddRange(processes ?? new List<ProcessInfo>());
+                    UpdateAppRecommendations();
+                    ProcessInfo restored = previousProcess == null ? null : _processes.FirstOrDefault(item => SameProcessSelection(item, previousProcess));
+                    if (!string.IsNullOrWhiteSpace(launchBundle)) restored = FindProcessForBundle(_processes, launchBundle);
+                    else if (previousProcess == null && !_lastProcesses.ContainsKey(key)) restored = _processes.FirstOrDefault(item => item.ForegroundApplication)
+                        ?? _processes.FirstOrDefault(item => item.Recommended) ?? _processes.FirstOrDefault(item => !string.IsNullOrWhiteSpace(item.BundleId));
+                    RunSelectionSync(() =>
+                    {
+                        ApplyProcessFilter(); ProcessList.SelectedItem = restored;
+                        if (!_launchMode) AppList.SelectedItem = FindAppForProcess(restored);
+                        ApplyAppFilter();
+                    });
+                    if (!_launchMode) UpdateSelectedAppSummary(FindAppForProcess(restored));
+                    if (previousProcess != null && restored == null)
+                        _lastProcesses[key] = previousProcess;
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex) { processesError = ex; }
+                finally
+                {
+                    if (IsCurrentLoad(generation, udid)) { _processesLoading = false; ShowLoadStatus(); UpdateActionState(); }
+                }
+            }
+            void ShowLoadStatus()
+            {
+                var messages = new List<string>();
+                if (_appsLoading) messages.Add("APP 清单读取中，已就绪的进程可直接选择");
+                if (_processesLoading) messages.Add("进程读取中，已就绪的 APP 可先选择");
+                if (appsError != null) messages.Add("APP 清单读取失败：" + appsError.Message + "；可直接选择已读取的 PID");
+                if (processesError != null) messages.Add("进程读取失败：" + processesError.Message + "；请启动目标后刷新");
+                if (!_processesLoading && processesError == null && previousProcess != null && ProcessList.SelectedItem == null)
+                    messages.Add("原进程已退出或实例已变化，请重新选择进程");
+                StatusText.Text = messages.Count == 0 ? _deviceCountStatus : string.Join("；", messages);
+            }
+            try
+            {
+                await Task.WhenAll(ReadApps(), ReadProcesses());
+                if (!IsCurrentLoad(generation, udid) || token.IsCancellationRequested) return false;
+                _preferredAppBundleId = "";
+                _preferredHarmonyUserId = _preferredHarmonyAppIndex = -1;
+                _ = HydrateIconsAndRefreshAsync(device, _apps.ToArray(), _processes.ToArray(), token, generation, udid);
+                return string.IsNullOrWhiteSpace(launchBundle)
+                    ? appsError == null || processesError == null
+                    : processesError == null && ProcessList.SelectedItem != null;
+            }
+            finally
+            {
+                if (IsCurrentLoad(generation, udid))
+                {
+                    _appsLoading = _processesLoading = _targetsLoading = false;
+                    ShowLoadStatus(); UpdateActionState();
+                }
+            }
+        }
+
+        private void UpdateAppRecommendations()
+        {
+            foreach (AppInfo app in _apps)
+            {
+                if (DeviceLookupService.IsHarmony(app.Platform)) continue;
+                app.Recommended = _processes.Any(process => process.ForegroundApplication
+                    && string.Equals(process.BundleId, app.BundleId, StringComparison.Ordinal));
             }
         }
 
@@ -557,7 +830,8 @@ namespace MoTuPerf.Desktop
 
         private async void LaunchSelectedApp(object sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
-            if (_launchInProgress || _targetsLoading || _driverDownloadInProgress) return;
+            if (_launchInProgress || _appsLoading || _driverDownloadInProgress
+                || (DeviceLookupService.IsHarmony(DeviceList.SelectedItem as DeviceInfo) && _targetsLoading)) return;
             DeviceInfo device = DeviceList.SelectedItem as DeviceInfo;
             AppInfo app = AppList.SelectedItem as AppInfo;
             if (device == null || app == null)
@@ -572,6 +846,7 @@ namespace MoTuPerf.Desktop
                 return;
             }
             _launchInProgress = true;
+            UpdateActionState();
             try
             {
                 StatusText.Text = "正在启动 " + app.Name + "...";
@@ -640,6 +915,7 @@ namespace MoTuPerf.Desktop
                 if (!string.IsNullOrWhiteSpace(_preferredAppBundleId))
                     ClearPendingHarmonyLaunchTarget();
                 _launchInProgress = false;
+                UpdateActionState();
             }
         }
 
@@ -725,8 +1001,8 @@ namespace MoTuPerf.Desktop
                 requestedApp.HarmonyAppIndex);
         }
 
-        private void AppSearchChanged(object sender, TextChangedEventArgs e) { RunSelectionSync(ApplyAppFilter); }
-        private void ProcessSearchChanged(object sender, TextChangedEventArgs e) { RunSelectionSync(ApplyProcessFilter); }
+        private void AppSearchChanged(object sender, TextChangedEventArgs e) { RunSelectionSync(ApplyAppFilter); UpdateActionState(); }
+        private void ProcessSearchChanged(object sender, TextChangedEventArgs e) { RunSelectionSync(ApplyProcessFilter); UpdateActionState(); }
         private void HarmonyShowAllTargetsChanged(object sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             _showAllHarmonyTargets = HarmonyShowAllCheckBox != null && HarmonyShowAllCheckBox.IsChecked == true;
@@ -735,11 +1011,12 @@ namespace MoTuPerf.Desktop
                 ApplyAppFilter();
                 ApplyProcessFilter();
             });
+            UpdateActionState();
         }
 
         private void UpdateHarmonyTargetFilterVisibility(DeviceInfo device, bool reset)
         {
-            bool visible = DeviceLookupService.IsHarmony(device);
+            bool visible = DeviceLookupService.IsHarmony(device) || DeviceLookupService.IsAndroid(device);
             if (reset && !visible) _showAllHarmonyTargets = false;
             if (HarmonyShowAllCheckBox == null) return;
             HarmonyShowAllCheckBox.IsVisible = visible;
@@ -750,7 +1027,8 @@ namespace MoTuPerf.Desktop
             string query = (AppSearch.Text ?? "").Trim();
             AppInfo current = AppList.SelectedItem as AppInfo;
             DeviceInfo selectedDevice = DeviceList.SelectedItem as DeviceInfo;
-            IEnumerable<AppInfo> source = _apps;
+            IEnumerable<AppInfo> source = _apps.OrderByDescending(app => app.Recommended)
+                .ThenBy(app => app.PickerBadge.Length == 0 ? 1 : 0).ThenBy(app => app.Name, StringComparer.OrdinalIgnoreCase);
             if (DeviceLookupService.IsHarmony(selectedDevice) && !_showAllHarmonyTargets
                 && string.IsNullOrWhiteSpace(query))
                 source = source.Where(IsHarmonyDefaultAppTarget);
@@ -773,6 +1051,12 @@ namespace MoTuPerf.Desktop
             if (DeviceLookupService.IsHarmony(selectedDevice) && !_showAllHarmonyTargets
                 && string.IsNullOrWhiteSpace(query))
                 source = source.Where(process => IsHarmonyDefaultProcessTarget(process, _apps));
+            if (DeviceLookupService.IsAndroid(selectedDevice) && !_showAllHarmonyTargets && string.IsNullOrWhiteSpace(query))
+                source = source.Where(process => process.ForegroundApplication
+                    || SameProcessSelection(process, current)
+                    || (!string.IsNullOrWhiteSpace(process.BundleId)
+                        && !process.BundleId.StartsWith("com.android.", StringComparison.Ordinal)
+                        && !process.BundleId.StartsWith("android.", StringComparison.Ordinal)));
             if (string.IsNullOrWhiteSpace(query))
             {
                 DeviceInfo device = DeviceList.SelectedItem as DeviceInfo;
@@ -796,9 +1080,9 @@ namespace MoTuPerf.Desktop
                         || Contains(process.OwnerBundleId, query) || Contains(process.Reason, query) || process.Pid.ToString().Contains(query);
                 });
             }
-            List<ProcessInfo> items = source.OrderByDescending(delegate(ProcessInfo process) { return process.Recommended; }).ToList();
+            List<ProcessInfo> items = GroupProcesses(source);
             ProcessList.ItemsSource = items;
-            ProcessInfo selected = current == null ? null : items.FirstOrDefault(delegate(ProcessInfo process) { return process.Pid == current.Pid; });
+            ProcessInfo selected = current == null ? null : items.FirstOrDefault(process => SameProcessSelection(process, current));
             AppInfo selectedAppForProcess = AppList.SelectedItem as AppInfo;
             ProcessInfo matchingAppProcess = FindProcessForApp(selectedAppForProcess);
             if (DeviceLookupService.IsHarmony(selectedDevice))
@@ -807,10 +1091,39 @@ namespace MoTuPerf.Desktop
                     _pendingHarmonyLaunchBundleId, _pendingHarmonyLaunchUserId, _pendingHarmonyLaunchAppIndex);
                 return;
             }
-            if (selected == null && matchingAppProcess != null)
+            if (current == null && selected == null && matchingAppProcess != null)
                 selected = items.FirstOrDefault(delegate(ProcessInfo process) { return process.Pid == matchingAppProcess.Pid; });
-            selected = selected ?? items.FirstOrDefault(delegate(ProcessInfo process) { return process.Recommended; }) ?? items.FirstOrDefault();
+            if (current == null && selected == null && !_lastProcesses.ContainsKey(DeviceKey(selectedDevice)))
+                selected = items.FirstOrDefault(process => process.ForegroundApplication) ?? items.FirstOrDefault(process => process.Recommended);
             ProcessList.SelectedItem = selected;
+        }
+
+        private List<ProcessInfo> GroupProcesses(IEnumerable<ProcessInfo> source)
+        {
+            string Key(ProcessInfo process)
+            {
+                string bundle = ProcessTargetMatcher.IsIosWebKitProcessRole(process.Name)
+                    ? process.OwnershipVerified && !process.OwnershipAmbiguous ? process.OwnerBundleId : ""
+                    : FirstNonEmpty(process.BundleId, process.OwnershipVerified ? process.OwnerBundleId : "");
+                return (process.Platform ?? "") + ":" + FirstNonEmpty(bundle, "pid:" + process.Pid)
+                    + (DeviceLookupService.IsHarmony(process.Platform) ? ":" + process.HarmonyUserId + ":" + process.HarmonyAppIndex : "");
+            }
+            var result = new List<ProcessInfo>();
+            foreach (var group in source.GroupBy(Key)
+                .OrderByDescending(items => items.Any(process => process.ForegroundApplication))
+                .ThenBy(items => items.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                var rows = group.OrderByDescending(process => process.ForegroundApplication)
+                    .ThenBy(process => process.PickerRole, StringComparer.Ordinal).ThenBy(process => process.Pid).ToList();
+                foreach (ProcessInfo process in rows) process.PickerGroupHeader = "";
+                ProcessInfo first = rows[0];
+                AppInfo app = FindAppForProcess(first);
+                first.PickerGroupHeader = FirstNonEmpty(app?.Name,
+                    first.OwnershipVerified ? first.OwnerDisplayName : "", app?.BundleId,
+                    first.BundleId, "其他进程") + (rows.Any(item => item.ForegroundApplication) ? " · 当前前台" : "");
+                result.AddRange(rows);
+            }
+            return result;
         }
 
         internal static bool IsHarmonyDefaultAppTarget(AppInfo app)
@@ -865,12 +1178,12 @@ namespace MoTuPerf.Desktop
             return items.FirstOrDefault(process => process.Recommended) ?? items.FirstOrDefault();
         }
 
-        private void Confirm(object sender, Avalonia.Interactivity.RoutedEventArgs e)
+        private async void Confirm(object sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             DeviceInfo device = DeviceList.SelectedItem as DeviceInfo;
             ProcessInfo process = ProcessList.SelectedItem as ProcessInfo;
             AppInfo app = AppList.SelectedItem as AppInfo;
-            if (_launchInProgress || _targetsLoading)
+            if (_launchInProgress || _processesLoading || _confirming)
             {
                 StatusText.Text = "正在读取或匹配目标进程，请稍候。";
                 return;
@@ -886,13 +1199,35 @@ namespace MoTuPerf.Desktop
                 }
             }
             else
-                app = app ?? FindAppForProcess(process);
+            {
+                if (_launchMode) process = FindProcessForApp(app);
+                else app = FindAppForProcess(process);
+            }
             if (device == null || !ProcessTargetMatcher.IsValidTarget(process))
             {
                 StatusText.Text = "当前进程 PID 无效，请刷新进程列表后重新选择。";
                 return;
             }
-            Close(new DeviceSelection(device, app, process, AutoStartCheckBox.IsChecked == true));
+            _confirming = true;
+            UpdateActionState();
+            long generation = _loadGeneration;
+            try
+            {
+                bool? online = await _lookup.IsDeviceOnlineAsync(device.Udid, device.Platform, _monitorCancellation.Token);
+                if (_closed || generation != _loadGeneration || DeviceKey(device) != DeviceKey(DeviceList.SelectedItem as DeviceInfo)
+                    || !SameProcessSelection(process, _launchMode ? FindProcessForApp(AppList.SelectedItem as AppInfo) : ProcessList.SelectedItem as ProcessInfo)) return;
+                if (online != true)
+                {
+                    _connectionCheckRejected = true;
+                    StatusText.Text = online == false ? "所选设备已离线，请重新连接并刷新。" : "暂时无法确认设备连接，请查看检测详情并刷新。";
+                    ProcessList.SelectedItem = null;
+                    return;
+                }
+                Close(new DeviceSelection(device, app, process, AutoStartCheckBox.IsChecked == true));
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { if (!_closed) StatusText.Text = "设备连接检查失败：" + ex.Message; }
+            finally { _confirming = false; UpdateActionState(); }
         }
 
         internal static bool ShouldAutoSelectFallbackProcess(
@@ -998,6 +1333,7 @@ namespace MoTuPerf.Desktop
                 if (launchMode) ApplyAppFilter();
                 else ApplyProcessFilter();
             });
+            UpdateActionState();
         }
 
         private void RunSelectionSync(Action action)
@@ -1013,7 +1349,9 @@ namespace MoTuPerf.Desktop
             if (process == null) return null;
             if (DeviceLookupService.IsHarmony(process.Platform))
                 return FindHarmonyAppForProcess(_apps, process);
-            string bundle = FirstNonEmpty(process.BundleId, process.OwnerBundleId);
+            string bundle = ProcessTargetMatcher.IsIosWebKitProcessRole(process.Name)
+                ? process.OwnershipVerified && !process.OwnershipAmbiguous ? process.OwnerBundleId : ""
+                : FirstNonEmpty(process.BundleId, process.OwnershipVerified && !process.OwnershipAmbiguous ? process.OwnerBundleId : "");
             AppInfo pidMatch = _apps.FirstOrDefault(delegate(AppInfo app)
             {
                 if (app == null) return false;
@@ -1130,8 +1468,15 @@ namespace MoTuPerf.Desktop
         private static bool SameProcessSelection(ProcessInfo current, ProcessInfo selected)
         {
             if (current == null || selected == null || current.Pid != selected.Pid) return false;
+            if (!string.Equals(current.DeviceUdid, selected.DeviceUdid, StringComparison.Ordinal)
+                && !string.IsNullOrWhiteSpace(current.DeviceUdid) && !string.IsNullOrWhiteSpace(selected.DeviceUdid)) return false;
             if (DeviceLookupService.IsHarmony(current.Platform) || DeviceLookupService.IsHarmony(selected.Platform))
                 return ProcessTargetMatcher.SameHarmonyProcessInstance(current, selected);
+            if (DeviceLookupService.IsAndroid(current.Platform) || DeviceLookupService.IsAndroid(selected.Platform))
+                return ProcessTargetMatcher.SameAndroidProcessInstance(current, selected);
+            if (selected.ProcessUniqueId > 0 && current.ProcessUniqueId != selected.ProcessUniqueId) return false;
+            if (selected.StartAbsTime > 0 && current.StartAbsTime != selected.StartAbsTime) return false;
+            if (!string.IsNullOrWhiteSpace(selected.StartedAt) && current.StartedAt != selected.StartedAt) return false;
             return string.IsNullOrWhiteSpace(selected.Name)
                 || string.Equals(current.Name, selected.Name, StringComparison.OrdinalIgnoreCase);
         }
@@ -1160,9 +1505,11 @@ namespace MoTuPerf.Desktop
                 .Where(delegate(ProcessInfo process)
                 {
                     return string.Equals(process.BundleId, bundle, StringComparison.OrdinalIgnoreCase)
-                        || string.Equals(process.OwnerBundleId, bundle, StringComparison.OrdinalIgnoreCase);
+                        || (process.OwnershipVerified && !process.OwnershipAmbiguous
+                            && string.Equals(process.OwnerBundleId, bundle, StringComparison.OrdinalIgnoreCase));
                 })
-                .OrderByDescending(delegate(ProcessInfo process) { return string.Equals(process.Name, bundle, StringComparison.OrdinalIgnoreCase); })
+                .OrderByDescending(process => process.ForegroundApplication)
+                .ThenByDescending(delegate(ProcessInfo process) { return string.Equals(process.Name, bundle, StringComparison.OrdinalIgnoreCase); })
                 .ThenByDescending(delegate(ProcessInfo process) { return process.Recommended; })
                 .FirstOrDefault();
         }

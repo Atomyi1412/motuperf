@@ -15,7 +15,8 @@ namespace CSharpIosPerfMonitor
             return discovery.Devices;
         }
 
-        public async Task<PlatformDeviceDiscovery> DiscoverDevicesAsync(CancellationToken token)
+        public async Task<PlatformDeviceDiscovery> DiscoverDevicesAsync(CancellationToken token,
+            bool includeDetails = true, Action<PlatformDeviceDiscovery> onBasicDevices = null)
         {
             PlatformDeviceDiscovery discovery = new PlatformDeviceDiscovery();
             try
@@ -51,6 +52,10 @@ namespace CSharpIosPerfMonitor
                         Recommended = i == 0
                     };
                     discovery.Devices.Add(device);
+                }
+                onBasicDevices?.Invoke(discovery);
+                foreach (DeviceInfo device in includeDetails ? discovery.Devices : new List<DeviceInfo>())
+                {
                     string detailIssue = await EnrichDeviceDetailsAsync(device, token);
                     if (!string.IsNullOrWhiteSpace(detailIssue))
                         discovery.Diagnostic += (discovery.Diagnostic.Length == 0 ? "" : "\n") + device.PickerLabel + " 已连接，部分设备信息不可用。" + detailIssue;
@@ -661,7 +666,7 @@ namespace CSharpIosPerfMonitor
         {
             AppInfo existing = apps.FirstOrDefault(delegate(AppInfo app) { return app.BundleId == "com.tencent.xin"; });
             if (existing == null) return;
-            existing.Recommended = true;
+            existing.Recommended = false;
             if (string.IsNullOrWhiteSpace(existing.Name)) existing.Name = "WeChat";
             if (string.IsNullOrWhiteSpace(existing.Reason)) existing.Reason = "微信宿主应用";
         }
@@ -673,10 +678,10 @@ namespace CSharpIosPerfMonitor
 
         private static Tuple<bool, string> ClassifyApp(string bundle, string name)
         {
-            if (bundle == "com.tencent.xin") return Tuple.Create(true, "微信宿主应用");
+            if (bundle == "com.tencent.xin") return Tuple.Create(false, "常用宿主 · 微信");
             if (bundle == "com.tencent.mqq" || name == "QQ" || name == "WeChat")
             {
-                return Tuple.Create(true, "腾讯宿主应用");
+                return Tuple.Create(false, "常用宿主应用");
             }
             return Tuple.Create(false, "");
         }
@@ -689,7 +694,7 @@ namespace CSharpIosPerfMonitor
             {
                 return Tuple.Create(true, "当前前台 iOS APP 主进程");
             }
-            if (bundle == "com.tencent.xin" || name == "WeChat") return Tuple.Create(true, "微信主进程");
+            if (bundle == "com.tencent.xin" || name == "WeChat") return Tuple.Create(false, "微信主进程");
             if (!string.IsNullOrWhiteSpace(bundle) && !bundle.StartsWith("com.apple.", StringComparison.Ordinal))
             {
                 return Tuple.Create(false, "第三方 APP 进程");
@@ -699,7 +704,7 @@ namespace CSharpIosPerfMonitor
                 if (process.OwnershipVerified && process.OwnerBundleId == "com.tencent.xin")
                 {
                     string role = WebKitRoleLabel(name);
-                    return Tuple.Create(name != "com.apple.WebKit.Networking", "微信 " + role + "（宿主 pid " + process.OwnerPid + "）");
+                    return Tuple.Create(false, "微信 " + role + "（宿主 pid " + process.OwnerPid + "）");
                 }
                 if (process.OwnershipVerified)
                 {
@@ -726,6 +731,7 @@ namespace CSharpIosPerfMonitor
 
         private static int ProcessRank(ProcessInfo process)
         {
+            if (process.ForegroundApplication) return -1;
             if (process.BundleId == "com.tencent.xin" || process.Name == "WeChat") return 0;
             if (process.OwnerBundleId == "com.tencent.xin" && process.Name == "com.apple.WebKit.WebContent") return 1;
             if (process.OwnerBundleId == "com.tencent.xin" && process.Name == "com.apple.WebKit.GPU") return 2;

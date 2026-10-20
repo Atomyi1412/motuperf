@@ -42,7 +42,7 @@
               <TextBlock Classes="helpItemTitle" Text="1. 选择设备与应用" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="点击刷新获取当前连接设备；选择应用后，应用名称、图标和可用进程会同步更新。列表中的平台、名称和状态用于辅助判断，不代表一定可以采集。" />
               <TextBlock Classes="helpItemTitle" Text="2. 选择真实目标" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="进程列表显示进程名和 PID，支持按名称、包名或 PID 搜索。“推荐”表示工具根据应用归属和前台状态筛出的优先目标。微信小游戏等场景应确认实际宿主进程，不要只凭名称猜测。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="1. 进程按应用分组，显示 PID、主进程/小游戏/WebKit 等角色，支持名称、包名和 PID 搜索。&#xA;2. “当前前台”来自实际前台证据；“常用宿主”只表示微信等常用入口，不代表它正在前台。WebKit 宿主未确认时不会自动归给当前 APP。&#xA;3. Android/鸿蒙可开启“显示全部目标”；搜索会查找默认隐藏的真实目标。刷新保留手动选择，原进程退出或实例变化后请重新选择。&#xA;4. APP 和进程分别读取，单项失败可继续使用成功的一项。选择框会检测连接变化；设备断开禁止确认，新接入设备需手动选择。" />
               <TextBlock Classes="helpItemTitle" Text="3. 启动 APP" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="需要启动应用时，在“启动 APP”页选择设备返回的真实入口；启动后回到进程页确认目标。最终采集目标以确认时的所选 PID 为准，目标重启后 PID 变化需要重新选择。" />
               <TextBlock Classes="dialogHint" Foreground="{DynamicResource Theme.Accent}" FontWeight="SemiBold" TextWrapping="Wrap" Text="重点：启动 APP 以应用为准，选择进程以进程为准；应用列表和进程列表的推荐结果可能不同。" />

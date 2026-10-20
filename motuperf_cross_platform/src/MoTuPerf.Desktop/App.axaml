@@ -869,6 +869,12 @@
       <Setter Property="Background" Value="{DynamicResource Theme.Accent}" />
       <Setter Property="Foreground" Value="{DynamicResource Theme.TextOnAccent}" />
     </Style>
+    <Style Selector="TextBlock.pickerRowText">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+    <Style Selector="ListBoxItem:selected TextBlock.pickerRowText">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextOnAccent}" />
+    </Style>
     <Style Selector="Border.processRow">
       <Setter Property="Background" Value="Transparent" />
     </Style>

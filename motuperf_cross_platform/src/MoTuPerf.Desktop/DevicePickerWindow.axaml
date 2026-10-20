@@ -22,7 +22,7 @@
       <TextBlock Text="{Binding PickerLabel}" Foreground="{DynamicResource Theme.TextPrimary}" TextTrimming="CharacterEllipsis" />
     </DataTemplate>
     <DataTemplate x:Key="AppTemplate" x:DataType="model:AppInfo">
-      <Grid ColumnDefinitions="34,*,Auto" MinHeight="38" ClipToBounds="True">
+      <Grid ColumnDefinitions="34,*,Auto" MinHeight="38" ClipToBounds="True" Margin="0,0,14,0">
         <Border Width="28" Height="28" Background="{DynamicResource Theme.InputBackground}" CornerRadius="4" VerticalAlignment="Center">
           <Grid>
             <Image Source="{Binding IconPath, Converter={StaticResource IconPathConverter}}" IsVisible="{Binding IconPath, Converter={StaticResource IconPathVisibilityConverter}}" Stretch="UniformToFill" Margin="2" />
@@ -31,20 +31,26 @@
           </Grid>
         </Border>
         <Grid Grid.Column="1" RowDefinitions="Auto,Auto" Margin="8,0,6,0" VerticalAlignment="Center" MinWidth="0">
-          <TextBlock Text="{Binding Name}" Foreground="{DynamicResource Theme.TextPrimary}" FontSize="14" FontWeight="SemiBold"
+          <TextBlock Text="{Binding Name}" Classes="pickerRowText" FontSize="14" FontWeight="SemiBold"
                      TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
-          <TextBlock Grid.Row="1" Text="{Binding PickerTargetIdentifier}" Classes="dialogHint" FontSize="11"
+          <TextBlock Grid.Row="1" Text="{Binding PickerTargetIdentifier}" Classes="dialogHint pickerRowText" FontSize="11"
                      TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PickerTargetIdentifier}" />
         </Grid>
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" HorizontalAlignment="Right">
           <Border Background="{DynamicResource Theme.Accent}" BorderBrush="{DynamicResource Theme.BorderStrong}" BorderThickness="1"
-                  CornerRadius="3" Padding="5,1" IsVisible="{Binding Recommended}">
-            <TextBlock Text="推荐" Foreground="{DynamicResource Theme.TextOnAccent}" FontSize="11" FontWeight="SemiBold" />
+                  CornerRadius="3" Padding="5,1" IsVisible="{Binding PickerBadge, Converter={StaticResource EmptyTextVisibilityConverter}, ConverterParameter=notEmpty}">
+            <TextBlock Text="{Binding PickerBadge}" Foreground="{DynamicResource Theme.TextOnAccent}" FontSize="11" FontWeight="SemiBold" />
           </Border>
         </StackPanel>
       </Grid>
     </DataTemplate>
     <DataTemplate x:Key="ProcessTemplate" x:DataType="model:ProcessInfo">
+      <StackPanel Margin="0,0,14,0">
+      <Border Background="{DynamicResource Theme.DialogSurface}" BorderBrush="{DynamicResource Theme.DialogSeparator}" BorderThickness="0,0,0,1" Padding="8,6"
+              IsVisible="{Binding PickerGroupHeader, Converter={StaticResource EmptyTextVisibilityConverter}, ConverterParameter=notEmpty}">
+        <TextBlock Text="{Binding PickerGroupHeader}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource Theme.TextPrimary}"
+                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PickerGroupHeader}" />
+      </Border>
       <Border Classes="processRow" MinHeight="26" Padding="6,3" ClipToBounds="True">
         <Grid ColumnDefinitions="34,64,*">
           <Border Width="22" Height="22" Background="{DynamicResource Theme.InputBackground}" CornerRadius="4" VerticalAlignment="Center" HorizontalAlignment="Center">
@@ -54,23 +60,24 @@
                          HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Grid>
           </Border>
-          <TextBlock Grid.Column="1" Text="{Binding Pid}" Foreground="{DynamicResource Theme.TextPrimary}" FontSize="14"
+          <TextBlock Grid.Column="1" Text="{Binding Pid}" Classes="pickerRowText" FontSize="14"
                      VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
           <DockPanel Grid.Column="2" LastChildFill="True">
             <Border DockPanel.Dock="Right" Background="{DynamicResource Theme.Accent}" BorderBrush="{DynamicResource Theme.BorderStrong}" BorderThickness="1"
                     CornerRadius="3" Padding="5,1" Margin="8,1,4,1" VerticalAlignment="Top"
-                    IsVisible="{Binding Recommended}">
-              <TextBlock Text="推荐" Foreground="{DynamicResource Theme.TextOnAccent}" FontSize="11" FontWeight="SemiBold" />
+                    IsVisible="{Binding ForegroundApplication}">
+              <TextBlock Text="{Binding PickerBadge}" Foreground="{DynamicResource Theme.TextOnAccent}" FontSize="11" FontWeight="SemiBold" />
             </Border>
             <Grid RowDefinitions="Auto,Auto" VerticalAlignment="Center" MinWidth="0">
-              <TextBlock Text="{Binding PickerName}" Foreground="{DynamicResource Theme.TextPrimary}" FontSize="14"
+              <TextBlock Text="{Binding PickerName}" Classes="pickerRowText" FontSize="14"
                          TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PickerName}" />
-              <TextBlock Grid.Row="1" Text="{Binding PickerSubtitle}" Classes="dialogHint" FontSize="11"
-                         TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PickerSubtitle}" />
+              <TextBlock Grid.Row="1" Text="{Binding PickerDetails}" Classes="dialogHint pickerRowText" FontSize="11"
+                         TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PickerDetails}" />
             </Grid>
           </DockPanel>
         </Grid>
       </Border>
+      </StackPanel>
     </DataTemplate>
   </Window.Resources>
   <Border Classes="secondaryWindowFrame">
@@ -187,7 +194,7 @@
                            VerticalAlignment="Center" IsHitTestVisible="False"
                            IsVisible="{Binding #AppSearch.Text, Converter={StaticResource EmptyTextVisibilityConverter}}" />
               </Grid>
-              <Button Grid.Column="1" Classes="dialogLaunchButton" Content="启动" Click="LaunchSelectedApp"
+              <Button x:Name="LaunchButton" Grid.Column="1" Classes="dialogLaunchButton" Content="启动" Click="LaunchSelectedApp"
                       VerticalAlignment="Top" />
             </Grid>
             <ListBox Grid.Row="1" x:Name="AppList" Classes="dialogList appList"
@@ -202,7 +209,7 @@
           <CheckBox x:Name="AutoStartCheckBox" Content="自动开始采集" Foreground="{DynamicResource Theme.TextPrimary}"
                     Grid.Column="0" VerticalAlignment="Center" Margin="122,0,0,0" />
           <Button Grid.Column="1" Classes="dialogFooterButton" Content="关闭" Click="Cancel" VerticalAlignment="Center" />
-          <Button Grid.Column="2" Classes="dialogPrimaryButton" Content="选择" Click="Confirm" Width="100" Margin="6,0" VerticalAlignment="Center" />
+          <Button x:Name="ConfirmButton" Grid.Column="2" Classes="dialogPrimaryButton" Content="选择" Click="Confirm" IsEnabled="False" Width="100" Margin="6,0" VerticalAlignment="Center" />
         </Grid>
       </Border>
     </Grid>

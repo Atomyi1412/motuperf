@@ -37,6 +37,7 @@ namespace CSharpIosPerfMonitor
         {
             return process != null
                 && process.OwnershipVerified
+                && !process.OwnershipAmbiguous
                 && process.OwnerPid > 0
                 && IsIosWebKitProcessRole(process.Name)
                 && !string.IsNullOrWhiteSpace(bundleId)
@@ -48,9 +49,7 @@ namespace CSharpIosPerfMonitor
             if (process == null) return false;
             if (IsIosWebKitProcessRole(process.Name))
             {
-                return string.Equals(selectedBundleId, "com.tencent.xin", StringComparison.Ordinal)
-                    && process.Name != "com.apple.WebKit.Networking"
-                    && IsIosOwnedWebProcess(process, selectedBundleId);
+                return IsIosOwnedWebProcess(process, selectedBundleId);
             }
 
             if (!string.IsNullOrWhiteSpace(selectedBundleId)

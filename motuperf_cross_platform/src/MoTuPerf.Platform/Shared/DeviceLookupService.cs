@@ -6,7 +6,18 @@ using System.Threading.Tasks;
 
 namespace CSharpIosPerfMonitor
 {
-    public sealed class DeviceLookupService
+    public interface IDevicePickerLookup
+    {
+        Task<DeviceDiscoveryReport> DiscoverDevicesAsync(CancellationToken token, Action<DeviceDiscoveryReport> onProgress = null, bool includeDetails = true);
+        Task<List<AppInfo>> ListAppsAsync(DeviceInfo device, CancellationToken token);
+        Task<List<ProcessInfo>> ListProcessesAsync(DeviceInfo device, CancellationToken token);
+        Task<HarmonyTargetInventory> ListTargetsAsync(DeviceInfo device, CancellationToken token);
+        Task<ProcessResult> LaunchAppAsync(DeviceInfo device, AppInfo app, CancellationToken token);
+        Task HydrateAppIconsAsync(DeviceInfo device, IList<AppInfo> apps, IList<ProcessInfo> processes, int maxIcons, CancellationToken token);
+        Task<bool?> IsDeviceOnlineAsync(string udid, string platform, CancellationToken token);
+    }
+
+    public sealed class DeviceLookupService : IDevicePickerLookup
     {
         private readonly IosLookupService _ios = new IosLookupService();
         private readonly AndroidLookupService _android = new AndroidLookupService();
@@ -18,28 +29,46 @@ namespace CSharpIosPerfMonitor
             return report.Devices;
         }
 
-        public async Task<DeviceDiscoveryReport> DiscoverDevicesAsync(CancellationToken token)
+        public async Task<DeviceDiscoveryReport> DiscoverDevicesAsync(CancellationToken token,
+            Action<DeviceDiscoveryReport> onProgress = null, bool includeDetails = true)
         {
-            Task<PlatformDeviceDiscovery> iosTask = _ios.DiscoverDevicesAsync(token);
-            Task<PlatformDeviceDiscovery> androidTask = _android.DiscoverDevicesAsync(token);
-            Task<PlatformDeviceDiscovery> harmonyTask = _harmony.DiscoverDevicesAsync(token);
-            await Task.WhenAll(iosTask, androidTask, harmonyTask);
-            DeviceDiscoveryReport report = new DeviceDiscoveryReport
+            PlatformDeviceDiscovery ios = new PlatformDeviceDiscovery();
+            PlatformDeviceDiscovery android = new PlatformDeviceDiscovery();
+            PlatformDeviceDiscovery harmony = new PlatformDeviceDiscovery();
+            object gate = new object();
+            DeviceDiscoveryReport Snapshot()
             {
-                IosDiagnostic = iosTask.Result.Diagnostic,
-                AndroidDiagnostic = androidTask.Result.Diagnostic,
-                HarmonyDiagnostic = harmonyTask.Result.Diagnostic,
-                AppleDriverMissing = iosTask.Result.AppleDriverMissing,
-                AppleDriverActionAvailable = iosTask.Result.AppleDriverActionAvailable
-            };
-            report.Devices.AddRange(iosTask.Result.Devices);
-            report.Devices.AddRange(androidTask.Result.Devices);
-            report.Devices.AddRange(harmonyTask.Result.Devices);
-            for (int i = 0; i < report.Devices.Count; i++)
-            {
-                report.Devices[i].Recommended = i == 0;
+                var snapshot = new DeviceDiscoveryReport
+                {
+                    IosDiagnostic = ios.Diagnostic, AndroidDiagnostic = android.Diagnostic,
+                    HarmonyDiagnostic = harmony.Diagnostic, AppleDriverMissing = ios.AppleDriverMissing,
+                    AppleDriverActionAvailable = ios.AppleDriverActionAvailable
+                };
+                snapshot.Devices.AddRange(ios.Devices);
+                snapshot.Devices.AddRange(android.Devices);
+                snapshot.Devices.AddRange(harmony.Devices);
+                foreach (DeviceInfo device in snapshot.Devices) device.Recommended = false;
+                return snapshot;
             }
-            return report;
+            void Publish(int platform, PlatformDeviceDiscovery result)
+            {
+                lock (gate)
+                {
+                    if (platform == 0) ios = result;
+                    else if (platform == 1) android = result;
+                    else harmony = result;
+                    if (!token.IsCancellationRequested) onProgress?.Invoke(Snapshot());
+                }
+            }
+            async Task Run(int platform, Task<PlatformDeviceDiscovery> query)
+            {
+                Publish(platform, await query);
+            }
+            await Task.WhenAll(
+                Run(0, _ios.DiscoverDevicesAsync(token, includeDetails, result => Publish(0, result))),
+                Run(1, _android.DiscoverDevicesAsync(token, includeDetails, result => Publish(1, result))),
+                Run(2, _harmony.DiscoverDevicesAsync(token, includeDetails, result => Publish(2, result))));
+            lock (gate) return Snapshot();
         }
 
         public Task<List<AppInfo>> ListAppsAsync(DeviceInfo device, CancellationToken token)

@@ -16,7 +16,8 @@ namespace CSharpIosPerfMonitor
             return (await DiscoverDevicesAsync(token)).Devices;
         }
 
-        public async Task<PlatformDeviceDiscovery> DiscoverDevicesAsync(CancellationToken token)
+        public async Task<PlatformDeviceDiscovery> DiscoverDevicesAsync(CancellationToken token,
+            bool includeDetails = true, Action<PlatformDeviceDiscovery> onBasicDevices = null)
         {
             PlatformDeviceDiscovery report;
             try
@@ -29,6 +30,8 @@ namespace CSharpIosPerfMonitor
             {
                 return new PlatformDeviceDiscovery { Diagnostic = DescribeDiscoveryException(ex) };
             }
+            onBasicDevices?.Invoke(report);
+            if (!includeDetails) return report;
             List<string> issues = new List<string>();
             if (!string.IsNullOrWhiteSpace(report.Diagnostic)) issues.Add(report.Diagnostic);
             foreach (DeviceInfo device in report.Devices)
@@ -139,9 +142,14 @@ namespace CSharpIosPerfMonitor
         {
             string adb = SerialArgs(serial, "shell pm list packages -3 -f");
             ProcessResult result = await ProcessRunner.RunAsync(RuntimeTools.AdbExecutable, adb, 20000, token);
-            if (result.ExitCode != 0) return new List<AppInfo>();
+            if (result.ExitCode != 0) throw new IOException("ADB 应用查询失败：" + CaptureDiagnosticsLog.Sanitize(result.Stderr, 240));
+            return ParseApps(result.Stdout);
+        }
+
+        internal static List<AppInfo> ParseApps(string output)
+        {
             List<AppInfo> apps = new List<AppInfo>();
-            string[] lines = (result.Stdout ?? "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            string[] lines = (output ?? "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
             foreach (string raw in lines)
             {
                 string line = raw.Trim();
@@ -165,11 +173,10 @@ namespace CSharpIosPerfMonitor
                     Recommended = rec.Item1,
                     Reason = rec.Item2,
                     IconKey = AppIconKey(packageName),
-                    IconPath = CachedIconPath(packageName),
+                    IconPath = "",
                     ApkPath = apkPath
                 });
             }
-            EnsureWechat(apps);
             return apps.OrderBy(AppRank).ThenBy(delegate(AppInfo app) { return app.BundleId; }).ToList();
         }
 
@@ -182,7 +189,7 @@ namespace CSharpIosPerfMonitor
             {
                 result = await ProcessRunner.RunAsync(RuntimeTools.AdbExecutable, SerialArgs(serial, "shell ps"), 12000, token);
             }
-            if (result.ExitCode != 0) return new List<ProcessInfo>();
+            if (result.ExitCode != 0) throw new IOException("ADB 进程查询失败：" + CaptureDiagnosticsLog.Sanitize(result.Stderr, 240));
             List<ProcessInfo> processes = ParsePs(result.Stdout);
             string defaultHomePackage = await defaultHomePackageTask;
             processes.RemoveAll(delegate(ProcessInfo process) { return IsHomeProcess(process, defaultHomePackage); });
@@ -230,7 +237,7 @@ namespace CSharpIosPerfMonitor
             foreach (AppInfo app in apps)
             {
                 if (app == null || string.IsNullOrWhiteSpace(app.BundleId)) continue;
-                string cached = CachedIconPath(app.BundleId);
+                string cached = CachedIconPath(ScopedIconKey(serial, app.BundleId, app.ApkPath));
                 if (string.IsNullOrWhiteSpace(cached)) continue;
                 app.IconPath = cached;
                 iconsByPackage[app.BundleId] = cached;
@@ -290,7 +297,7 @@ namespace CSharpIosPerfMonitor
         {
             try
             {
-                string outputPath = IconCachePath(packageName, ".png");
+                string outputPath = IconCachePath(ScopedIconKey(serial, packageName, apkPath), ".png");
                 string tempPath = outputPath + ".tmp";
                 foreach (string entry in PreferredIconEntries(packageName))
                 {
@@ -474,7 +481,7 @@ namespace CSharpIosPerfMonitor
             }
         }
 
-        private static List<ProcessInfo> ParsePs(string output)
+        internal static List<ProcessInfo> ParsePs(string output)
         {
             List<ProcessInfo> processes = new List<ProcessInfo>();
             string[] lines = (output ?? "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
@@ -496,9 +503,9 @@ namespace CSharpIosPerfMonitor
                     name = parts[parts.Length - 1];
                 }
                 if (pid <= 0 || string.IsNullOrWhiteSpace(name)) continue;
-                if (!IsUserVisibleProcessName(name)) continue;
+                if (name.StartsWith("[", StringComparison.Ordinal)) continue;
                 Tuple<bool, string> rec = ClassifyProcess(name);
-                string packageName = ProcessPackageName(name);
+                string packageName = IsUserVisibleProcessName(name) ? ProcessPackageName(name) : "";
                 processes.Add(new ProcessInfo
                 {
                     Pid = pid,
@@ -509,7 +516,7 @@ namespace CSharpIosPerfMonitor
                     Recommended = rec.Item1,
                     Reason = rec.Item2,
                     IconKey = AppIconKey(packageName),
-                    IconPath = CachedIconPath(packageName)
+                    IconPath = ""
                 });
             }
             return processes
@@ -678,6 +685,7 @@ namespace CSharpIosPerfMonitor
             if (foregroundPid <= 0) return;
             ProcessInfo process = processes.FirstOrDefault(delegate(ProcessInfo item) { return item.Pid == foregroundPid; });
             if (process == null) return;
+            process.ForegroundApplication = true;
             process.Recommended = true;
             if (process.Name.StartsWith("com.tencent.mm:appbrand", StringComparison.Ordinal))
             {
@@ -850,34 +858,17 @@ namespace CSharpIosPerfMonitor
             return prefix + "-" + cleanedModel;
         }
 
-        private static void EnsureWechat(List<AppInfo> apps)
-        {
-            if (apps.Any(delegate(AppInfo app) { return app.BundleId == "com.tencent.mm"; })) return;
-            apps.Add(new AppInfo
-            {
-                BundleId = "com.tencent.mm",
-                Name = "微信",
-                Platform = "android",
-                Recommended = true,
-                Reason = "微信宿主应用",
-                IconKey = "wechat",
-                IconPath = CachedIconPath("com.tencent.mm")
-            });
-        }
-
         private static Tuple<bool, string> ClassifyApp(string packageName)
         {
-            if (packageName == "com.tencent.mm") return Tuple.Create(true, "微信宿主应用");
-            if (packageName.StartsWith("com.tencent.", StringComparison.Ordinal)) return Tuple.Create(true, "腾讯应用");
+            if (packageName == "com.tencent.mm") return Tuple.Create(false, "常用宿主 · 微信");
             return Tuple.Create(false, "");
         }
 
         private static Tuple<bool, string> ClassifyProcess(string name)
         {
-            if (name == "com.tencent.mm") return Tuple.Create(true, "微信主进程");
-            if (name.StartsWith("com.tencent.mm:appbrand", StringComparison.Ordinal)) return Tuple.Create(true, "微信小游戏进程");
-            if (name.StartsWith("com.tencent.mm:", StringComparison.Ordinal)) return Tuple.Create(true, "微信子进程");
-            if (name.StartsWith("com.tencent.", StringComparison.Ordinal)) return Tuple.Create(true, "腾讯应用进程");
+            if (name == "com.tencent.mm") return Tuple.Create(false, "微信主进程");
+            if (name.StartsWith("com.tencent.mm:appbrand", StringComparison.Ordinal)) return Tuple.Create(false, "微信小游戏进程");
+            if (name.StartsWith("com.tencent.mm:", StringComparison.Ordinal)) return Tuple.Create(false, "微信子进程");
             return Tuple.Create(false, "");
         }
 
@@ -890,14 +881,7 @@ namespace CSharpIosPerfMonitor
             if (name.StartsWith("android.hidl.", StringComparison.Ordinal)) return false;
             if (name.StartsWith("android.system.", StringComparison.Ordinal)) return false;
             if (name.IndexOf('.') < 0) return false;
-            if (name.StartsWith("com.", StringComparison.Ordinal)) return true;
-            if (name.StartsWith("cn.", StringComparison.Ordinal)) return true;
-            if (name.StartsWith("me.", StringComparison.Ordinal)) return true;
-            if (name.StartsWith("tv.", StringComparison.Ordinal)) return true;
-            if (name.StartsWith("android.", StringComparison.Ordinal)) return true;
-            if (name.StartsWith("org.", StringComparison.Ordinal)) return true;
-            if (name.StartsWith("ctrip.", StringComparison.Ordinal)) return true;
-            return false;
+            return Regex.IsMatch(ProcessPackageName(name), @"^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$");
         }
 
         private static string ProcessPackageName(string processName)
@@ -952,6 +936,12 @@ namespace CSharpIosPerfMonitor
             return Path.Combine(IconCacheDir(), safe + extension);
         }
 
+        internal static string ScopedIconKey(string serial, string packageName, string apkPath)
+        {
+            byte[] bytes = System.Text.Encoding.UTF8.GetBytes((serial ?? "") + "\n" + (packageName ?? "") + "\n" + (apkPath ?? ""));
+            return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
+        }
+
         private static string IconCacheDir()
         {
             return Path.Combine(RuntimeTools.DataDirectory, "app-icons");
@@ -984,8 +974,7 @@ namespace CSharpIosPerfMonitor
 
         private static int AppRank(AppInfo app)
         {
-            if (app.BundleId == "com.tencent.mm") return 0;
-            return app.Recommended ? 1 : 2;
+            return app.Recommended ? 0 : app.BundleId == "com.tencent.mm" ? 1 : 2;
         }
 
         private static int IconHydrationRank(AppInfo app)

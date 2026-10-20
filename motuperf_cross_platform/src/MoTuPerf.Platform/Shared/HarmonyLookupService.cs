@@ -189,7 +189,8 @@ namespace CSharpIosPerfMonitor
             _deviceDetailBudgetMs = Math.Max(1, deviceDetailBudgetMs);
         }
 
-        public async Task<PlatformDeviceDiscovery> DiscoverDevicesAsync(CancellationToken token)
+        public async Task<PlatformDeviceDiscovery> DiscoverDevicesAsync(CancellationToken token,
+            bool includeDetails = true, Action<PlatformDeviceDiscovery> onBasicDevices = null)
         {
             PlatformDeviceDiscovery report = new PlatformDeviceDiscovery();
             try
@@ -200,6 +201,8 @@ namespace CSharpIosPerfMonitor
                     12000,
                     token);
                 report = ParseDiscovery(result);
+                onBasicDevices?.Invoke(report);
+                if (!includeDetails) return report;
                 foreach (DeviceInfo device in report.Devices)
                 {
                     await PopulateDeviceDetailsAsync(device, token).ConfigureAwait(false);

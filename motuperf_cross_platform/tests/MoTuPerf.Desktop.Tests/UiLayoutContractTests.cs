@@ -307,7 +307,7 @@ namespace MoTuPerf.Desktop.Tests
 
             Assert.Contains("private long _loadGeneration", dialogCode);
             Assert.Contains("NewLoadToken(out generation)", dialogCode);
-            Assert.Contains("if (!IsCurrentLoad(generation)) return;", dialogCode);
+            Assert.Contains("generation != _discoveryGeneration", dialogCode);
             Assert.Contains("if (!IsCurrentLoad(generation, deviceUdid)) return;", dialogCode);
             Assert.Contains("_apps.ToArray()", dialogCode);
             Assert.Contains("_processes.ToArray()", dialogCode);
@@ -334,7 +334,7 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Contains("MatchesHarmonyAppProcess", dialogCode);
             Assert.Contains("TrySelectHarmonyRunningProcess", dialogCode);
             Assert.Contains("启动入口不可用，已切换到唯一匹配进程 PID", dialogCode);
-            Assert.Contains("PickerSubtitle", LoadText("src", "MoTuPerf.Desktop", "DevicePickerWindow.axaml"));
+            Assert.Contains("PickerDetails", LoadText("src", "MoTuPerf.Desktop", "DevicePickerWindow.axaml"));
             Assert.Contains("PickerTargetIdentifier", LoadText("src", "MoTuPerf.Desktop", "DevicePickerWindow.axaml"));
             Assert.DoesNotContain("{Binding LaunchAvailability", LoadText("src", "MoTuPerf.Desktop", "DevicePickerWindow.axaml"));
             Assert.Contains("MarkHarmonyPickerUserScopeVisibility", dialogCode);
@@ -348,7 +348,7 @@ namespace MoTuPerf.Desktop.Tests
 
             Assert.Contains("ClipToBounds=\"True\"", xaml);
             Assert.Contains("ToolTip.Tip=\"{Binding PickerTargetIdentifier}\"", xaml);
-            Assert.Contains("ToolTip.Tip=\"{Binding PickerSubtitle}\"", xaml);
+            Assert.Contains("ToolTip.Tip=\"{Binding PickerDetails}\"", xaml);
             Assert.DoesNotContain("运行中，可直接选择进程", xaml);
             Assert.DoesNotContain("可尝试启动", xaml);
         }
