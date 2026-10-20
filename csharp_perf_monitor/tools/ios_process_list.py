@@ -121,6 +121,7 @@ def apply_application_states(
         if _integer(row.get("pid")) > 0
     }
     running_user_application_pids: list[int] = []
+    explicit_foreground_pids: list[int] = []
     enriched: list[dict[str, Any]] = []
     for raw_process in processes:
         process = dict(raw_process)
@@ -131,18 +132,26 @@ def apply_application_states(
         process["applicationState"] = application_state
         process["applicationExecutablePath"] = executable_path
         process["foregroundApplication"] = False
+        is_user_application = bool(process.get("isApplication")) and _is_user_application_path(
+            process.get("realAppName") or executable_path
+        )
+        if is_user_application and process.get("foregroundRunning") is True:
+            explicit_foreground_pids.append(pid)
         if (
-            bool(process.get("isApplication"))
+            is_user_application
             and application_state == "Running"
-            and _is_user_application_path(executable_path)
+            and "foregroundRunning" not in process
         ):
             running_user_application_pids.append(pid)
         enriched.append(process)
 
-    if len(running_user_application_pids) == 1:
-        foreground_pid = running_user_application_pids[0]
-        for process in enriched:
-            process["foregroundApplication"] = _integer(process.get("pid")) == foreground_pid
+    # A direct proclist flag is stronger than the optional notification snapshot.
+    # Several explicit foreground apps are valid on iPad; leave selection to the user.
+    foreground_pids = explicit_foreground_pids
+    if not foreground_pids and len(running_user_application_pids) == 1:
+        foreground_pids = running_user_application_pids
+    for process in enriched:
+        process["foregroundApplication"] = _integer(process.get("pid")) in foreground_pids
     return enriched
 
 

@@ -187,8 +187,10 @@ namespace MoTuPerf.Desktop
                 }
                 ApplyDiscoveredDevices(report, true, preserveDetails: monitor);
                 string previousStatus = StatusText.Text;
+                string previousDeviceStatus = _deviceCountStatus;
                 ApplyDeviceDiagnostics(DeviceDiagnosticsFormatter.FromReport(report));
-                if (monitor && DeviceList.SelectedItem != null) StatusText.Text = previousStatus;
+                if (DeviceList.SelectedItem != null && (monitor || previousStatus != previousDeviceStatus))
+                    StatusText.Text = previousStatus;
                 if (_hadDeviceSelection && DeviceList.SelectedItem == null)
                     StatusText.Text = "所选设备已断开，请重新连接并选择设备。";
                 AppleDriverButton.IsVisible = report.AppleDriverActionAvailable;
@@ -448,7 +450,13 @@ namespace MoTuPerf.Desktop
             string selectionKey = DeviceKey(device);
             if (previousApp == null) _lastApps.TryGetValue(selectionKey, out previousApp);
             if (previousProcess == null) _lastProcesses.TryGetValue(selectionKey, out previousProcess);
-            if (DeviceKey(device) == DeviceKey(_initialSelection?.Device))
+            // A previous capture is history, not a manual choice in this picker.
+            if (DeviceLookupService.IsIos(device))
+            {
+                if (!_lastApps.ContainsKey(selectionKey)) previousApp = null;
+                if (!_lastProcesses.ContainsKey(selectionKey)) previousProcess = null;
+            }
+            if (!DeviceLookupService.IsIos(device) && DeviceKey(device) == DeviceKey(_initialSelection?.Device))
             {
                 if (!_lastApps.ContainsKey(selectionKey)) previousApp = previousApp ?? _initialSelection?.App;
                 if (!_lastProcesses.ContainsKey(selectionKey)) previousProcess = previousProcess ?? _initialSelection?.Process;
@@ -685,7 +693,8 @@ namespace MoTuPerf.Desktop
                     if (!_launchMode && process != null) selected = FindAppForProcess(process);
                     AppInfo restored = selected == null ? null : _apps.FirstOrDefault(item => SameAppSelection(item, selected));
                     if (!string.IsNullOrWhiteSpace(launchBundle)) restored = FindAppByBundle(launchBundle);
-                    if (selected == null && restored == null) restored = _apps.FirstOrDefault(item => item.Recommended) ?? _apps.FirstOrDefault();
+                    if (selected == null && restored == null && !DeviceLookupService.IsIos(device))
+                        restored = _apps.FirstOrDefault(item => item.Recommended) ?? _apps.FirstOrDefault();
                     RunSelectionSync(() =>
                     {
                         ApplyAppFilter(); AppList.SelectedItem = restored;
@@ -710,12 +719,18 @@ namespace MoTuPerf.Desktop
                     UpdateAppRecommendations();
                     ProcessInfo restored = previousProcess == null ? null : _processes.FirstOrDefault(item => SameProcessSelection(item, previousProcess));
                     if (!string.IsNullOrWhiteSpace(launchBundle)) restored = FindProcessForBundle(_processes, launchBundle);
-                    else if (previousProcess == null && !_lastProcesses.ContainsKey(key)) restored = _processes.FirstOrDefault(item => item.ForegroundApplication)
-                        ?? _processes.FirstOrDefault(item => item.Recommended) ?? _processes.FirstOrDefault(item => !string.IsNullOrWhiteSpace(item.BundleId));
+                    else if (previousProcess == null && !_lastProcesses.ContainsKey(key))
+                    {
+                        var foreground = _processes.Where(item => item.ForegroundApplication).ToList();
+                        restored = DeviceLookupService.IsIos(device)
+                            ? (foreground.Count == 1 ? foreground[0] : null)
+                            : foreground.FirstOrDefault() ?? _processes.FirstOrDefault(item => item.Recommended)
+                                ?? _processes.FirstOrDefault(item => !string.IsNullOrWhiteSpace(item.BundleId));
+                    }
                     RunSelectionSync(() =>
                     {
-                        ApplyProcessFilter(); ProcessList.SelectedItem = restored;
                         if (!_launchMode) AppList.SelectedItem = FindAppForProcess(restored);
+                        ApplyProcessFilter(); ProcessList.SelectedItem = restored;
                         ApplyAppFilter();
                     });
                     if (!_launchMode) UpdateSelectedAppSummary(FindAppForProcess(restored));
@@ -738,6 +753,9 @@ namespace MoTuPerf.Desktop
                 if (processesError != null) messages.Add("进程读取失败：" + processesError.Message + "；请启动目标后刷新");
                 if (!_processesLoading && processesError == null && previousProcess != null && ProcessList.SelectedItem == null)
                     messages.Add("原进程已退出或实例已变化，请重新选择进程");
+                if (!_processesLoading && processesError == null && previousProcess == null && !_launchMode
+                    && ProcessList.SelectedItem == null && DeviceLookupService.IsIos(device))
+                    messages.Add("未确认唯一前台应用，请保持目标在设备前台后刷新，或手动选择进程");
                 StatusText.Text = messages.Count == 0 ? _deviceCountStatus : string.Join("；", messages);
             }
             try
@@ -1063,7 +1081,7 @@ namespace MoTuPerf.Desktop
                 AppInfo selectedApp = AppList.SelectedItem as AppInfo;
                 string selectedBundle = FirstNonEmpty(
                     selectedApp == null ? "" : selectedApp.BundleId,
-                    _initialSelection == null || _initialSelection.App == null ? "" : _initialSelection.App.BundleId);
+                    DeviceLookupService.IsIos(device) || _initialSelection?.App == null ? "" : _initialSelection.App.BundleId);
                 if (DeviceLookupService.IsIos(device))
                 {
                     source = source.Where(delegate(ProcessInfo process)

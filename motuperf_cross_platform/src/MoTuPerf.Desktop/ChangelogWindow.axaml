@@ -26,6 +26,13 @@
           <StackPanel Margin="22,10,18,12" Spacing="9">
           <Border Classes="helpSection">
             <StackPanel>
+              <TextBlock Text="v0.45.1" Classes="helpTitle" />
+              <TextBlock Text="2026-10-20" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复 iOS 前台识别：优先读取系统明确的前台运行标记，避免可选应用状态通知缺失时无法识别当前游戏，并排除系统输入界面和 WebKit 子进程抢占应用推荐。&#xA;• 修复重新打开设备选择框仍优先选中上次采集应用的问题；当前唯一前台应用优先，本窗口内的手动选择仍在刷新后保留。无法确认唯一前台时提示用户手选，不再默认选中历史游戏。&#xA;• 修复设备详情加载完成后覆盖进程读取错误、前台未确认等目标提示的问题。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel>
               <TextBlock Text="v0.45.0" Classes="helpTitle" />
               <TextBlock Text="2026-10-20" Classes="dialogHint" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 优化设备和目标选择：刷新优先保留手动选择，原进程退出或实例变化时要求重选，避免跳回初始设备或应用。&#xA;• Android/iOS 的 APP 与进程分别加载和提示错误，已就绪的目标可先操作；设备基础列表先展示，CPU、GPU、分辨率等详情随后补充。&#xA;• 修复 Android 合法包名前缀进程漏显和未安装微信仍出现在 APP 清单的问题，增加显示全部目标，图标缓存按设备和安装路径隔离。&#xA;• 区分当前前台与常用宿主，进程按应用分组并显示角色和归属；iOS 支持查看其他 APP 已确认归属的 WebKit 子进程。&#xA;• 设备选择框增加连接变化检测与确认前在线检查，断开后清空目标并禁止确认，新设备不会抢占已有选择；保留鸿蒙原子快照和用户、分身隔离。" />
@@ -36,13 +43,6 @@
               <TextBlock Text="v0.44.1" Classes="helpTitle" />
               <TextBlock Text="2026-10-20" Classes="dialogHint" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 客户端“查看完整在线更新日志”改为打开 GitHub CHANGELOG，继续保留最新三个版本的离线日志。&#xA;• 统一以 Git 中的 CHANGELOG 为更新说明来源，发布说明和客户端更新提示沿用该来源；飞书日志保留历史并提供跳转入口，后续停止重复维护。" />
-            </StackPanel>
-          </Border>
-          <Border Classes="helpSection">
-            <StackPanel>
-              <TextBlock Text="v0.44.0" Classes="helpTitle" />
-              <TextBlock Text="2026-10-19" Classes="dialogHint" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 优化 Android 帧源连续性：轮询间隔、帧源重建和时间线断点会写入现场数据与诊断日志，不跨断点计算 FrameTime/Jank。&#xA;• 修正 Android 逐核 CPU，改为每个核心使用自身工作时间/总时间增量计算；保留 Raw CPU 和归一化 CPU 的独立口径。&#xA;• 保持 PerfDog 风格的 Jank 总数包含 BigJank，并在 CSV 增加普通 Jank（排除 BigJank）明细，避免与 Gears 的互斥分类混淆。&#xA;• 完善 Android CPU、内存、温度和系统热状态缺测提示；真实来源继续写入导出数据，GPU 暂无可靠来源时保持缺测。&#xA;• 更新帮助说明和相关回归测试，明确采集断点、逐核 CPU、Jank 分类及指标能力边界。" />
             </StackPanel>
           </Border>
         </StackPanel>

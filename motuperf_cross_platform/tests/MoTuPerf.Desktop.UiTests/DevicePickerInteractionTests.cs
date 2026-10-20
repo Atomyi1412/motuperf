@@ -18,6 +18,15 @@ using Xunit;
 
 namespace MoTuPerf.Desktop.UiTests
 {
+    public sealed class ConnectedIosFactAttribute : FactAttribute
+    {
+        public ConnectedIosFactAttribute()
+        {
+            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("MOTUPERF_TEST_IOS_UDID")))
+                Skip = "Requires an explicitly selected connected iOS test device.";
+        }
+    }
+
     public sealed class PickerTestApplication : Application
     {
         public static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<PickerTestApplication>()
@@ -56,6 +65,108 @@ namespace MoTuPerf.Desktop.UiTests
             for (int i = 0; i < 200; i++) { if (predicate()) return; await Task.Delay(10); }
             Assert.True(predicate(), "UI condition did not complete within two seconds");
         }
+
+        private static string ScreenshotDirectory()
+        {
+            var root = new DirectoryInfo(AppContext.BaseDirectory);
+            while (root != null && !File.Exists(Path.Combine(root.FullName, "CHANGELOG.md"))) root = root.Parent;
+            Assert.NotNull(root);
+            string path = Path.Combine(root.FullName, ".outputs", "device-picker-v0451");
+            Directory.CreateDirectory(path);
+            return path;
+        }
+
+        [ConnectedIosFact]
+        public Task ConnectedIosForegroundIsSelectedThroughActualAppAndProcessQueries() => OnUi(async () =>
+        {
+            string udid = Environment.GetEnvironmentVariable("MOTUPERF_TEST_IOS_UDID");
+            string bundle = Environment.GetEnvironmentVariable("MOTUPERF_TEST_IOS_BUNDLE");
+            Assert.False(string.IsNullOrWhiteSpace(bundle));
+            var lookup = new DeviceLookupService();
+            var source = new FakeLookup();
+            var device = new DeviceInfo { Udid = udid, Platform = "ios", Name = "iOS connected test device",
+                ProductVersion = Environment.GetEnvironmentVariable("MOTUPERF_TEST_IOS_VERSION") };
+            source.Report.Devices.Clear(); source.Report.Devices.Add(device);
+            source.ReadApps = lookup.ListAppsAsync;
+            source.ReadProcesses = lookup.ListProcessesAsync;
+            var history = new DeviceSelection(device, AppRow("net.history"), Process(1, "net.history", udid), false);
+            var window = new DevicePickerWindow(history, source); window.Show();
+            try
+            {
+                var processes = window.FindControl<ListBox>("ProcessList");
+                for (int i = 0; i < 600 && processes.SelectedItem == null; i++)
+                {
+                    if (window.FindControl<TextBlock>("DeviceCountText").Text.Contains("进程读取失败")) break;
+                    await Task.Delay(100);
+                }
+                Assert.True(processes.SelectedItem != null, window.FindControl<TextBlock>("DeviceCountText").Text
+                    + " | " + string.Join(", ", processes.Items.Cast<ProcessInfo>().Select(process => process.Pid + ":" + process.BundleId + ":" + process.ForegroundApplication)));
+                var selected = Assert.IsType<ProcessInfo>(processes.SelectedItem);
+                Assert.Equal(bundle, selected.BundleId);
+                Assert.True(selected.ForegroundApplication);
+                for (int i = 0; i < 300 && window.FindControl<ListBox>("AppList").SelectedItem == null; i++) await Task.Delay(100);
+                Assert.Equal(bundle, Assert.IsType<AppInfo>(window.FindControl<ListBox>("AppList").SelectedItem).BundleId);
+                window.UpdateLayout();
+                using var bitmap = new RenderTargetBitmap(new PixelSize(680, 640));
+                bitmap.Render(window);
+                bitmap.Save(Path.Combine(ScreenshotDirectory(), "ios-connected-foreground.png"), PngBitmapEncoderOptions.Default);
+            }
+            finally { window.Close(); }
+        });
+
+        [Fact]
+        public Task ReopeningIosPickerPrefersCurrentForegroundOverCaptureHistoryAndKeepsWindowManualChoice() => OnUi(async () =>
+        {
+            var source = new FakeLookup();
+            source.Report.Devices[0].Platform = "ios";
+            bool firstInForeground = true;
+            source.ReadProcesses = (device, _) =>
+            {
+                var first = Process(10, "io.first", device.Udid); first.Platform = "ios";
+                var second = Process(11, "net.second", device.Udid); second.Platform = "ios";
+                first.ForegroundApplication = firstInForeground;
+                second.ForegroundApplication = !firstInForeground;
+                return Task.FromResult(new List<ProcessInfo> { second, first });
+            };
+            var history = Process(11, "net.second"); history.Platform = "ios";
+            var window = new DevicePickerWindow(new DeviceSelection(source.Report.Devices[0], AppRow("net.second"), history, false), source);
+            window.Show();
+            try
+            {
+                var processes = window.FindControl<ListBox>("ProcessList");
+                await Until(() => (processes.SelectedItem as ProcessInfo)?.Pid == 10);
+                Assert.Equal("io.first", ((AppInfo)window.FindControl<ListBox>("AppList").SelectedItem).BundleId);
+                firstInForeground = false;
+                await window.LoadTargetsAsync();
+                Assert.Equal(11, ((ProcessInfo)processes.SelectedItem).Pid);
+                processes.SelectedItem = processes.Items.Cast<ProcessInfo>().Single(process => process.Pid == 10);
+                await window.LoadTargetsAsync();
+                Assert.Equal(10, ((ProcessInfo)processes.SelectedItem).Pid);
+            }
+            finally { window.Close(); }
+        });
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public Task IosWithoutUniqueForegroundDoesNotSilentlySelectHistoricalGame(bool multipleForegroundApps) => OnUi(async () =>
+        {
+            var source = new FakeLookup();
+            source.Report.Devices[0].Platform = "ios";
+            source.ReadProcesses = (device, _) => Task.FromResult(new[] { Process(10, "io.first", device.Udid), Process(11, "net.second", device.Udid) }
+                .Select(process => { process.Platform = "ios"; process.ForegroundApplication = multipleForegroundApps; return process; }).ToList());
+            var history = Process(11, "net.second"); history.Platform = "ios";
+            var window = new DevicePickerWindow(new DeviceSelection(source.Report.Devices[0], AppRow("net.second"), history, false), source);
+            window.Show();
+            try
+            {
+                await Until(() => window.FindControl<ListBox>("ProcessList").Items.Count == 2);
+                Assert.Null(window.FindControl<ListBox>("ProcessList").SelectedItem);
+                Assert.False(window.FindControl<Button>("ConfirmButton").IsEnabled);
+                Assert.Contains("未确认唯一前台", window.FindControl<TextBlock>("DeviceCountText").Text);
+            }
+            finally { window.Close(); }
+        });
 
         [Fact]
         public Task BasicDeviceCanLoadTargetsBeforeMetadataCompletesAndLaunchModeOwnsConfirmation() => OnUi(async () =>
@@ -104,7 +215,7 @@ namespace MoTuPerf.Desktop.UiTests
         [Fact]
         public Task GroupsAndRolesRenderWithinThreeThemesAtSupportedSizes() => OnUi(async () =>
         {
-            string output = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../../.outputs/device-picker-v0450"));
+            string output = ScreenshotDirectory();
             Directory.CreateDirectory(output);
             foreach (string theme in new[] { "dark", "light", "retro-sage" })
             {

@@ -30,6 +30,41 @@ def _web(pid: int) -> dict[str, object]:
 
 
 class IosProcessOwnershipTests(unittest.TestCase):
+    def test_explicit_foreground_survives_missing_notification_snapshot(self) -> None:
+        game = _app(639, "appstore", "com.scientist.twios")
+        game.update(foregroundRunning=True, realAppName="/var/containers/Bundle/Application/A/appstore.app/appstore")
+        system = _app(160, "InputUI", "com.apple.InputUI")
+        system.update(foregroundRunning=True, realAppName="/Applications/InputUI.app/InputUI")
+        web = _web(644)
+        web["foregroundRunning"] = True
+
+        rows = process_list.apply_application_states([game, system, web], [])
+
+        self.assertTrue(rows[0]["foregroundApplication"])
+        self.assertFalse(rows[1]["foregroundApplication"])
+        self.assertFalse(rows[2]["foregroundApplication"])
+
+    def test_explicit_foreground_wins_over_background_running_notification(self) -> None:
+        game = _app(639, "Game", "com.example.game")
+        game.update(foregroundRunning=True, realAppName="/var/containers/Bundle/Application/A/Game.app/Game")
+        background = _app(454, "OldGame", "com.example.old")
+        states = [{"pid": 454, "state_description": "Running", "execName": "/var/containers/Bundle/Application/B/OldGame.app"}]
+        rows = process_list.apply_application_states([game, background], states)
+        self.assertTrue(rows[0]["foregroundApplication"])
+        self.assertFalse(rows[1]["foregroundApplication"])
+
+    def test_explicit_false_is_not_overridden_by_running_notification(self) -> None:
+        game = _app(639, "Game", "com.example.game")
+        game["foregroundRunning"] = False
+        states = [{"pid": 639, "state_description": "Running", "execName": "/var/containers/Bundle/Application/A/Game.app"}]
+        self.assertFalse(process_list.apply_application_states([game], states)[0]["foregroundApplication"])
+
+    def test_multiple_explicit_foreground_apps_preserve_multitasking_evidence(self) -> None:
+        apps = [_app(1, "A", "com.example.a"), _app(2, "B", "com.example.b")]
+        for app in apps:
+            app.update(foregroundRunning=True, realAppName="/var/containers/Bundle/Application/A/Game.app/Game")
+        self.assertTrue(all(row["foregroundApplication"] for row in process_list.apply_application_states(apps, [])))
+
     def test_process_discovery_persists_the_canonical_sysmontap_schema(self) -> None:
         source = (ROOT / "csharp_perf_monitor" / "tools" / "ios_process_list.py").read_text(
             encoding="utf-8"
