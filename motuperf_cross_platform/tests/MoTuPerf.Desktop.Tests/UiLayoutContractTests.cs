@@ -796,7 +796,8 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Equal("OpenVersionLog", Attribute(link, "Click"));
             string changelogCode = LoadText("src", "MoTuPerf.Desktop", "ChangelogWindow.axaml.cs");
             Assert.Contains("OpenVersionLog", changelogCode);
-            Assert.Contains("EJ6Hdr6lbokuUsxr8FecLA7Qneg", changelogCode);
+            Assert.Contains("https://github.com/Atomyi1412/motuperf/blob/master/CHANGELOG.md", changelogCode);
+            Assert.DoesNotContain("feishu.cn", changelogCode);
         }
 
         [Fact]

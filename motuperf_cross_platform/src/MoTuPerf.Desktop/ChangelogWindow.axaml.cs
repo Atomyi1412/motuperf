@@ -7,7 +7,7 @@ namespace MoTuPerf.Desktop
 {
     public partial class ChangelogWindow : Window
     {
-        private const string VersionLogUrl = "https://more2.feishu.cn/docx/EJ6Hdr6lbokuUsxr8FecLA7Qneg";
+        private const string VersionLogUrl = "https://github.com/Atomyi1412/motuperf/blob/master/CHANGELOG.md";
 
         public ChangelogWindow()
         {

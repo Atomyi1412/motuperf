@@ -79,7 +79,7 @@ confirmed
 - 每次发布先将真实改动写入根目录 `CHANGELOG.md`，最新版本排在顶部，并标注日期。
 - 主工具栏“帮助”后固定提供“更新日志”按钮；`ChangelogWindow` 离线展示最新三个版本。帮助窗口不再承担更新日志入口。
 - 同步修改 `ChangelogWindow.axaml` 中的版本、日期和逐条内容。`BundledChangelogMatchesLatestThreeReleaseNotes` 对比 CHANGELOG，遗漏同步会阻止 CI/Release 测试通过。
-- 飞书完整日志继续维护于 https://more2.feishu.cn/docx/EJ6Hdr6lbokuUsxr8FecLA7Qneg 。发布工作必须读取当前 block ID，在版本列表顶部局部插入，保留历史及标题自动编号，并回读核对版本顺序和内容。飞书凭据不进入客户端或仓库。
+- 完整日志以根 `CHANGELOG.md` 为唯一维护来源，客户端在线入口为 https://github.com/Atomyi1412/motuperf/blob/master/CHANGELOG.md 。飞书原文仅保留历史与顶部跳转提示，后续发布无需重复更新飞书。飞书凭据不进入客户端或仓库。
 - 日志窗口使用共享二级框主题；顶部关闭列为 46px，正文可纵向滚动，底部完整日志入口固定可见。
 - v0.23.0 起日志与更新提示窗口按内容自适应高度，并限制在所在屏幕工作区；超高正文在窗口内滚动，底部操作保持可见。
 - `latest.json` 的可选 `releaseNotes` 是该版本的纯文本条目数组，最多24条、每条最多1000字符。发布脚本从对应版本 CHANGELOG 提取，无匹配或没有条目则阻止发布；GitHub Release 正文同步使用同一段日志。schema 保持1，旧客户端忽略新字段。
