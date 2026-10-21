@@ -114,9 +114,19 @@ namespace CSharpIosPerfMonitor
 
         public static SessionDocument Load(string path, string extractionRoot)
         {
+            return LoadCore(path, extractionRoot, true);
+        }
+
+        public static SessionDocument LoadForAnalysis(string path)
+        {
+            return LoadCore(path, null, false);
+        }
+
+        private static SessionDocument LoadCore(string path, string extractionRoot, bool extractScreenshots)
+        {
             string fullPath = Path.GetFullPath(path ?? "");
-            string targetRoot = Path.GetFullPath(extractionRoot ?? "");
-            Directory.CreateDirectory(targetRoot);
+            string targetRoot = extractScreenshots ? Path.GetFullPath(extractionRoot ?? "") : null;
+            if (extractScreenshots) Directory.CreateDirectory(targetRoot);
             List<string> extractedFiles = new List<string>();
             try
             {
@@ -161,6 +171,8 @@ namespace CSharpIosPerfMonitor
                         if (entry == null) throw new InvalidDataException("现场文件缺少截图：" + entryName);
                         if (entry.Length > MaximumScreenshotBytes || uncompressedBytes > MaximumUncompressedBytes - entry.Length)
                             throw new InvalidDataException("现场文件解压后的数据量过大。");
+                        uncompressedBytes += entry.Length;
+                        if (!extractScreenshots) continue;
                         string target = Path.Combine(targetRoot, Guid.NewGuid().ToString("N") + "-" + Path.GetFileName(entryName));
                         using (Stream input = entry.Open())
                         using (Stream output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None))
@@ -168,7 +180,6 @@ namespace CSharpIosPerfMonitor
                             extractedFiles.Add(target);
                             input.CopyTo(output);
                         }
-                        uncompressedBytes += entry.Length;
                         screenshot.OriginalPath = target;
                     }
                     document.Samples = document.Samples ?? new List<PerfSample>();

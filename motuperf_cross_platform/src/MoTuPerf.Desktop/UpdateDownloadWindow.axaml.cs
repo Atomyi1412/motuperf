@@ -46,9 +46,10 @@ namespace MoTuPerf.Desktop
             _progress.IsIndeterminate = !hasPercent;
             if (hasPercent) _progress.Value = Math.Max(0, Math.Min(100, progress.Percent.Value));
             _percentText.Text = hasPercent ? _progress.Value.ToString("0.0") + "%" : "下载中";
-            _detail.Text = progress?.TotalBytes.HasValue == true
+            string downloaded = progress?.TotalBytes.HasValue == true
                 ? "已下载 " + FormatSize(progress.BytesReceived) + " / " + FormatSize(progress.TotalBytes.Value)
                 : "已下载 " + FormatSize(progress?.BytesReceived ?? 0);
+            _detail.Text = string.IsNullOrWhiteSpace(progress?.Status) ? downloaded : progress.Status + "，" + downloaded;
         }
         public void Complete() { Close(); }
         public void ShowFailure(string message)

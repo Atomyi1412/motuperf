@@ -11,6 +11,7 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using Avalonia.Media.Imaging;
+using Avalonia.Media;
 using Avalonia.VisualTree;
 using CSharpIosPerfMonitor;
 using MoTuPerf.Desktop;
@@ -50,7 +51,7 @@ namespace MoTuPerf.Desktop.UiTests
     public sealed class PickerUiCollection { }
 
     [Collection("Picker UI")]
-    public sealed class DevicePickerInteractionTests
+    public sealed partial class DevicePickerInteractionTests
     {
         private static readonly HeadlessUnitTestSession Ui = HeadlessUnitTestSession.StartNew(typeof(PickerTestApplication), AvaloniaTestIsolationLevel.PerAssembly);
         private static Task OnUi(Func<Task> body) => Ui.Dispatch(async () => { await body(); return true; }, CancellationToken.None);
@@ -75,6 +76,109 @@ namespace MoTuPerf.Desktop.UiTests
             Directory.CreateDirectory(path);
             return path;
         }
+
+        [Fact]
+        public Task HelpRemainsReadableAndScrollableAtMinimumSize() => OnUi(async () =>
+        {
+            string output = Path.Combine(ScreenshotDirectory(), "help-v0453");
+            Directory.CreateDirectory(output);
+            foreach (string theme in new[] { "dark", "light", "retro-sage" })
+            {
+                AppThemeManager.Apply(Application.Current, theme, false);
+                var window = new HelpWindow { Width = 620, Height = 520 };
+                try
+                {
+                    window.Show();
+                    await Task.Delay(50);
+                    window.UpdateLayout();
+                    var scroll = window.GetVisualDescendants().OfType<ScrollViewer>().First();
+                    Assert.True(scroll.Extent.Height > scroll.Viewport.Height);
+                    Assert.True(scroll.Extent.Width <= scroll.Viewport.Width + 1);
+                    foreach (string position in new[] { "top", "bottom" })
+                    {
+                        if (position == "bottom") scroll.Offset = new Vector(0, scroll.Extent.Height);
+                        window.UpdateLayout();
+                        using var bitmap = new RenderTargetBitmap(new PixelSize(620, 520));
+                        bitmap.Render(window);
+                        bitmap.Save(Path.Combine(output, theme + "-" + position + ".png"), PngBitmapEncoderOptions.Default);
+                    }
+                }
+                finally { window.Close(); }
+            }
+        });
+
+        [Fact]
+        public Task ChartRenderingPreservesCachesAcrossCursorZoomAndThemes() => OnUi(async () =>
+        {
+            string output = Path.Combine(ScreenshotDirectory(), "charts-v0461");
+            Directory.CreateDirectory(output);
+            var buffer = Enumerable.Range(0, 18000).Select(i => new PerfSample
+            {
+                ElapsedSec = i, HasFps = true, FpsUpdated = true, Fps = i % 110 == 0 ? 4 : 60,
+                HasFreshnessMetadata = true, Source = "ios-fps",
+                HasFrameTimeMax = true, FrameTimeMaxMs = i % 110 == 0 ? 250 : 16.7,
+                HasJank = true, Jank = i % 110 == 0 ? 2 : 0, BigJank = i % 220 == 0 ? 1 : 0,
+                FrameSource = i < 9000 ? "display" : "fallback", FpsScope = "display",
+                FrameSourceSequenceDiscontinuity = i == 9000,
+                HasCpu = true, CpuPercent = 35 + 20 * Math.Sin(i / 40.0),
+                HasCpuNormalized = true, CpuNormalizedPercent = 8,
+                HasCpuCoreUsage = true, CpuCoreCount = 3, CpuCorePercents = new List<double> { 20, 35, 10 },
+                HasMemory = true, MemoryUpdated = true, MemoryMetric = "pss", MemoryMb = 350 + i / 100.0,
+                HasTemperature = true, TemperatureUpdated = true,
+                TemperatureCelsius = new Dictionary<string, double> { ["Battery"] = 35 + i / 6000.0,
+                    ["shell_back_long_sensor_name"] = 33 + i / 5000.0, ["charger"] = 34 },
+                HasThermalState = true, ThermalStateLevel = (i / 3000) % 4, ThermalStateName = "nominal"
+            }).SelectMany(frame => new[] { frame, new PerfSample
+            {
+                ElapsedSec = frame.ElapsedSec + 0.5, HasFreshnessMetadata = true,
+                HasFps = true, Fps = frame.Fps, HasJank = true, Jank = frame.Jank, BigJank = frame.BigJank,
+                FrameSource = frame.FrameSource, FpsScope = frame.FpsScope, Source = "thermal-state",
+                HasThermalState = true, ThermalStateUpdated = true, ThermalStateLevel = frame.ThermalStateLevel
+            } }).ToList();
+            var snapshot = new SampleSnapshot(buffer);
+            foreach (string theme in new[] { "dark", "light", "retro-sage" })
+            foreach (int width in new[] { 420, 900 })
+            {
+                AppThemeManager.Apply(Application.Current, theme, false);
+                var charts = new[] { "fps", "frametime", "memory", "cpu", "cpunormalized", "corecpu", "temperature", "thermalstate" }
+                    .Select(mode => new PerformanceChartControl { Samples = snapshot, Mode = mode, Height = 156, SelectedTime = 17999 }).ToArray();
+                var panel = new StackPanel();
+                foreach (var chart in charts) panel.Children.Add(chart);
+                var window = new Window { Width = width, Height = 1248, Content = panel };
+                try
+                {
+                    window.Show(); await Task.Delay(30); window.UpdateLayout();
+                    using (var bitmap = new RenderTargetBitmap(new PixelSize(width, 1248)))
+                    {
+                        bitmap.Render(window);
+                        bitmap.Save(Path.Combine(output, theme + "-" + width + ".png"), PngBitmapEncoderOptions.Default);
+                    }
+                    foreach (var chart in charts)
+                    {
+                        int renders = chart.SeriesRenderCount;
+                        chart.SelectedTime = 8900;
+                        using (var drawing = new DrawingGroup().Open()) chart.Render(drawing);
+                        Assert.Equal(renders, chart.SeriesRenderCount);
+                        chart.ViewStartTime = 8940; chart.ViewEndTime = 9060;
+                        using (var drawing = new DrawingGroup().Open()) chart.Render(drawing);
+                        Assert.Equal(buffer.Count, chart.IndexedSampleCount);
+                    }
+                    double clickedTime = -1;
+                    charts[0].TimeSelected += time => clickedTime = time;
+                    window.MouseDown(new Point(width - 52, 70), Avalonia.Input.MouseButton.Left);
+                    window.MouseUp(new Point(width - 52, 70), Avalonia.Input.MouseButton.Left);
+                    Assert.Equal(9060, clickedTime, 6);
+                    using var zoomBitmap = new RenderTargetBitmap(new PixelSize(width, 1248));
+                    zoomBitmap.Render(window);
+                    zoomBitmap.Save(Path.Combine(output, theme + "-" + width + "-zoom.png"), PngBitmapEncoderOptions.Default);
+                    foreach (var chart in charts) { chart.ViewStartTime = 0; chart.ViewEndTime = 60; }
+                    using var mixedBitmap = new RenderTargetBitmap(new PixelSize(width, 1248));
+                    mixedBitmap.Render(window);
+                    mixedBitmap.Save(Path.Combine(output, theme + "-" + width + "-mixed-events.png"), PngBitmapEncoderOptions.Default);
+                }
+                finally { window.Close(); }
+            }
+        });
 
         [ConnectedIosFact]
         public Task ConnectedIosForegroundIsSelectedThroughActualAppAndProcessQueries() => OnUi(async () =>

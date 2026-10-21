@@ -14,6 +14,9 @@ namespace MoTuPerf.Desktop
         public PerfSample this[int index] => index >= 0 && index < Count ? _source[index] : throw new ArgumentOutOfRangeException(nameof(index));
         public IReadOnlyList<PerfSample> Ordered { get; }
 
+        internal bool Extends(SampleSnapshot previous) => previous != null
+            && ReferenceEquals(_source, previous._source) && Count >= previous.Count;
+
         public SampleSnapshot(List<PerfSample> source, SampleSnapshot previous = null)
         {
             _source = source;

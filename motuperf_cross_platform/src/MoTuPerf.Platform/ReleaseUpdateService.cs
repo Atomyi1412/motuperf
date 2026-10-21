@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -41,6 +42,7 @@ namespace MoTuPerf.Platform
         public long BytesReceived { get; internal set; }
         public long? TotalBytes { get; internal set; }
         public double? Percent { get; internal set; }
+        public string Status { get; internal set; }
     }
 
     public sealed class ReleaseUpdateService
@@ -50,11 +52,26 @@ namespace MoTuPerf.Platform
         public const string LatestManifestUrl = "https://github.com/Atomyi1412/motuperf/releases/latest/download/latest.json";
 
         private static readonly Regex VersionPattern = new Regex(@"\A(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\z", RegexOptions.CultureInvariant);
+        private static readonly TimeSpan DefaultReadTimeout = TimeSpan.FromSeconds(15);
+        private static readonly TimeSpan ProgressReportInterval = TimeSpan.FromMilliseconds(250);
+        private const long ProgressReportByteInterval = 1024 * 1024;
+        private const int DefaultMaxRetryAttempts = 5;
         private readonly HttpClient _httpClient;
+        private readonly TimeSpan _readTimeout;
+        private readonly int _maxRetryAttempts;
 
         public ReleaseUpdateService(HttpClient httpClient = null)
+            : this(httpClient, DefaultReadTimeout, DefaultMaxRetryAttempts)
+        {
+        }
+
+        internal ReleaseUpdateService(HttpClient httpClient, TimeSpan readTimeout, int maxRetryAttempts)
         {
             _httpClient = httpClient ?? CreateHttpClient();
+            if (readTimeout <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(readTimeout));
+            if (maxRetryAttempts < 0) throw new ArgumentOutOfRangeException(nameof(maxRetryAttempts));
+            _readTimeout = readTimeout;
+            _maxRetryAttempts = maxRetryAttempts;
         }
 
         public async Task<UpdateCheckResult> CheckAsync(string currentVersion, CancellationToken cancellationToken)
@@ -92,28 +109,102 @@ namespace MoTuPerf.Platform
             string temporaryPath = finalPath + "." + Guid.NewGuid().ToString("N") + ".download";
             try
             {
-                using (HttpResponseMessage response = await _httpClient.GetAsync(new Uri(asset.Url), HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false))
+                long received = 0;
+                int retryAttempts = 0;
+                long? totalBytes = null;
+                byte[] buffer = new byte[128 * 1024];
+                long lastProgressBytes = -1;
+                DateTime lastProgressAt = DateTime.MinValue;
+                void ReportProgress(string status = null, bool force = false)
                 {
-                    response.EnsureSuccessStatusCode();
-                    long? total = response.Content.Headers.ContentLength;
-                    long received = 0;
-                    using (Stream source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false))
-                    using (FileStream destination = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.SequentialScan))
+                    if (progress == null) return;
+                    DateTime now = DateTime.UtcNow;
+                    if (!force && lastProgressBytes >= 0
+                        && received - lastProgressBytes < ProgressReportByteInterval
+                        && now - lastProgressAt < ProgressReportInterval)
+                        return;
+                    lastProgressBytes = received;
+                    lastProgressAt = now;
+                    progress.Report(new UpdateDownloadProgress
                     {
-                        byte[] buffer = new byte[128 * 1024];
-                        int count;
-                        while ((count = await source.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false)) > 0)
+                        BytesReceived = received,
+                        TotalBytes = totalBytes,
+                        Percent = totalBytes.HasValue && totalBytes.Value > 0 ? (double?)received * 100d / totalBytes.Value : null,
+                        Status = status
+                    });
+                }
+                while (true)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    try
+                    {
+                        using (HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, new Uri(asset.Url)))
                         {
-                            await destination.WriteAsync(buffer, 0, count, cancellationToken).ConfigureAwait(false);
-                            received += count;
-                            progress?.Report(new UpdateDownloadProgress
+                            if (received > 0)
+                                request.Headers.Range = new RangeHeaderValue(received, null);
+                            using (HttpResponseMessage response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false))
                             {
-                                BytesReceived = received,
-                                TotalBytes = total,
-                                Percent = total.HasValue && total.Value > 0 ? (double?)received * 100d / total.Value : null
-                            });
+                                ValidateDownloadResponse(response, received);
+                                totalBytes = GetTotalBytes(response, received, totalBytes);
+                                using (Stream source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false))
+                                using (FileStream destination = new FileStream(temporaryPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.SequentialScan))
+                                {
+                                    destination.Position = received;
+                                    int count;
+                                    while (true)
+                                    {
+                                        using (CancellationTokenSource readTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+                                        {
+                                            readTimeout.CancelAfter(_readTimeout);
+                                            try
+                                            {
+                                                count = await source.ReadAsync(buffer, 0, buffer.Length, readTimeout.Token).ConfigureAwait(false);
+                                            }
+                                            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                                            {
+                                                throw new TimeoutException("更新包下载暂时没有数据，正在重新连接。");
+                                            }
+                                            catch (IOException exception)
+                                            {
+                                                throw new DownloadReadException("更新包下载流读取失败，正在重新连接。", exception);
+                                            }
+                                        }
+
+                                        if (count == 0) break;
+                                        await destination.WriteAsync(buffer, 0, count, cancellationToken).ConfigureAwait(false);
+                                        received += count;
+                                        retryAttempts = 0;
+                                        ReportProgress();
+                                    }
+                                }
+                            }
                         }
+
+                        if (!totalBytes.HasValue || received >= totalBytes.Value) break;
+                        throw new EndOfStreamException("更新包下载提前结束，正在重新连接。");
                     }
+                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                    {
+                        retryAttempts = await RetryDownloadAsync(retryAttempts, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (TimeoutException)
+                    {
+                        retryAttempts = await RetryDownloadAsync(retryAttempts, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (HttpRequestException)
+                    {
+                        retryAttempts = await RetryDownloadAsync(retryAttempts, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (EndOfStreamException)
+                    {
+                        retryAttempts = await RetryDownloadAsync(retryAttempts, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (DownloadReadException)
+                    {
+                        retryAttempts = await RetryDownloadAsync(retryAttempts, cancellationToken).ConfigureAwait(false);
+                    }
+
+                    ReportProgress("网络暂时无数据，正在重新连接（" + retryAttempts + "/" + _maxRetryAttempts + "）", true);
                 }
 
                 string actualHash;
@@ -123,7 +214,8 @@ namespace MoTuPerf.Platform
                     throw new InvalidDataException("更新包校验失败。");
                 cancellationToken.ThrowIfCancellationRequested();
                 File.Move(temporaryPath, finalPath, true);
-                progress?.Report(new UpdateDownloadProgress { BytesReceived = new FileInfo(finalPath).Length, TotalBytes = new FileInfo(finalPath).Length, Percent = 100 });
+                long finalLength = new FileInfo(finalPath).Length;
+                progress?.Report(new UpdateDownloadProgress { BytesReceived = finalLength, TotalBytes = finalLength, Percent = 100 });
                 return finalPath;
             }
             catch
@@ -131,6 +223,52 @@ namespace MoTuPerf.Platform
                 TryDelete(temporaryPath);
                 throw;
             }
+        }
+
+        private async Task<int> RetryDownloadAsync(int retryAttempts, CancellationToken cancellationToken)
+        {
+            retryAttempts++;
+            if (retryAttempts > _maxRetryAttempts)
+                throw new IOException("更新包下载多次中断，请检查网络后重试。");
+            await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken).ConfigureAwait(false);
+            return retryAttempts;
+        }
+
+        private sealed class DownloadReadException : IOException
+        {
+            public DownloadReadException(string message, Exception innerException)
+                : base(message, innerException)
+            {
+            }
+        }
+
+        private static void ValidateDownloadResponse(HttpResponseMessage response, long received)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new InvalidDataException("更新服务器返回 HTTP " + (int)response.StatusCode + "。");
+            }
+
+            if (received == 0)
+            {
+                if (response.StatusCode == System.Net.HttpStatusCode.PartialContent
+                    && response.Content.Headers.ContentRange?.From != 0)
+                    throw new InvalidDataException("更新服务器返回的下载范围无效。");
+                return;
+            }
+
+            if (response.StatusCode != System.Net.HttpStatusCode.PartialContent
+                || response.Content.Headers.ContentRange?.From != received)
+                throw new InvalidDataException("更新服务器不支持从断点继续下载。");
+        }
+
+        private static long? GetTotalBytes(HttpResponseMessage response, long received, long? previousTotal)
+        {
+            long? rangeLength = response.Content.Headers.ContentRange?.Length;
+            if (rangeLength.HasValue) return rangeLength;
+            long? contentLength = response.Content.Headers.ContentLength;
+            if (contentLength.HasValue) return received + contentLength.Value;
+            return previousTotal;
         }
 
         public static string GetCurrentTarget()

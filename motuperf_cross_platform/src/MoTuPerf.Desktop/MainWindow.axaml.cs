@@ -226,11 +226,7 @@ namespace MoTuPerf.Desktop
             StackPanel panel = this.FindControl<StackPanel>("CoreCpuLegendPanel");
             PerformanceChartControl chart = this.FindControl<PerformanceChartControl>("CoreCpuChart");
             if (panel == null || chart == null) return;
-            int count = (samples ?? Array.Empty<CSharpIosPerfMonitor.PerfSample>())
-                .Where(delegate(CSharpIosPerfMonitor.PerfSample sample) { return sample != null && sample.HasCpuCoreUsage && sample.CpuCorePercents != null; })
-                .Select(delegate(CSharpIosPerfMonitor.PerfSample sample) { return Math.Min(sample.CpuCoreCount, sample.CpuCorePercents.Count); })
-                .DefaultIfEmpty(0)
-                .Max();
+            int count = chart.IndexedSeriesKeys(samples, "corecpu").Count;
             if (count == _renderedCoreLegendCount) return;
             _renderedCoreLegendCount = count;
             panel.Children.Clear();
@@ -254,7 +250,7 @@ namespace MoTuPerf.Desktop
             StackPanel panel = this.FindControl<StackPanel>("TemperatureLegendPanel");
             PerformanceChartControl chart = this.FindControl<PerformanceChartControl>("TemperatureChart");
             if (panel == null || chart == null) return;
-            List<string> sensors = PerformanceChartControl.TemperatureSensorNames(samples);
+            List<string> sensors = PerformanceChartControl.SortTemperatureSensorNames(chart.IndexedSeriesKeys(samples, "temperature"));
             string signature = string.Join("\u001f", sensors);
             if (string.Equals(signature, _renderedTemperatureLegendSignature, StringComparison.Ordinal)) return;
             _renderedTemperatureLegendSignature = signature;
@@ -611,6 +607,17 @@ namespace MoTuPerf.Desktop
             }
             catch (Exception ex) { viewModel.Status = "导出失败：" + ex.Message; }
             finally { _fileActionGate.Release(); }
+        }
+
+        private async void ShowComparison(object sender, RoutedEventArgs e)
+        {
+            MainWindowViewModel viewModel = DataContext as MainWindowViewModel;
+            if (viewModel == null || !viewModel.CanUseFileActions) return;
+            try
+            {
+                await new SessionComparisonWindow(viewModel.HasSessionData ? viewModel.BuildSessionDocument() : null).ShowDialog(this);
+            }
+            catch (Exception ex) { viewModel.Status = "打开对比分析失败：" + ex.Message; }
         }
 
         private async void ShowHelp(object sender, RoutedEventArgs e) { await new HelpWindow().ShowDialog(this); }

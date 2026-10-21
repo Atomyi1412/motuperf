@@ -2,7 +2,10 @@ using System;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -83,6 +86,63 @@ namespace MoTuPerf.Platform.Tests
             finally { Directory.Delete(directory, true); }
         }
 
+        [Fact]
+        public async Task ResumesFromExistingBytesAfterReadTimeout()
+        {
+            byte[] content = Encoding.UTF8.GetBytes("0123456789");
+            string target = ReleaseUpdateService.GetCurrentTarget();
+            string fileName = target == "win-x64" ? "update.exe" : "update.dmg";
+            UpdateAsset asset = new UpdateAsset
+            {
+                Target = target,
+                FileName = fileName,
+                Url = "https://github.com/Atomyi1412/motuperf/releases/download/v99.1.2/" + fileName,
+                Sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(content))
+            };
+            RangeResumeHandler handler = new RangeResumeHandler(content, 4);
+            ReleaseUpdateService service = new ReleaseUpdateService(
+                new HttpClient(handler), TimeSpan.FromMilliseconds(20), 2);
+            string directory = Directory.CreateTempSubdirectory("motuperf-update-").FullName;
+            try
+            {
+                string path = await service.DownloadAsync(asset, directory, null, CancellationToken.None);
+
+                Assert.Equal(content, File.ReadAllBytes(path));
+                Assert.Equal(2, handler.Requests.Count);
+                Assert.Null(handler.Requests[0]);
+                Assert.Equal(4, handler.Requests[1].Ranges.Single().From);
+            }
+            finally { Directory.Delete(directory, true); }
+        }
+
+        [Fact]
+        public async Task ThrottlesProgressReportsDuringFastDownload()
+        {
+            byte[] content = new byte[4 * 1024 * 1024];
+            new Random(42).NextBytes(content);
+            string target = ReleaseUpdateService.GetCurrentTarget();
+            string fileName = target == "win-x64" ? "update.exe" : "update.dmg";
+            UpdateAsset asset = new UpdateAsset
+            {
+                Target = target,
+                FileName = fileName,
+                Url = "https://github.com/Atomyi1412/motuperf/releases/download/v99.1.2/" + fileName,
+                Sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(content))
+            };
+            ReleaseUpdateService service = new ReleaseUpdateService(new HttpClient(new BytesHandler(content)));
+            RecordingProgress progress = new RecordingProgress();
+            string directory = Directory.CreateTempSubdirectory("motuperf-update-").FullName;
+            try
+            {
+                await service.DownloadAsync(asset, directory, progress, CancellationToken.None);
+
+                Assert.True(progress.Values.Count <= 7, "Fast downloads should not enqueue one UI update per 128KB read.");
+                Assert.Equal(100, progress.Values.Last().Percent);
+                Assert.Equal(content.Length, progress.Values.Last().BytesReceived);
+            }
+            finally { Directory.Delete(directory, true); }
+        }
+
         [Theory]
         [InlineData(null, 0)]
         [InlineData("null", 0)]
@@ -140,6 +200,96 @@ namespace MoTuPerf.Platform.Tests
             {
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(_bytes) });
             }
+        }
+
+        private sealed class RecordingProgress : IProgress<UpdateDownloadProgress>
+        {
+            public List<UpdateDownloadProgress> Values { get; } = new List<UpdateDownloadProgress>();
+            public void Report(UpdateDownloadProgress value) { Values.Add(value); }
+        }
+
+        private sealed class RangeResumeHandler : HttpMessageHandler
+        {
+            private readonly byte[] _content;
+            private readonly int _prefixLength;
+            public List<RangeHeaderValue> Requests { get; } = new List<RangeHeaderValue>();
+
+            public RangeResumeHandler(byte[] content, int prefixLength)
+            {
+                _content = content;
+                _prefixLength = prefixLength;
+            }
+
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+            {
+                RangeHeaderValue range = request.Headers.Range;
+                Requests.Add(range);
+                if (range == null)
+                {
+                    HttpResponseMessage response = new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StreamContent(new StallingStream(_content, _prefixLength))
+                    };
+                    response.Content.Headers.ContentLength = _content.Length;
+                    return Task.FromResult(response);
+                }
+
+                long start = range.Ranges.Single().From.GetValueOrDefault();
+                byte[] remainder = _content.Skip((int)start).ToArray();
+                HttpResponseMessage resumed = new HttpResponseMessage(HttpStatusCode.PartialContent)
+                {
+                    Content = new ByteArrayContent(remainder)
+                };
+                resumed.Content.Headers.ContentRange = new ContentRangeHeaderValue(
+                    start, _content.Length - 1, _content.Length);
+                return Task.FromResult(resumed);
+            }
+        }
+
+        private sealed class StallingStream : Stream
+        {
+            private readonly byte[] _content;
+            private readonly int _prefixLength;
+            private int _position;
+
+            public StallingStream(byte[] content, int prefixLength)
+            {
+                _content = content;
+                _prefixLength = prefixLength;
+            }
+
+            public override bool CanRead => true;
+            public override bool CanSeek => false;
+            public override bool CanWrite => false;
+            public override long Length => _content.Length;
+            public override long Position { get => _position; set => throw new NotSupportedException(); }
+
+            public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+            public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            {
+                return ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+            }
+
+            public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            {
+                if (_position < _prefixLength)
+                {
+                    int count = Math.Min(buffer.Length, _prefixLength - _position);
+                    _content.AsMemory(_position, count).CopyTo(buffer);
+                    _position += count;
+                    return count;
+                }
+
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                return 0;
+            }
+
+            public override Task FlushAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+            public override void Flush() { }
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
         }
     }
 }

@@ -33,7 +33,7 @@
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="点击“选择设备及应用”，依次选择设备、应用和目标进程；微信小游戏等场景应确认实际宿主进程。" />
               <TextBlock Classes="helpItemTitle" Text="3. 开始采集" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="勾选需要的指标，点击“开始采集”；再次点击停止。采集中不能更换设备或应用，工具只保留真实数据，缺失值显示为 --。" />
-              <TextBlock Classes="dialogHint" Foreground="{DynamicResource Theme.Accent}" FontWeight="SemiBold" TextWrapping="Wrap" Text="提示：鸿蒙首次使用请按设备页向导准备 HDC，具体步骤见“鸿蒙连接与指标”。" />
+              <TextBlock Classes="dialogHint" Foreground="{DynamicResource Theme.Accent}" FontWeight="SemiBold" TextWrapping="Wrap" Text="提示：鸿蒙首次使用可进入“选择设备及应用 → 查看检测详情 → 下载鸿蒙连接工具”准备 HDC。" />
             </StackPanel>
           </Border>
           <Border Classes="helpSection">
@@ -42,7 +42,9 @@
               <TextBlock Classes="helpItemTitle" Text="1. 选择设备与应用" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="点击刷新获取当前连接设备；选择应用后，应用名称、图标和可用进程会同步更新。列表中的平台、名称和状态用于辅助判断，不代表一定可以采集。" />
               <TextBlock Classes="helpItemTitle" Text="2. 选择真实目标" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="1. 进程按应用分组，显示 PID、主进程/小游戏/WebKit 等角色，支持名称、包名和 PID 搜索。&#xA;2. “当前前台”来自实际前台证据；“常用宿主”只表示微信等常用入口，不代表它正在前台。WebKit 宿主未确认时不会自动归给当前 APP。&#xA;3. Android/鸿蒙可开启“显示全部目标”；搜索会查找默认隐藏的真实目标。刷新保留手动选择，原进程退出或实例变化后请重新选择。&#xA;4. APP 和进程分别读取，单项失败可继续使用成功的一项。选择框会检测连接变化；设备断开禁止确认，新接入设备需手动选择。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="1. 进程按应用分组，显示 PID、主进程/小游戏/WebKit 等角色，支持名称、包名和 PID 搜索。&#xA;2. “当前前台”来自实际前台证据；“常用宿主”只表示微信等常用入口，不代表它正在前台。WebKit 宿主未确认时不会自动归给当前 APP。&#xA;3. Android/鸿蒙可开启“显示全部目标”；搜索会查找默认隐藏的真实目标。刷新保留本窗口内的手动选择，原进程退出或实例变化后请重新选择。&#xA;4. Android/iOS 的 APP 和进程分别读取，单项失败可继续使用成功的一项；鸿蒙使用同一轮完整清单，避免混用不同轮次的目标。设备断开后禁止确认，新接入设备需手动选择。" />
+              <TextBlock Classes="helpItemTitle" Text="iOS 默认选择规则" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="重新打开选择框时，优先选择当前唯一确认的前台应用，不沿用上次采集目标；本窗口内手动选择后，刷新会保留选择。锁屏、应用挂起或多个应用同时处于前台时，可能无法唯一推荐，请解锁并打开目标应用，刷新或手动选择。" />
               <TextBlock Classes="helpItemTitle" Text="3. 启动 APP" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="需要启动应用时，在“启动 APP”页选择设备返回的真实入口；启动后回到进程页确认目标。最终采集目标以确认时的所选 PID 为准，目标重启后 PID 变化需要重新选择。" />
               <TextBlock Classes="dialogHint" Foreground="{DynamicResource Theme.Accent}" FontWeight="SemiBold" TextWrapping="Wrap" Text="重点：启动 APP 以应用为准，选择进程以进程为准；应用列表和进程列表的推荐结果可能不同。" />
@@ -66,7 +68,7 @@
             <StackPanel Spacing="2">
               <TextBlock Text="鸿蒙连接与指标" Classes="helpTitle" />
               <TextBlock Classes="helpItemTitle" Text="1. 准备 HDC" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="不需要单独安装 DevEco Studio。设备页向导会自动检查常见 SDK 位置；找不到时，按向导打开官方下载中心，只下载 Command Line Tools。解压后选择最外层的 command-line-tools 文件夹，MoTuPerf 会自动寻找里面的 HDC。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="进入“选择设备及应用 → 查看检测详情 → 下载鸿蒙连接工具”，按向导操作；不需要单独安装 DevEco Studio。工具会检查常见 SDK 位置；找不到时，从官方下载中心下载 Command Line Tools，解压后选择最外层的 command-line-tools 文件夹，MoTuPerf 会自动寻找 HDC。" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="普通用户不需要自己找 hdc.exe，也不需要手动设置环境变量；高级用户也可以选择 HDC 文件，或设置 MOTUPERF_HDC 为 HDC 可执行文件的完整路径。Windows 使用 hdc.exe，macOS 使用对应芯片版本的 hdc。" />
               <TextBlock Classes="helpItemTitle" Text="2. 选择鸿蒙目标" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="应用列表合并 Bundle Manager 清单、兼容包和运行中进程。默认只显示可测目标，可打开“显示全部目标”查看完整清单。多用户设备上，同一 Bundle 的不同用户资料必须分别确认；不要跨用户选择 PID。" />
@@ -83,6 +85,7 @@
               <TextBlock Text="指标口径" Classes="helpTitle" />
               <TextBlock Classes="helpItemTitle" Text="1. FPS 与 FrameTime" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="FPS 来自设备实际提供的显示帧；高刷新率设备可能超过 60。iOS 通常是屏幕级数据，不按所选 PID 过滤；Android 取决于可用帧源；鸿蒙要求唯一确认所选 PID 的 Surface。FrameTime 是相邻显示帧的实际间隔，曲线使用当前采样窗口的最大值，CSV 还提供 Mean 和 P95。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="FPS 图左轴为帧/秒，Jank、BigJank 使用右轴，单位为次/采样窗口。虚线标记表示来源切换、序列断点或采集缺口；断点两侧不连线，真实测得的 0 FPS 仍保留。" />
               <TextBlock Classes="helpItemTitle" Text="2. Jank 与 BigJank" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="Jank：帧间隔同时超过前 3 帧平均值的 2 倍和 83.33ms；BigJank：在此基础上超过 125ms。Jank 是总次数，包含 BigJank；普通 Jank = Jank - BigJank，CSV 会分别导出，不能把 Jank 和 BigJank 相加。没有可信有序帧时保持缺测，不从 FPS 波动或无序直方图推算。" />
               <TextBlock Classes="helpItemTitle" Text="3. CPU 与内存" />
@@ -97,6 +100,7 @@
               <TextBlock Classes="helpItemTitle" Text="6. 汇总与缺测" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="CSV 默认按秒汇总：FrameTime Mean 按帧数加权；WindowP95Max 是这一秒各窗口 P95 的最大值，不是整秒 P95。Stat 的 FrameTime P95 仅在完整逐帧记录存在时计算，表示至少 95% 的帧间隔不超过该值。原始明细新增逐帧间隔列；现场文件保留原始帧，旧文件无法恢复的最小值/P95 显示 --。" />
               <TextBlock Classes="helpItemTitle" Text="7. 分析数据与缩放范围" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="实时数据：查看最新采样；选中数据：查看时间游标处的采样；分析数据：查看各指标的最大值、最小值和平均值。采集中隐藏分析页签，停止采集或导入现场后显示并默认切换到分析页签。未缩放时分析全程，不需要先选中数据；没有有效数据时显示 --。" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="FPS 分析与 CSV Stat 使用同一来源筛选和时长加权；CPU、内存、温度等仅统计真实更新。FrameTime 分析为逐帧最大、最小、平均间隔，曲线仍为窗口最大值。缩放后统计结束时刻落入区间的完整窗口，不拆分边界帧；还原后统计全程。缩放不改变采集、保存或全程 CSV。" />
             </StackPanel>
           </Border>
@@ -106,22 +110,36 @@
               <TextBlock Classes="helpItemTitle" Text="1. 定位数据" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="采集开始后横轴从 0 秒计时；未手动定位时曲线跟随最新数据。点击或拖动任意曲线可移动时间游标，并在全部曲线和截图区域同步定位；手动选中历史时刻后不会强制跳回最新。Android 帧源发生轮询超时、历史覆盖或 Surface 变化时会重建时间线，日志和 CSV 会记录原因，不跨断点计算 FrameTime/Jank。" />
               <TextBlock Classes="helpItemTitle" Text="2. 缩放曲线" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="勾选“缩放曲线”后，可在曲线上按住鼠标左键框选时间范围，最小查看窗口为 60 秒；点击还原按钮或取消勾选恢复全程视图。缩放只影响查看，不改变正在采集的原始数据、统计结果、保存文件或导出文件。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="勾选“缩放曲线”后，可按住鼠标左键框选时间范围，最小查看窗口为 60 秒，纵轴最大值保持不变；点击还原或取消勾选恢复全程。缩放会改变分析数据的统计区间，但不改变实际采集、保存的原始数据或全程 CSV 导出。暂不支持鼠标滚轮缩放。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="长记录按显示宽度保留首尾和峰谷，放大后可查看更细的数据；绘制抽稀不影响分析、保存或导出。选中时间不在当前区间时隐藏游标，不移动已选中的原始数据。标题过长时显示省略号，悬浮可查看完整文字及断点说明。" />
               <TextBlock Classes="helpItemTitle" Text="3. 查看截图" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="截图固定每 3 秒记录一次。点击缩略图可定位时间，双击可打开大图；大图窗口支持适应窗口、放大、缩小，以及切换上一张和下一张截图。截图失败时保留失败原因，不生成伪造图片。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="启用截图后，每 3 秒尝试采集一次，实际间隔受设备响应和采集耗时影响。点击缩略图定位时间，双击打开大图；大图支持适应窗口、放大、缩小和切换相邻截图，切换时同步定位选中数据。截图失败会保留原因，不保证每次尝试都有图片。" />
             </StackPanel>
           </Border>
           <Border Classes="helpSection">
             <StackPanel Spacing="2">
               <TextBlock Text="现场文件、导出与主题" Classes="helpTitle" />
               <TextBlock Classes="helpItemTitle" Text="1. 保存与打开" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="保存会生成 .motuperf 现场文件，包含设备、应用、进程、原始采样、截图索引和查看状态。打开大文件时会显示加载遮罩，加载期间暂时不能操作主界面；现场文件中的设备和进程是历史记录，仅用于还原查看。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="保存生成 .motuperf 现场文件，包含设备、应用、进程、原始采样、截图索引和查看状态。采集中打开、保存、导出按钮置灰，请先停止采集。打开或保存时显示进度弹框，请等待完成后再操作或退出；现场中的设备和进程是历史记录，仅用于查看。" />
               <TextBlock Classes="helpItemTitle" Text="2. 导出数据" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="导出会生成 CSV，包含设备信息、目标 PID、指标统计和采样数据。默认按秒汇总，便于阅读和对比；需要完整时间戳时选择原始明细，现场文件本身不受导出方式影响。" />
               <TextBlock Classes="helpItemTitle" Text="3. 再次采集" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="打开现场后再次采集，点击“开始采集”会要求重新确认当前设备、应用和进程。停止采集、设备断开或退出时选择“保存”，功能与顶部保存按钮一致。" />
               <TextBlock Classes="helpItemTitle" Text="4. 主题与数据目录" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="右上角调色板图标可选择深色、明亮或绿色主题；主题只改变界面显示，不写入采集数据，也不改变指标口径。日志、现场文件和缓存默认保存在软件安装目录下，可在设置中查看或更换数据目录。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="右上角调色板图标可选择深色、明亮或绿色主题，不改变采集数据或指标口径。在“设置 → 设置目录”查看或更换当前数据目录；Windows 默认使用软件目录下的 data，macOS 默认使用 ~/Library/Application Support/MoTuPerf/data，以设置中显示的实际目录为准。手动保存的现场文件以所选位置为准。" />
+              <TextBlock Classes="helpItemTitle" Text="5. 清理与迁移数据" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="“设置 → 清理数据”可按类型查看大小、选择清理，或打开目录自行整理。清理和目录迁移期间显示进度及预估时间，请等待完成，避免关闭软件或同时修改相关文件；预估时间会随处理速度调整。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel Spacing="2">
+              <TextBlock Text="对比分析" Classes="helpTitle" />
+              <TextBlock Classes="helpItemTitle" Text="1. 选择记录" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="停止采集后点击顶部“对比分析”，展开“选择数据”可查看最多五份 A～E 记录。点击槽位可从本窗口已加载记录中复用、加入当前现场或导入其他 .motuperf 文件，菜单中也可移除；彩色槽位与表格列一一对应。只读取指标，不解压截图，也不会覆盖主窗口现场。" />
+              <TextBlock Classes="helpItemTitle" Text="2. 选择统计与区间" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="选择均值或峰值，输入各记录相对起点的开始、结束秒数后点击应用，结束留空表示各自末尾，点击全部还原。帧窗口按结束时间归属，不拆分窗口；各记录有效范围与缺测可能不同。热状态固定显示最高等级，发生率和卡顿占比不随均值/峰值变化。" />
+              <TextBlock Classes="helpItemTitle" Text="3. 判断可比性与导出" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="至少两份记录时可导出对比 CSV。FPS/FrameTime 沿用分析页的可信统计，内存按口径、热状态按平台分行；刷新率列在上方设备信息，帧来源、统计口径等放在表尾默认收起的“口径详情”，点击展开查看，CSV 保留完整口径信息。跨设备请核对帧来源、显示范围、传感器和刷新率。缺测为 --；悬浮指标名可查看口径，长文件名和数值悬浮可查看全文。" />
             </StackPanel>
           </Border>
           <Border Classes="helpSection">
@@ -134,7 +152,7 @@
               <TextBlock Classes="helpItemTitle" Text="3. 没有 FPS、FrameTime 或 Jank" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="这些指标依赖设备实际提供的显示帧源，先等待采集器建立帧源；仍无数据时不要用其他指标替代，查看状态提示和导出中的 Source、Scope、Updated 字段。" />
               <TextBlock Classes="helpItemTitle" Text="4. 采集中断或报错" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="先保存现场文件，再查看软件安装目录下的 data\logs\collector-*.log。日志中的 source、PID、设备断开和帧源状态可用于定位问题。采集中不要拔线、切换设备或打开/导出现场文件。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="先保存现场文件，在“设置 → 设置目录”确认当前数据目录，再到该目录的 logs 文件夹查找对应时间的 collector-*.log。日志中的 source、PID、设备断开和帧源状态可用于定位问题。采集中不要拔线或切换设备。" />
               <TextBlock Classes="dialogHint" Foreground="{DynamicResource Theme.Accent}" FontWeight="SemiBold" TextWrapping="Wrap" Text="重点：日志用于定位原因，不能把缺测数据补成 0；需要对比时同时查看指标来源和统计范围。" />
             </StackPanel>
           </Border>

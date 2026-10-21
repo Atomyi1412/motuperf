@@ -112,8 +112,6 @@
                       Click="ShowDeviceDiagnostics" IsEnabled="False" />
               <Button x:Name="AppleDriverButton" Classes="driverDownloadButton" Content="下载苹果设备驱动"
                       Click="DownloadAppleDriver" IsVisible="False" />
-              <Button x:Name="HarmonyHdcButton" Classes="driverDownloadButton" Content="下载鸿蒙连接工具"
-                      Click="OpenHarmonyHdcSetup" IsVisible="False" />
             </StackPanel>
           </Grid>
         </StackPanel>

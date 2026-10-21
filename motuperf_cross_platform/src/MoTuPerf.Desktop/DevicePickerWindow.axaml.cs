@@ -25,7 +25,6 @@ namespace MoTuPerf.Desktop
 
         private TextBlock DeviceCountText;
         private Button AppleDriverButton;
-        private Button HarmonyHdcButton;
         private Button DeviceDiagnosticsButton;
         private TextBlock StatusText;
         private ComboBox DeviceList;
@@ -117,7 +116,6 @@ namespace MoTuPerf.Desktop
             Avalonia.Markup.Xaml.AvaloniaXamlLoader.Load(this);
             DeviceCountText = this.FindControl<TextBlock>("DeviceCountText");
             AppleDriverButton = this.FindControl<Button>("AppleDriverButton");
-            HarmonyHdcButton = this.FindControl<Button>("HarmonyHdcButton");
             DeviceDiagnosticsButton = this.FindControl<Button>("DeviceDiagnosticsButton");
             StatusText = DeviceCountText;
             DeviceList = this.FindControl<ComboBox>("DeviceList");
@@ -161,7 +159,6 @@ namespace MoTuPerf.Desktop
             {
                 ApplyDeviceDiagnostics(DeviceDiagnosticsFormatter.Loading());
                 AppleDriverButton.IsVisible = false;
-                HarmonyHdcButton.IsVisible = false;
             }
             try
             {
@@ -194,7 +191,6 @@ namespace MoTuPerf.Desktop
                 if (_hadDeviceSelection && DeviceList.SelectedItem == null)
                     StatusText.Text = "所选设备已断开，请重新连接并选择设备。";
                 AppleDriverButton.IsVisible = report.AppleDriverActionAvailable;
-                HarmonyHdcButton.IsVisible = _deviceDiagnostics.HarmonyHdcActionAvailable;
                 _appleDriverButtonIdleText = report.AppleDriverMissing ? "下载苹果设备驱动" : "修复苹果设备驱动";
                 AppleDriverButton.Content = _appleDriverButtonIdleText;
             }
@@ -204,7 +200,6 @@ namespace MoTuPerf.Desktop
                 if (_closed || generation != _discoveryGeneration) return;
                 ApplyDeviceDiagnostics(DeviceDiagnosticsFormatter.Error("设备检测失败：" + ex.Message, ex.Message, ex.Message));
                 AppleDriverButton.IsVisible = false;
-                HarmonyHdcButton.IsVisible = false;
             }
             finally { completed = true; if (generation == _discoveryGeneration) _discoveryRunning = false; }
         }
@@ -297,13 +292,6 @@ namespace MoTuPerf.Desktop
             if (!_deviceDiagnostics.IsReady) return;
             DeviceDiagnosticsSnapshot snapshot = _deviceDiagnostics;
             DeviceDiagnosticsWindow window = new DeviceDiagnosticsWindow(snapshot);
-            window.RecheckRequested += delegate { _ = LoadDevicesAsync(); };
-            await window.ShowDialog(this);
-        }
-
-        private async void OpenHarmonyHdcSetup(object sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            HarmonyHdcSetupWindow window = new HarmonyHdcSetupWindow();
             window.RecheckRequested += delegate { _ = LoadDevicesAsync(); };
             await window.ShowDialog(this);
         }

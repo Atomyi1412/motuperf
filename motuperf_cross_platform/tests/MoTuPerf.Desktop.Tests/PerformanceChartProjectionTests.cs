@@ -18,7 +18,7 @@ namespace MoTuPerf.Desktop.Tests
                 Frame(2, 60, 3)
             };
 
-            IReadOnlyList<IReadOnlyList<PerfSample>> segments = ChartSeriesProjection.BuildSegments(
+            IReadOnlyList<IReadOnlyList<PerfSample>> segments = Project(
                 samples, 2400, delegate(PerfSample sample) { return sample.Fps; }, 3, false, true);
 
             Assert.Single(segments);
@@ -32,7 +32,7 @@ namespace MoTuPerf.Desktop.Tests
             PerfSample second = Frame(1, 33.4, 3);
             second.FrameSourceSequenceDiscontinuity = true;
 
-            IReadOnlyList<IReadOnlyList<PerfSample>> segments = ChartSeriesProjection.BuildSegments(
+            IReadOnlyList<IReadOnlyList<PerfSample>> segments = Project(
                 new[] { first, second }, 2400, delegate(PerfSample sample) { return sample.Fps; }, 3, true, false);
 
             Assert.Equal(2, segments.Count);
@@ -41,7 +41,7 @@ namespace MoTuPerf.Desktop.Tests
         }
 
         [Fact]
-        public void ValidFpsStaysContinuousAcrossSourceAndSequenceChanges()
+        public void ValidFpsShowsSourceAndSequenceBreaksWithoutFabricatingValues()
         {
             PerfSample first = Frame(0, 60, 1);
             PerfSample second = Frame(1, 0, 3);
@@ -49,11 +49,11 @@ namespace MoTuPerf.Desktop.Tests
             second.FrameSourceSequenceDiscontinuity = true;
             PerfSample third = Frame(2, 58, 4);
 
-            IReadOnlyList<IReadOnlyList<PerfSample>> segments = ChartSeriesProjection.BuildSegments(
-                new[] { first, second, third }, 2400, delegate(PerfSample sample) { return sample.Fps; }, 3, false, true);
+            IReadOnlyList<IReadOnlyList<PerfSample>> segments = Project(
+                new[] { first, second, third }, 2400, delegate(PerfSample sample) { return sample.Fps; }, 3, true, true);
 
-            Assert.Single(segments);
-            Assert.Equal(new[] { 60d, 0d, 58d }, segments[0].Select(delegate(PerfSample sample) { return sample.Fps; }).ToArray());
+            Assert.Equal(3, segments.Count);
+            Assert.Equal(new[] { 60d, 0d, 58d }, segments.SelectMany(s => s).Select(s => s.Fps).ToArray());
         }
 
         [Fact]
@@ -63,7 +63,7 @@ namespace MoTuPerf.Desktop.Tests
             PerfSample second = Frame(5, 58, 2);
             first.HasFrameSourceSequence = false;
             second.HasFrameSourceSequence = false;
-            IReadOnlyList<IReadOnlyList<PerfSample>> segments = ChartSeriesProjection.BuildSegments(
+            IReadOnlyList<IReadOnlyList<PerfSample>> segments = Project(
                 new[] { first, second }, 2400,
                 delegate(PerfSample sample) { return sample.Fps; }, 3, false, true);
 
@@ -78,7 +78,7 @@ namespace MoTuPerf.Desktop.Tests
                 .Select(delegate(int index) { return Frame(index, index == 52 ? 4 : 60, index + 1); })
                 .ToList();
 
-            IReadOnlyList<IReadOnlyList<PerfSample>> segments = ChartSeriesProjection.BuildSegments(
+            IReadOnlyList<IReadOnlyList<PerfSample>> segments = Project(
                 samples, 20, delegate(PerfSample sample) { return sample.Fps; }, 3, false, true);
 
             Assert.Single(segments);
@@ -118,6 +118,14 @@ namespace MoTuPerf.Desktop.Tests
             Assert.True(chart.IsSeriesVisible(cpu1));
             Assert.False(chart.IsSeriesVisible(cpuTemperature));
             Assert.True(chart.IsSeriesVisible(gpuTemperature));
+        }
+
+        private static IReadOnlyList<IReadOnlyList<PerfSample>> Project(IEnumerable<PerfSample> source, int points,
+            System.Func<PerfSample, double> value, double gap, bool frames, bool measured)
+        {
+            var cache = new ChartSeriesCache(value, gap, frames, measured);
+            foreach (var sample in source.OrderBy(s => s.ElapsedSec)) cache.Add(sample);
+            return cache.Project(0, System.Math.Max(1, cache.Samples.Last().ElapsedSec), System.Math.Max(1, points / 4));
         }
 
         private static PerfSample Frame(double elapsed, double fps, long sequence)

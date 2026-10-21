@@ -205,11 +205,7 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Equal("下载苹果设备驱动", Attribute(driverButton, "Content"));
             Assert.Equal("DownloadAppleDriver", Attribute(driverButton, "Click"));
             Assert.Equal("False", Attribute(driverButton, "IsVisible"));
-            XElement harmonyHdcButton = Named(dialog, "HarmonyHdcButton");
-            Assert.Contains("driverDownloadButton", Attribute(harmonyHdcButton, "Classes"));
-            Assert.Equal("下载鸿蒙连接工具", Attribute(harmonyHdcButton, "Content"));
-            Assert.Equal("OpenHarmonyHdcSetup", Attribute(harmonyHdcButton, "Click"));
-            Assert.Equal("False", Attribute(harmonyHdcButton, "IsVisible"));
+            Assert.DoesNotContain(dialog.Descendants(Avalonia + "Button"), button => Attribute(button, "Content") == "下载鸿蒙连接工具");
             Assert.DoesNotContain(dialog.Descendants(), element => (string)element.Attribute(Xaml + "Name") == "StatusText");
             Assert.DoesNotContain(dialog.Descendants(Avalonia + "TextBlock"), text => Attribute(text, "Text") == "{Binding Platform}");
 
@@ -506,6 +502,7 @@ namespace MoTuPerf.Desktop.Tests
                 "DataCleanupProgressWindow.axaml",
                 "DataDirectorySettingsWindow.axaml",
                 "ExportCsvDialogWindow.axaml",
+                "SessionComparisonWindow.axaml",
                 "HelpWindow.axaml",
                 "ChangelogWindow.axaml",
                 "UpdatePromptWindow.axaml",
@@ -531,7 +528,7 @@ namespace MoTuPerf.Desktop.Tests
             XDocument help = LoadXaml("src", "MoTuPerf.Desktop", "HelpWindow.axaml");
             Assert.Equal("700", Attribute(help.Root, "Width"));
             Assert.Equal("640", Attribute(help.Root, "Height"));
-            Assert.Equal(8, help.Descendants(Avalonia + "Border")
+            Assert.Equal(9, help.Descendants(Avalonia + "Border")
                 .Count(element => Attribute(element, "Classes") == "helpSection"));
             XElement helpCloseButton = help.Descendants(Avalonia + "Button")
                 .Single(element => Attribute(element, "Click") == "CloseWindow"
@@ -563,10 +560,10 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Contains("应用图标已支持", helpText);
             Assert.Contains("鸿蒙系统热状态暂未接入", helpText);
             Assert.Contains("每 3 秒", helpText);
-            Assert.Contains("缩放只影响查看", helpText);
+            Assert.Contains("纵轴最大值保持不变", helpText);
             Assert.Contains("按秒汇总", helpText);
             Assert.Contains("原始明细", helpText);
-            Assert.Contains("软件安装目录下", helpText);
+            Assert.Contains("~/Library/Application Support/MoTuPerf/data", helpText);
             Assert.DoesNotContain("框选曲线可放大时间范围", helpText);
             Assert.Contains("点击或拖动任意曲线可移动时间游标", helpText);
             Assert.DoesNotContain(help.Descendants(Avalonia + "Button"), button => Attribute(button, "Content") == "查看在线版本更新日志");
@@ -857,7 +854,7 @@ namespace MoTuPerf.Desktop.Tests
             Assert.Contains("startAfterSelection || selection.AutoStart", windowCode);
             Assert.Contains("_selectionNeedsRefresh", viewModelCode);
             Assert.Contains("现场文件中的设备和进程仅用于查看", viewModelCode);
-            Assert.Contains("现场文件中的设备和进程是历史记录，仅用于还原查看", helpCode);
+            Assert.Contains("现场中的设备和进程是历史记录，仅用于查看", helpCode);
         }
 
         [Fact]
