@@ -27,7 +27,7 @@
           <Border Classes="helpSection">
             <StackPanel>
               <TextBlock Text="v0.49.0" Classes="helpTitle" />
-              <TextBlock Text="2026-10-20" Classes="dialogHint" />
+              <TextBlock Text="2026-10-21" Classes="dialogHint" />
               <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 对比分析界面参考 Gears 的紧凑布局重构：选择数据可折叠，A-E 彩色槽与表头对应，点击槽可从已加载记录复用、加入当前现场或导入文件；指标改为分组名称加子指标并合并同组行，首屏信息密度和长列表滚动更清晰。统计口径、均值/峰值、区间与 CSV 导出不变。" />
             </StackPanel>
           </Border>
