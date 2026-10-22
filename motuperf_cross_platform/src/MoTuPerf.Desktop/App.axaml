@@ -304,6 +304,34 @@
       <Setter Property="VerticalAlignment" Value="Center" />
       <Setter Property="HorizontalAlignment" Value="Center" />
     </Style>
+    <Style Selector="Button.curveAnalysisButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.Accent}" />
+      <Setter Property="Height" Value="32" />
+      <Setter Property="Padding" Value="10,0" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Button.curveAnalysisButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+    </Style>
+    <Style Selector="Button.curveAnalysisButton:pressed">
+      <Setter Property="Background" Value="{DynamicResource Theme.PressedBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+    </Style>
+    <Style Selector="TextBlock.curveAnalysisButtonText">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.Accent}" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.curveAnalysisButtonArrow">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.Accent}" />
+      <Setter Property="FontSize" Value="15" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
     <Style Selector="PathIcon.settingsMenuIcon">
       <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
       <Setter Property="Width" Value="16" />

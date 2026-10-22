@@ -651,8 +651,10 @@ namespace MoTuPerf.Desktop
         private void UpdateCurveAnalysisButtonState()
         {
             TextBlock label = this.FindControl<TextBlock>("CurveAnalysisButtonText");
+            TextBlock arrow = this.FindControl<TextBlock>("CurveAnalysisButtonArrow");
             Button button = this.FindControl<Button>("CurveAnalysisButton");
             if (label != null) label.Text = _curveAnalysisOpen ? "返回性能监控" : "曲线分析";
+            if (arrow != null) arrow.Text = _curveAnalysisOpen ? "\u2190" : "\u2192";
             if (button != null) ToolTip.SetTip(button, _curveAnalysisOpen ? "返回采集主界面" : "进入多现场曲线分析");
         }
 

@@ -1522,6 +1522,9 @@ namespace MoTuPerf.Desktop.UiTests
                 Assert.True(curveButton.Bounds.Left >= versionText.Bounds.Right);
                 Assert.True(titleBarHeader.Bounds.Right <= status.Bounds.Left + 1);
                 Assert.Equal("曲线分析", curveButtonText.Text);
+                Assert.Contains("curveAnalysisButton", curveButton.Classes);
+                Assert.DoesNotContain("themeSelectorButton", curveButton.Classes);
+                Assert.Equal("数据显示", window.FindControl<TextBlock>("DataDisplayTitle").Text);
                 Assert.DoesNotContain(window.GetVisualDescendants().OfType<Button>(), button =>
                     button.Content is StackPanel stack && stack.Children.OfType<TextBlock>().Any(text => text.Text == "对比分析"));
 
