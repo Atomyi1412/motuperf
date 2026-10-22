@@ -87,6 +87,41 @@ namespace MoTuPerf.Core.Tests
             Assert.Equal("3.00", Value(peak, "Jank"));
             Assert.Equal("1.50", Value(mean, "BigJank"));
             Assert.Equal(Value(mean, "Jank 发生率"), Value(peak, "Jank 发生率"));
+            JankStatistics statistics = MetricStatistics.ComputeJank(inputs[0].Document.Samples);
+            Assert.Equal((statistics.JankPer10Min - statistics.BigJankPer10Min).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                Value(mean, "Jank 发生率（不含 BigJank）"));
+            Assert.Equal("--", Value(mean, "TinyJank 发生率"));
+            Assert.Equal("--", Value(mean, "SmallJank 发生率"));
+        }
+
+        [Fact]
+        public void PerfDogStyleOverviewStatisticsUseRawFramesAndHonestMissingValues()
+        {
+            PerfSample sample = FrameTimeStatisticsTests.Window(10, 10, 10, 111, 111);
+            sample.HasJank = true;
+            sample.Jank = 4;
+            sample.BigJank = 1;
+            ComparisonReport report = SessionComparisonService.Build(
+                new[] { Input("A", "ios", sample) }, ComparisonMode.Average);
+
+            Assert.Equal("9.01", Value(report, "FPS 1% Low"));
+            Assert.Equal("--", Value(report, "Smooth"));
+            Assert.Equal("111.00", Value(report, "FrameTime Max"));
+            Assert.Equal("111.00", Value(report, "FrameTime P95"));
+            Assert.Equal("49.48", Value(report, "FrameTime Std"));
+            Assert.Equal("2448.24", Value(report, "FrameTime Var"));
+            Assert.Equal("40.00", Value(report, "FrameTime >=100ms"));
+            Assert.Equal("14285.71", Value(report, "FrameTime Delta>100ms/h"));
+            JankStatistics statistics = MetricStatistics.ComputeJank(new[] { sample });
+            Assert.Equal((statistics.JankPer10Min - statistics.BigJankPer10Min).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                Value(report, "Jank 发生率（不含 BigJank）"));
+            Assert.Equal("--", Value(report, "TinyJank 发生率"));
+            Assert.Equal("--", Value(report, "SmallJank 发生率"));
+            Assert.Equal("1% Low(FPS)", report.Rows.Single(row => row.Label == "FPS 1% Low").SubLabel);
+            Assert.Equal("Smooth(稳帧指数)", report.Rows.Single(row => row.Label == "Smooth").SubLabel);
+            Assert.Equal("Max(FrameTime)[ms]", report.Rows.Single(row => row.Label == "FrameTime Max").SubLabel);
+            Assert.Equal("Window P95(FrameTime)[ms]", report.Rows.Single(row => row.Label == "FrameTime P95").SubLabel);
+            Assert.Equal("FrameTime >= 100ms [%]", report.Rows.Single(row => row.Label == "FrameTime >=100ms").SubLabel);
         }
 
         [Fact]
@@ -104,7 +139,7 @@ namespace MoTuPerf.Core.Tests
             Assert.Equal("60.00", Value(report, "屏幕刷新率"));
             var fps = report.Rows.Single(row => row.Label == "FPS");
             Assert.Equal("帧率 / 卡顿", fps.Group);
-            Assert.Equal("FPS", fps.SubLabel);
+            Assert.Equal("Avg(FPS)", fps.SubLabel);
             Assert.Equal("帧耗时", report.Rows.Single(row => row.Label == "FrameTime").Group);
             var cpu = report.Rows.Single(row => row.Label == "进程 CPU Raw");
             Assert.Equal("进程 CPU", cpu.Group);

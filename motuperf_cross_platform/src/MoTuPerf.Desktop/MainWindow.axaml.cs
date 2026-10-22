@@ -23,6 +23,8 @@ namespace MoTuPerf.Desktop
         private bool _allowClose;
         private bool _closeFlowRunning;
         private bool _closeSavePending;
+        private bool _curveAnalysisOpen;
+        private SessionComparisonWorkspace _curveAnalysisWorkspace;
         private string _renderedFpsLegendSignature;
         private int _renderedCoreLegendCount = -1;
         private string _renderedTemperatureLegendSignature;
@@ -32,6 +34,7 @@ namespace MoTuPerf.Desktop
         public MainWindow()
         {
             InitializeComponent();
+            _curveAnalysisWorkspace = this.FindControl<SessionComparisonWorkspace>("CurveAnalysisWorkspace");
             MainWindowViewModel viewModel = new MainWindowViewModel();
             viewModel.CaptureStoppedUnexpectedly += async delegate { await OfferSaveAsync(); };
             DataContext = viewModel;
@@ -68,6 +71,7 @@ namespace MoTuPerf.Desktop
                 || e.PropertyName == nameof(MainWindowViewModel.CurrentThemePreviewColor))
             {
                 PerformanceChartControl.RefreshThemeResources();
+                ComparisonChartControl.RefreshThemeResources();
                 _renderedFpsLegendSignature = null;
                 _renderedCoreLegendCount = -1;
                 _renderedTemperatureLegendSignature = null;
@@ -609,15 +613,47 @@ namespace MoTuPerf.Desktop
             finally { _fileActionGate.Release(); }
         }
 
-        private async void ShowComparison(object sender, RoutedEventArgs e)
+        private async void OpenCurveAnalysis(object sender, RoutedEventArgs e)
         {
             MainWindowViewModel viewModel = DataContext as MainWindowViewModel;
-            if (viewModel == null || !viewModel.CanUseFileActions) return;
+            if (viewModel == null || viewModel.IsFileOperationInProgress || _curveAnalysisWorkspace == null) return;
+            if (_curveAnalysisOpen)
+            {
+                ShowPerformanceWorkspace();
+                return;
+            }
+            _curveAnalysisOpen = true;
+            UpdateCurveAnalysisButtonState();
+            this.FindControl<Border>("MainToolbar").IsVisible = false;
+            this.FindControl<Grid>("MainContent").IsVisible = false;
+            _curveAnalysisWorkspace.IsVisible = true;
             try
             {
-                await new SessionComparisonWindow(viewModel.HasSessionData ? viewModel.BuildSessionDocument() : null).ShowDialog(this);
+                await _curveAnalysisWorkspace.InitializeAsync(viewModel.HasSessionData ? viewModel.BuildSessionDocument() : null);
             }
-            catch (Exception ex) { viewModel.Status = "打开对比分析失败：" + ex.Message; }
+            catch (Exception ex)
+            {
+                ShowPerformanceWorkspace();
+                viewModel.Status = "打开曲线分析失败：" + ex.Message;
+            }
+        }
+
+        private void ShowPerformanceWorkspace()
+        {
+            if (_curveAnalysisWorkspace == null || _curveAnalysisWorkspace.IsBusy) return;
+            _curveAnalysisOpen = false;
+            UpdateCurveAnalysisButtonState();
+            _curveAnalysisWorkspace.IsVisible = false;
+            this.FindControl<Border>("MainToolbar").IsVisible = true;
+            this.FindControl<Grid>("MainContent").IsVisible = true;
+        }
+
+        private void UpdateCurveAnalysisButtonState()
+        {
+            TextBlock label = this.FindControl<TextBlock>("CurveAnalysisButtonText");
+            Button button = this.FindControl<Button>("CurveAnalysisButton");
+            if (label != null) label.Text = _curveAnalysisOpen ? "返回性能监控" : "曲线分析";
+            if (button != null) ToolTip.SetTip(button, _curveAnalysisOpen ? "返回采集主界面" : "进入多现场曲线分析");
         }
 
         private async void ShowHelp(object sender, RoutedEventArgs e) { await new HelpWindow().ShowDialog(this); }

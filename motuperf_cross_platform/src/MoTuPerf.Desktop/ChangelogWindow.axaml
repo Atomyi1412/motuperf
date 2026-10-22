@@ -26,23 +26,23 @@
           <StackPanel Margin="22,10,18,12" Spacing="9">
           <Border Classes="helpSection">
             <StackPanel>
-              <TextBlock Text="v0.49.0" Classes="helpTitle" />
-              <TextBlock Text="2026-10-21" Classes="dialogHint" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 对比分析界面参考 Gears 的紧凑布局重构：选择数据可折叠，A-E 彩色槽与表头对应，点击槽可从已加载记录复用、加入当前现场或导入文件；指标改为分组名称加子指标并合并同组行，首屏信息密度和长列表滚动更清晰。统计口径、均值/峰值、区间与 CSV 导出不变。" />
+              <TextBlock Text="v0.54.0" Classes="helpTitle" />
+              <TextBlock Text="2026-10-22" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 曲线分析的每个指标选择栏新增“相同时间趋势”开关，默认关闭；勾选后所有现场曲线按各自完整采集时长等比拉伸到最长现场，取消勾选恢复原始时间轴。&#10;• 该功能只改变图表查看方式，不修改原始采样、统计结果、现场文件或导出数据；同一开关状态会同步应用到帧率、帧耗时、处理器、内存、温度与系统热状态分类。" />
             </StackPanel>
           </Border>
           <Border Classes="helpSection">
             <StackPanel>
-              <TextBlock Text="v0.48.0" Classes="helpTitle" />
-              <TextBlock Text="2026-10-20" Classes="dialogHint" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 精简对比分析主表：FPS 范围、帧来源及统计口径等说明移入表尾默认收起的“口径详情”，屏幕刷新率移至上方设备信息；导出 CSV 仍保留完整口径数据。" />
+              <TextBlock Text="v0.53.2" Classes="helpTitle" />
+              <TextBlock Text="2026-10-22" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 曲线分析空现场槽中的“添加现场”按钮和文件选择说明改为整体垂直居中，充分利用卡片可用高度。" />
             </StackPanel>
           </Border>
           <Border Classes="helpSection">
             <StackPanel>
-              <TextBlock Text="v0.47.1" Classes="helpTitle" />
-              <TextBlock Text="2026-10-20" Classes="dialogHint" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复对比分析从峰值切回均值时仍显示峰值的问题，确保切换按钮、统计表格与导出结果一致；不改变原始采集数据和统计口径。" />
+              <TextBlock Text="v0.53.1" Classes="helpTitle" />
+              <TextBlock Text="2026-10-22" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 曲线分析统计表的现场列改为单行优先使用完整列宽，长文件名只在列末显示省略号；悬浮提示继续保留完整文件名、应用和设备信息。" />
             </StackPanel>
           </Border>
         </StackPanel>

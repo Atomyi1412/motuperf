@@ -71,16 +71,57 @@ namespace CSharpIosPerfMonitor
             Text("样本范围（秒）/ 数量", i => samples[i].Count == 0 ? null : Number(samples[i].Min(s => s.ElapsedSec)) + " ～ " + Number(samples[i].Max(s => s.ElapsedSec)) + " / " + samples[i].Count,
                 "以各记录相对起点的秒数筛选；帧窗口按结束时间归属，不拆分窗口或补齐缺测。");
             var fps = samples.Select(MetricStatistics.ComputeFps).ToList();
+            var frames = samples.Select(s => MetricStatistics.ComputeFrameTime(s, includePercentile: false)).ToList();
             Metric("FPS", "帧/s", i => fps[i].HasData ? mode == ComparisonMode.Peak ? fps[i].Maximum : fps[i].Average : (double?)null,
                 "均值按可信观测时长加权；峰值是有效窗口最高 FPS，不是越高就一定更流畅。");
-            var frames = samples.Select(s => MetricStatistics.ComputeFrameTime(s, includePercentile: false)).ToList();
+            Metric("Smooth", "指数", _ => null,
+                "当前采集模型没有 Smooth 稳帧指数；保持缺测，不从 FPS、Jank 或帧耗时推算。");
+            Metric("FPS 1% Low", "帧/s", i => frames[i].OnePercentLowFps,
+                "取完整逐帧数据中耗时最高的 1% 帧，按平均帧耗时换算 FPS；窗口汇总数据不推算。");
+            Metric("FPS Std", "帧/s", i => fps[i].HasData ? fps[i].StandardDeviation : (double?)null,
+                "可信 FPS 观测按时长加权的总体标准差。");
+            Metric("FPS Var", "(帧/s)^2", i => fps[i].HasData ? fps[i].Variance : (double?)null,
+                "可信 FPS 观测按时长加权的总体方差。");
+            Metric("FPS >=18%", "%", i => fps[i].HasData ? fps[i].FpsGe18Percent : (double?)null,
+                "可信 FPS 观测时长中，FPS 大于等于 18 的占比。");
+            Metric("FPS >=25%", "%", i => fps[i].HasData ? fps[i].FpsGe25Percent : (double?)null,
+                "可信 FPS 观测时长中，FPS 大于等于 25 的占比。");
+            Metric("FPS Drop", "次/h", i => fps[i].HasData ? fps[i].DropPerHour : (double?)null,
+                "相邻可信 FPS 点下降大于 8 帧的次数，按小时折算。");
+            Metric("FPS Min", "帧/s", i => fps[i].HasData ? fps[i].Minimum : (double?)null,
+                "可信 FPS 观测窗口中的最低值。");
+            Metric("FPS Median", "帧/s", i => fps[i].HasData ? fps[i].Median : (double?)null,
+                "可信 FPS 观测按时长加权的 FPS 中位数。");
+            Metric("FPS MedRange", "%", i => fps[i].HasData ? fps[i].MedianRangePercent : (double?)null,
+                "FPS 位于中位数 80%～120% 范围内的可信观测时长占比。");
             Metric("FrameTime", "ms", i => mode == ComparisonMode.Peak ? frames[i].MaximumMs : frames[i].AverageMs,
                 "完整逐帧数据使用实际帧间隔；旧现场按帧数加权均值/测得最大值，不能从窗口最大值算逐帧均值。");
+            Metric("FrameTime Max", "ms", i => frames[i].MaximumMs,
+                "完整逐帧数据取实际最大间隔；旧现场仅在逐窗口最大值可验证时汇总。");
+            Metric("FrameTime P95", "ms", i => Aggregate(samples[i]
+                    .Where(s => s.HasFrameTimeP95 && s.FrameTimeP95Ms > 0 && s.FrameTimeP95Ms <= 60000)
+                    .Select(s => s.FrameTimeP95Ms)),
+                "按当前模式汇总各窗口 P95；与 CSV Stat 的全程池化 P95 不是同一统计层级。");
+            Metric("FrameTime Std", "ms", i => frames[i].StandardDeviationMs,
+                "完整逐帧间隔的总体标准差；窗口汇总数据保持 --。");
+            Metric("FrameTime Var", "ms^2", i => frames[i].VarianceMs2,
+                "完整逐帧间隔的总体方差；窗口汇总数据保持 --。");
+            Metric("FrameTime >=100ms", "%", i => frames[i].FrameTimeGe100MsPercent,
+                "完整逐帧间隔中大于等于 100ms 的帧占比；窗口汇总数据保持 --。");
+            Metric("FrameTime Delta>100ms/h", "次/h", i => frames[i].FrameTimeDeltaOver100PerHour,
+                "相邻帧耗时增加超过 100ms 的次数，按有效逐帧观测时长折算为每小时。");
             Metric("Jank", "次/窗", i => Aggregate(samples[i].Where(s => s.FpsUpdated && s.HasJank && MetricStatistics.IsReliableJankSample(s)).Select(s => s.Jank)), "包含 BigJank；均值/峰值描述采样窗口，窗口长度不同时请同时参考每 10 分钟次数。");
             Metric("BigJank", "次/窗", i => Aggregate(samples[i].Where(s => s.FpsUpdated && s.HasJank && MetricStatistics.IsReliableJankSample(s)).Select(s => s.BigJank)));
             var jank = samples.Select(MetricStatistics.ComputeJank).ToList();
-            Metric("Jank 发生率", "次/10min", i => jank[i].HasRateData ? jank[i].JankPer10Min : (double?)null, "按有效观测时长计算，不随峰值/均值模式变化。");
-            Metric("BigJank 发生率", "次/10min", i => jank[i].HasRateData ? jank[i].BigJankPer10Min : (double?)null);
+            Metric("TinyJank 发生率", "次/10min", _ => null, "当前采集模型没有 TinyJank 字段；保持缺测，不用 0 或其他 Jank 推导。");
+            Metric("SmallJank 发生率", "次/10min", _ => null, "当前采集模型没有 SmallJank 字段；保持缺测，不用 0 或其他 Jank 推导。");
+            Metric("Jank 发生率（不含 BigJank）", "次/10min",
+                i => jank[i].HasRateData ? Math.Max(0, jank[i].JankPer10Min - jank[i].BigJankPer10Min) : (double?)null,
+                "与 PerfDog 的 Jank 概览列对齐：从 MoTuPerf 含 BigJank 的 Jank 总数中扣除 BigJank后按 10 分钟折算。");
+            Metric("Jank 发生率", "次/10min", i => jank[i].HasRateData ? jank[i].JankPer10Min : (double?)null,
+                "包含 BigJank 的总 Jank 频率，按有效观测时长计算，不随峰值/均值模式变化。");
+            Metric("BigJank 发生率", "次/10min", i => jank[i].HasRateData ? jank[i].BigJankPer10Min : (double?)null,
+                "BigJank 每 10 分钟发生次数，按有效观测时长计算。");
             Metric("卡顿时长占比", "%", i => jank[i].HasStutterData ? jank[i].StutterPercent : (double?)null, "有效卡顿时间 / 有效观测时间，不随峰值/均值模式变化。");
             var memories = samples.Select(MetricStatistics.PreferredMemoryMetric).ToList();
             foreach (string memory in memories.Distinct(StringComparer.OrdinalIgnoreCase).Where(v => !string.IsNullOrWhiteSpace(v)))
@@ -115,15 +156,55 @@ namespace CSharpIosPerfMonitor
             Text("温度来源 / 范围", i => Join(samples[i].Where(s => s.HasTemperature && s.TemperatureUpdated).Select(s => s.TemperatureSource + " / " + s.TemperatureScope)), detail: true);
             foreach (var row in rows.Where(row => !row.IsDetail))
             {
-                if (row.Label == "FPS" || row.Label == "Jank" || row.Label == "BigJank" || row.Label.EndsWith("发生率") || row.Label == "卡顿时长占比")
+                if (row.Label == "FPS" || row.Label == "Smooth" || row.Label.StartsWith("FPS ", StringComparison.Ordinal)
+                    || row.Label == "Jank" || row.Label == "BigJank" || row.Label.EndsWith("发生率")
+                    || row.Label == "卡顿时长占比")
                     row.Group = "帧率 / 卡顿";
-                else if (row.Label == "FrameTime") row.Group = "帧耗时";
+                else if (row.Label == "FrameTime" || row.Label.StartsWith("FrameTime ", StringComparison.Ordinal)) row.Group = "帧耗时";
                 else if (row.Label.StartsWith("进程内存 / ")) { row.Group = "进程内存"; row.SubLabel = row.Label.Substring("进程内存 / ".Length); }
                 else if (row.Label.StartsWith("进程 CPU ")) { row.Group = "进程 CPU"; row.SubLabel = row.Label.Substring("进程 CPU ".Length); }
                 else if (row.Label.StartsWith("设备 CPU ")) { row.Group = "设备逐核负载"; row.SubLabel = row.Label.Substring("设备 ".Length); }
                 else if (row.Label.StartsWith("温度 / ")) { row.Group = "温度"; row.SubLabel = row.Label.Substring("温度 / ".Length); }
                 else if (row.Label.StartsWith("热状态 / ")) { row.Group = "系统热状态"; row.SubLabel = row.Label.Substring("热状态 / ".Length); }
-                if (!string.IsNullOrEmpty(row.Group) && string.IsNullOrEmpty(row.SubLabel)) row.SubLabel = row.Label;
+                if (row.Group == "帧率 / 卡顿")
+                {
+                    switch (row.Label)
+                    {
+                        case "FPS": row.SubLabel = "Avg(FPS)"; break;
+                        case "Smooth": row.SubLabel = "Smooth(稳帧指数)"; break;
+                        case "FPS 1% Low": row.SubLabel = "1% Low(FPS)"; break;
+                        case "FPS Std": row.SubLabel = "Std(FPS)"; break;
+                        case "FPS Var": row.SubLabel = "Var(FPS)"; break;
+                        case "FPS >=18%": row.SubLabel = "FPS >= 18 [%]"; break;
+                        case "FPS >=25%": row.SubLabel = "FPS >= 25 [%]"; break;
+                        case "FPS Drop": row.SubLabel = "Drop(FPS)[/h]"; break;
+                        case "FPS Min": row.SubLabel = "Min(FPS)"; break;
+                        case "FPS Median": row.SubLabel = "Median(FPS)"; break;
+                        case "FPS MedRange": row.SubLabel = "MedRange(FPS)[%]"; break;
+                        case "TinyJank 发生率": row.SubLabel = "TinyJank(/10min)"; break;
+                        case "SmallJank 发生率": row.SubLabel = "SmallJank(/10min)"; break;
+                        case "Jank 发生率（不含 BigJank）": row.SubLabel = "Jank(/10min)"; break;
+                        case "Jank 发生率": row.SubLabel = "Jank(/10min, 含 BigJank)"; break;
+                        case "BigJank 发生率": row.SubLabel = "BigJank(/10min)"; break;
+                        case "卡顿时长占比": row.SubLabel = "Stutter[%]"; break;
+                        default: row.SubLabel = row.Label; break;
+                    }
+                }
+                else if (row.Group == "帧耗时")
+                {
+                    switch (row.Label)
+                    {
+                        case "FrameTime": row.SubLabel = "Avg(FrameTime)[ms]"; break;
+                        case "FrameTime Max": row.SubLabel = "Max(FrameTime)[ms]"; break;
+                        case "FrameTime P95": row.SubLabel = "Window P95(FrameTime)[ms]"; break;
+                        case "FrameTime Std": row.SubLabel = "Std(FrameTime)[ms]"; break;
+                        case "FrameTime Var": row.SubLabel = "Var(FrameTime)[ms^2]"; break;
+                        case "FrameTime >=100ms": row.SubLabel = "FrameTime >= 100ms [%]"; break;
+                        case "FrameTime Delta>100ms/h": row.SubLabel = "Delta(FrameTime)>100ms/h"; break;
+                        default: row.SubLabel = row.Label; break;
+                    }
+                }
+                else if (!string.IsNullOrEmpty(row.Group) && string.IsNullOrEmpty(row.SubLabel)) row.SubLabel = row.Label;
             }
             return new ComparisonReport { Mode = mode, Headers = inputs.Select(i => Missing(i.Name)).ToArray(), Rows = rows };
         }

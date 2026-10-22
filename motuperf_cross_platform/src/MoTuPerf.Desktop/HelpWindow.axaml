@@ -133,13 +133,16 @@
           </Border>
           <Border Classes="helpSection">
             <StackPanel Spacing="2">
-              <TextBlock Text="对比分析" Classes="helpTitle" />
+              <TextBlock Text="曲线分析" Classes="helpTitle" />
               <TextBlock Classes="helpItemTitle" Text="1. 选择记录" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="停止采集后点击顶部“对比分析”，展开“选择数据”可查看最多五份 A～E 记录。点击槽位可从本窗口已加载记录中复用、加入当前现场或导入其他 .motuperf 文件，菜单中也可移除；彩色槽位与表格列一一对应。只读取指标，不解压截图，也不会覆盖主窗口现场。" />
-              <TextBlock Classes="helpItemTitle" Text="2. 选择统计与区间" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="选择均值或峰值，输入各记录相对起点的开始、结束秒数后点击应用，结束留空表示各自末尾，点击全部还原。帧窗口按结束时间归属，不拆分窗口；各记录有效范围与缺测可能不同。热状态固定显示最高等级，发生率和卡顿占比不随均值/峰值变化。" />
-              <TextBlock Classes="helpItemTitle" Text="3. 判断可比性与导出" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="至少两份记录时可导出对比 CSV。FPS/FrameTime 沿用分析页的可信统计，内存按口径、热状态按平台分行；刷新率列在上方设备信息，帧来源、统计口径等放在表尾默认收起的“口径详情”，点击展开查看，CSV 保留完整口径信息。跨设备请核对帧来源、显示范围、传感器和刷新率。缺测为 --；悬浮指标名可查看口径，长文件名和数值悬浮可查看全文。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="点击顶部版本号后的“曲线分析”，主内容会切换为全界面分析工作区；当前现场自动放入 A 槽，B～E 槽可复用已加载记录或导入其他 .motuperf 文件。进入分析不会停止正在进行的采集，分析基于进入时的现场快照；同一按钮会切换为“返回性能监控”，再次点击即可恢复原界面。彩色槽位与曲线、表格列一一对应。" />
+              <TextBlock Classes="helpItemTitle" Text="2. 查看统计与曲线" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="概览、FPS、FrameTime/Jank、CPU、内存、温度与热状态在同一纵向长页中依次展示。概览只汇总关键统计；FPS、FrameTime、CPU 等分类区块显示对应统计表和叠加曲线，避免同一曲线重复出现。点击顶部页签可定位到对应区块，手动滚动时当前页签也会同步更新。切换子页签时，统计表只显示当前口径的指标列。点击图例可隐藏或显示曲线，悬停可查看读数。不同平台热状态、不同内存口径和逐核负载分开显示，缺测保持 --，不会按 0 计算。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="曲线图例位于图表底部居中。横轴下方的蓝色区间条用于查看缩放：拖动左右端柄缩小时间区间，拖动中间平移区间，双击区间条或点击“还原”恢复全程。缩放只改变曲线可见时间段，纵轴最大值、统计表、采集数据、现场文件和导出结果保持不变。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="每个指标选择栏右侧的“相同时间趋势”默认关闭。勾选后，所有现场会按各自完整采集时长等比拉伸到最长现场，便于比较运行过程形状；该开关只影响曲线显示，不改变统计、原始样本、现场文件或导出结果，取消勾选即恢复原始时间轴。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="FPS 子页签按 FPS、Smooth、1%Low(FPS)、SmallJank、Jank、BigJank、Stutter 分开；FPS 页签展示 Avg/Std/Var/阈值占比/Drop/Min/Median/MedRange，其余页签只展示对应统计。1% Low 取完整逐帧数据中耗时最高的 1% 帧换算 FPS；Smooth、TinyJank、SmallJank 当前没有采集字段，固定显示 --。" />
+              <TextBlock Classes="helpItemTitle" Text="3. 判断可比性" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="长页统计固定使用全时间范围平均值，不提供均值/峰值、时间范围和 CSV 导出控件。PerfDog 与 MoTuPerf 的可信样本筛选、时长权重和设备帧源可能不同，同名指标只用于同口径参考，不保证逐位一致。跨设备请核对帧来源、显示范围、传感器、刷新率和统计说明；曲线分析只影响查看，不修改采集数据或现场文件。" />
             </StackPanel>
           </Border>
           <Border Classes="helpSection">

@@ -62,6 +62,11 @@ namespace CSharpIosPerfMonitor
         public double? MinimumMs { get; set; }
         public double? MaximumMs { get; set; }
         public double? P95Ms { get; set; }
+        public double? OnePercentLowFps { get; set; }
+        public double? VarianceMs2 { get; set; }
+        public double? StandardDeviationMs { get; set; }
+        public double? FrameTimeGe100MsPercent { get; set; }
+        public double? FrameTimeDeltaOver100PerHour { get; set; }
         public long FrameCount { get; set; }
         public int SampleCount { get; set; }
         public bool HasCompleteRawFrames { get; set; }
@@ -206,21 +211,58 @@ namespace CSharpIosPerfMonitor
             {
                 List<double> intervals = includePercentile ? new List<double>() : null;
                 double sum = 0;
+                double sumSquares = 0;
                 double minimum = double.MaxValue;
                 double maximum = 0;
+                long frameCount = 0;
+                long slowFrames = 0;
+                long largeFrameTimeJumps = 0;
+                int onePercentCount = Math.Max(1,
+                    (int)Math.Ceiling(Math.Max(1L, result.FrameCount) / 100.0));
+                var slowestIntervals = new PriorityQueue<double, double>();
                 foreach (PerfSample sample in samples)
                 {
+                    double previousInterval = double.NaN;
                     foreach (double interval in sample.FrameIntervalsMs)
                     {
+                        frameCount++;
                         sum += interval;
+                        sumSquares += interval * interval;
                         minimum = Math.Min(minimum, interval);
                         maximum = Math.Max(maximum, interval);
+                        if (interval >= 100.0) slowFrames++;
+                        if (!double.IsNaN(previousInterval) && interval - previousInterval > 100.0) largeFrameTimeJumps++;
+                        previousInterval = interval;
+                        if (slowestIntervals.Count < onePercentCount)
+                        {
+                            slowestIntervals.Enqueue(interval, interval);
+                        }
+                        else if (interval > slowestIntervals.Peek())
+                        {
+                            slowestIntervals.Dequeue();
+                            slowestIntervals.Enqueue(interval, interval);
+                        }
                         intervals?.Add(interval);
                     }
                 }
-                result.AverageMs = sum / result.FrameCount;
+                if (frameCount <= 0 || sum <= 0) return result;
+
+                result.FrameCount = frameCount;
+                result.AverageMs = sum / frameCount;
                 result.MinimumMs = minimum;
                 result.MaximumMs = maximum;
+                double variance = sumSquares / frameCount - result.AverageMs.Value * result.AverageMs.Value;
+                result.VarianceMs2 = Math.Max(0, variance);
+                result.StandardDeviationMs = Math.Sqrt(result.VarianceMs2.Value);
+                result.FrameTimeGe100MsPercent = slowFrames * 100.0 / frameCount;
+                double observationSec = sum / 1000.0;
+                result.FrameTimeDeltaOver100PerHour = observationSec > 0
+                    ? largeFrameTimeJumps * 3600.0 / observationSec
+                    : 0;
+                double slowestSumMs = 0;
+                while (slowestIntervals.TryDequeue(out double slowInterval, out _)) slowestSumMs += slowInterval;
+                if (slowestSumMs > 0)
+                    result.OnePercentLowFps = 1000.0 / (slowestSumMs / onePercentCount);
                 if (intervals != null)
                 {
                     intervals.Sort();

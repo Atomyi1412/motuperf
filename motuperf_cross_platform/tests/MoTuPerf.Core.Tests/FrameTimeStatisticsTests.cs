@@ -99,6 +99,21 @@ namespace MoTuPerf.Core.Tests
             Assert.Equal(1, result.ExcludedSampleCount);
         }
 
+        [Fact]
+        public void RawFrameStatisticsMatchPerfDogOnePercentLowThresholdAndDeltaSemantics()
+        {
+            FrameTimeStatistics result = MetricStatistics.ComputeFrameTime(
+                new[] { Window(10, 10, 10, 111, 111) }, includePercentile: false);
+
+            Assert.Equal(5, result.FrameCount);
+            Assert.Equal(1000.0 / 111.0, result.OnePercentLowFps.Value, 8);
+            Assert.Equal(2448.24, result.VarianceMs2.Value, 8);
+            Assert.Equal(Math.Sqrt(2448.24), result.StandardDeviationMs.Value, 8);
+            Assert.Equal(40.0, result.FrameTimeGe100MsPercent.Value, 8);
+            Assert.Equal(3600.0 / 0.252, result.FrameTimeDeltaOver100PerHour.Value, 6);
+            Assert.Null(result.P95Ms);
+        }
+
         [Theory]
         [InlineData(0)]
         [InlineData(-1)]

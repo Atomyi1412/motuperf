@@ -1,0 +1,183 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="MoTuPerf.Desktop.SessionComparisonWorkspace">
+  <UserControl.Styles>
+    <Style Selector="Button.analysisToolbarButton">
+      <Setter Property="Background" Value="{DynamicResource Theme.PanelBackground}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="13,7" />
+      <Setter Property="MinHeight" Value="32" />
+    </Style>
+    <Style Selector="Button.analysisToolbarButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+    </Style>
+    <Style Selector="Button.analysisToolbarButton:pressed">
+      <Setter Property="Background" Value="{DynamicResource Theme.PressedBackground}" />
+    </Style>
+    <Style Selector="Button.analysisTab">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+      <Setter Property="BorderThickness" Value="0,0,0,2" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Padding" Value="18,9" />
+      <Setter Property="MinHeight" Value="42" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="CornerRadius" Value="0" />
+    </Style>
+    <Style Selector="Button.analysisTab:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+    <Style Selector="Button.analysisTab.activeAnalysisTab">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.metricChip">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Padding" Value="10,5" />
+      <Setter Property="FontSize" Value="11" />
+    </Style>
+    <Style Selector="Button.metricChip:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+    <Style Selector="Button.metricChip.activeMetricChip">
+      <Setter Property="Background" Value="{DynamicResource Theme.SelectedBackground}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+    </Style>
+    <Style Selector="CheckBox.timeTrendToggle">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.comparisonSessionCard">
+      <Setter Property="Background" Value="{DynamicResource Theme.CardBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="BorderThickness" Value="0,0,1,0" />
+      <Setter Property="CornerRadius" Value="0" />
+    </Style>
+    <Style Selector="Border.comparisonSessionCard:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+    </Style>
+    <Style Selector="Border.analysisSection">
+      <Setter Property="Background" Value="{DynamicResource Theme.CardBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="BoxShadow" Value="0 2 10 0 #22000000" />
+    </Style>
+    <Style Selector="Button.sessionAddButton">
+      <Setter Property="Background" Value="{DynamicResource Theme.PanelBackground}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="14,7" />
+      <Setter Property="MinHeight" Value="34" />
+    </Style>
+    <Style Selector="Button.sessionAddButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+    </Style>
+    <Style Selector="Button.sessionRemoveButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="Button.sessionRemoveButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Theme.HoverBackground}" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+    </Style>
+    <Style Selector="TextBlock.analysisEyebrow">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.analysisHeading">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+      <Setter Property="FontSize" Value="18" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.analysisMuted">
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="ScrollBar:vertical">
+      <Setter Property="Background" Value="{DynamicResource Theme.ScrollTrack}" />
+    </Style>
+  </UserControl.Styles>
+
+  <Border Background="{DynamicResource Theme.WindowBackground}" BorderBrush="{DynamicResource Theme.Border}" BorderThickness="0">
+    <Grid RowDefinitions="58,146,44,*">
+      <Border Grid.Row="0" Background="{DynamicResource Theme.TitleBarBackground}" BorderBrush="{DynamicResource Theme.Border}" BorderThickness="0,0,0,1" Padding="18,8">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="18">
+          <StackPanel Orientation="Horizontal" Spacing="11" VerticalAlignment="Center">
+            <Border Width="32" Height="32" CornerRadius="5" Background="{DynamicResource Theme.SelectedBackground}" BorderBrush="{DynamicResource Theme.Accent}" BorderThickness="1">
+              <PathIcon Data="{StaticResource IconChart}" Width="16" Height="16" Foreground="{DynamicResource Theme.Accent}" />
+            </Border>
+            <StackPanel Spacing="1" VerticalAlignment="Center">
+              <TextBlock Text="曲线分析" Classes="analysisHeading" />
+              <TextBlock x:Name="StatusText" Text="添加现场后查看跨记录趋势；缺测显示 --。" Classes="analysisMuted" FontSize="10"
+                         TextTrimming="CharacterEllipsis" MaxWidth="760" />
+            </StackPanel>
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+            <TextBlock x:Name="SlotSummaryText" Text="0 / 5" Classes="analysisMuted" VerticalAlignment="Center" />
+            <Button x:Name="LanguageToggleButton" Content="中文" Classes="analysisToolbarButton" MinWidth="60"
+                    Padding="11,6" ToolTip.Tip="切换到中文指标名称" Click="ToggleLanguage" />
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <Border Grid.Row="1" Background="{DynamicResource Theme.ToolbarBackground}" BorderBrush="{DynamicResource Theme.Border}" BorderThickness="0,0,0,1" Padding="18,10">
+        <UniformGrid x:Name="SessionCardsPanel" Columns="5" />
+      </Border>
+
+      <Border Grid.Row="2" Background="{DynamicResource Theme.PanelHeaderBackground}" BorderBrush="{DynamicResource Theme.Border}" BorderThickness="0,0,0,1">
+        <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
+          <StackPanel x:Name="TabsPanel" Orientation="Horizontal" Margin="8,0" />
+        </ScrollViewer>
+      </Border>
+
+      <Grid Grid.Row="3" Background="{DynamicResource Theme.WindowBackground}">
+        <ScrollViewer x:Name="ContentScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      ScrollChanged="ContentScrollChanged">
+          <Grid MaxWidth="1600" Margin="20,14,20,24" HorizontalAlignment="Stretch">
+            <StackPanel x:Name="ContentHost" Spacing="14" />
+          </Grid>
+        </ScrollViewer>
+        <Border x:Name="EmptyState" IsVisible="False" Background="{DynamicResource Theme.WindowBackground}">
+          <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" MaxWidth="470">
+            <Border Width="54" Height="54" CornerRadius="27" Background="{DynamicResource Theme.SelectedBackground}" HorizontalAlignment="Center">
+              <PathIcon Data="{StaticResource IconChart}" Width="24" Height="24" Foreground="{DynamicResource Theme.Accent}" />
+            </Border>
+            <TextBlock Text="添加现场开始曲线分析" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimary}" HorizontalAlignment="Center" />
+            <TextBlock x:Name="EmptyStateMessage" Text="点击上方任一空卡片中的“添加现场”按钮选择 .motuperf 现场；所有指标将按概览、帧率、帧耗时、CPU、内存、温度和系统热状态依次展示。" Classes="analysisMuted"
+                       TextWrapping="Wrap" TextAlignment="Center" LineHeight="20" />
+          </StackPanel>
+        </Border>
+      </Grid>
+
+      <Border x:Name="BusyOverlay" Grid.RowSpan="4" Background="{DynamicResource Theme.DialogBackground}" IsVisible="False" Opacity="0.97" ZIndex="50">
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Width="410" Spacing="15">
+          <ProgressBar IsIndeterminate="True" Height="4" />
+          <TextBlock x:Name="BusyText" Text="正在读取现场与计算统计…" FontSize="16" FontWeight="SemiBold" TextAlignment="Center" Foreground="{DynamicResource Theme.TextPrimary}" />
+          <TextBlock Text="分析在后台进行，请稍候" TextAlignment="Center" Foreground="{DynamicResource Theme.TextSecondary}" />
+        </StackPanel>
+      </Border>
+    </Grid>
+  </Border>
+</UserControl>
