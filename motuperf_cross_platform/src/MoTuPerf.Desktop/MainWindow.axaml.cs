@@ -23,6 +23,7 @@ namespace MoTuPerf.Desktop
         private bool _allowClose;
         private bool _closeFlowRunning;
         private bool _closeSavePending;
+        private bool _isClosed;
         private bool _curveAnalysisOpen;
         private SessionComparisonWorkspace _curveAnalysisWorkspace;
         private string _renderedFpsLegendSignature;
@@ -31,6 +32,7 @@ namespace MoTuPerf.Desktop
         private readonly SemaphoreSlim _fileActionGate = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _devicePickerGate = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _screenshotViewerGate = new SemaphoreSlim(1, 1);
+        private readonly SemaphoreSlim _updateFlowGate = new SemaphoreSlim(1, 1);
         public MainWindow()
         {
             InitializeComponent();
@@ -41,6 +43,7 @@ namespace MoTuPerf.Desktop
             Opened += async delegate
             {
                 await Task.Delay(800);
+                if (_isClosed) return;
                 await CheckForUpdatesAsync(false);
             };
             UpdateDataTabState();
@@ -57,6 +60,7 @@ namespace MoTuPerf.Desktop
             UpdateSeriesLegends();
             Closed += delegate
             {
+                _isClosed = true;
                 viewModel.PropertyChanged -= ViewModelPropertyChanged;
                 viewModel.Dispose();
                 _fileActionGate.Dispose();
@@ -155,32 +159,44 @@ namespace MoTuPerf.Desktop
                 if (manual && viewModel != null) viewModel.Status = "请先停止采集或完成当前文件操作";
                 return;
             }
-            UpdateCheckResult result = await viewModel.CheckForUpdatesAsync(manual, CancellationToken.None);
-            if (viewModel.IsCapturing || viewModel.IsFileOperationInProgress)
+            if (!_updateFlowGate.Wait(0))
             {
-                if (manual) viewModel.Status = "采集或文件操作已开始，更新提示已延后";
+                if (manual) viewModel.Status = "正在检查或下载更新，请稍候";
                 return;
             }
-            if (!result.HasUpdate || result.Manifest == null)
+            try
             {
-                if (manual) viewModel.Status = result.Message ?? "当前已是最新版本";
-                return;
+                UpdateCheckResult result = await viewModel.CheckForUpdatesAsync(manual, CancellationToken.None);
+                if (viewModel.IsCapturing || viewModel.IsFileOperationInProgress)
+                {
+                    if (manual) viewModel.Status = "采集或文件操作已开始，更新提示已延后";
+                    return;
+                }
+                if (!result.HasUpdate || result.Manifest == null)
+                {
+                    if (manual) viewModel.Status = result.Message ?? "当前已是最新版本";
+                    return;
+                }
+                if (!manual && !result.Manifest.Mandatory && viewModel.IsUpdateSkipped(result.Manifest.Version)) return;
+                UpdatePromptChoice? choice = await new UpdatePromptWindow(result.Manifest).ShowDialog<UpdatePromptChoice?>(this);
+                if (choice == UpdatePromptChoice.Skip)
+                {
+                    viewModel.SkipUpdate(result.Manifest.Version);
+                    return;
+                }
+                if (choice != UpdatePromptChoice.Update) return;
+                if (viewModel.IsCapturing || viewModel.IsFileOperationInProgress)
+                {
+                    viewModel.Status = "采集或文件操作已开始，暂不能安装更新";
+                    return;
+                }
+                if (!await OfferSaveAsync()) return;
+                await DownloadAndOpenUpdateAsync(viewModel, result.Manifest);
             }
-            if (!manual && !result.Manifest.Mandatory && viewModel.IsUpdateSkipped(result.Manifest.Version)) return;
-            UpdatePromptChoice? choice = await new UpdatePromptWindow(result.Manifest).ShowDialog<UpdatePromptChoice?>(this);
-            if (choice == UpdatePromptChoice.Skip)
+            finally
             {
-                viewModel.SkipUpdate(result.Manifest.Version);
-                return;
+                _updateFlowGate.Release();
             }
-            if (choice != UpdatePromptChoice.Update) return;
-            if (viewModel.IsCapturing || viewModel.IsFileOperationInProgress)
-            {
-                viewModel.Status = "采集或文件操作已开始，暂不能安装更新";
-                return;
-            }
-            if (!await OfferSaveAsync()) return;
-            await DownloadAndOpenUpdateAsync(viewModel, result.Manifest);
         }
 
         private async Task DownloadAndOpenUpdateAsync(MainWindowViewModel viewModel, UpdateManifest manifest)
@@ -651,10 +667,8 @@ namespace MoTuPerf.Desktop
         private void UpdateCurveAnalysisButtonState()
         {
             TextBlock label = this.FindControl<TextBlock>("CurveAnalysisButtonText");
-            TextBlock arrow = this.FindControl<TextBlock>("CurveAnalysisButtonArrow");
             Button button = this.FindControl<Button>("CurveAnalysisButton");
             if (label != null) label.Text = _curveAnalysisOpen ? "返回性能监控" : "曲线分析";
-            if (arrow != null) arrow.Text = _curveAnalysisOpen ? "\u2190" : "\u2192";
             if (button != null) ToolTip.SetTip(button, _curveAnalysisOpen ? "返回采集主界面" : "进入多现场曲线分析");
         }
 

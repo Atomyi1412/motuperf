@@ -21,7 +21,8 @@ namespace MoTuPerf.Desktop.Tests
             XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
             XElement[] icons = app.Descendants().Where(element => element.Name.LocalName == "StreamGeometry"
                 && ((string)element.Attribute(xaml + "Key") ?? "").StartsWith("Icon", StringComparison.Ordinal)).ToArray();
-            Assert.Equal(11, icons.Length);
+            Assert.Contains(icons, icon => (string)icon.Attribute(xaml + "Key") == "IconDataDisplay");
+            Assert.Equal(12, icons.Length);
 
             using (SKBitmap preview = new SKBitmap(icons.Length * 80, AppThemeManager.Themes.Count * 80))
             using (SKCanvas sheet = new SKCanvas(preview))

@@ -13,6 +13,29 @@ namespace MoTuPerf.Desktop.Tests
         private static readonly XNamespace Xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
 
         [Fact]
+        public void DataDisplayTitleUsesDedicatedDataSourceIcon()
+        {
+            XDocument main = LoadXaml("src", "MoTuPerf.Desktop", "MainWindow.axaml");
+            XDocument app = LoadXaml("src", "MoTuPerf.Desktop", "App.axaml");
+            XElement curveButton = Named(main, "CurveAnalysisButton");
+            XElement dataDisplayIcon = Named(main, "DataDisplayIcon");
+
+            Assert.Equal("{StaticResource IconChart}",
+                Attribute(curveButton.Descendants(Avalonia + "PathIcon").Single(), "Data"));
+            Assert.Equal("{StaticResource IconDataDisplay}", Attribute(dataDisplayIcon, "Data"));
+            Assert.Equal("symbol", Attribute(dataDisplayIcon, "Classes"));
+            Assert.Equal("DataDisplayTitle",
+                (string)dataDisplayIcon.ElementsAfterSelf().First().Attribute(Xaml + "Name"));
+
+            string chartGeometry = app.Descendants(Avalonia + "StreamGeometry")
+                .Single(element => (string)element.Attribute(Xaml + "Key") == "IconChart").Value;
+            string dataDisplayGeometry = app.Descendants(Avalonia + "StreamGeometry")
+                .Single(element => (string)element.Attribute(Xaml + "Key") == "IconDataDisplay").Value;
+            Assert.NotEqual(chartGeometry, dataDisplayGeometry);
+            Assert.Contains("M3 5.5", dataDisplayGeometry);
+        }
+
+        [Fact]
         public void MainWorkstationKeepsReferenceGeometryAndExplicitTabTextStates()
         {
             XDocument main = LoadXaml("src", "MoTuPerf.Desktop", "MainWindow.axaml");
@@ -824,7 +847,7 @@ namespace MoTuPerf.Desktop.Tests
         }
 
         [Fact]
-        public void ReleaseDialogsFitContentAndManualChecksBypassSkippedVersion()
+        public void ReleaseDialogsFitContentAndUpdateChecksAreSingleFlight()
         {
             foreach (string name in new[] { "ChangelogWindow", "UpdatePromptWindow" })
             {
@@ -836,7 +859,12 @@ namespace MoTuPerf.Desktop.Tests
                 Assert.Contains(dialog.Descendants(Avalonia + "ScrollViewer"), scroll => Attribute(scroll, "VerticalScrollBarVisibility") == "Auto");
                 Assert.Contains("ContentDialogSizing.Attach(this)", LoadText("src", "MoTuPerf.Desktop", name + ".axaml.cs"));
             }
-            Assert.Contains("!manual && !result.Manifest.Mandatory && viewModel.IsUpdateSkipped", LoadText("src", "MoTuPerf.Desktop", "MainWindow.axaml.cs"));
+            string windowCode = LoadText("src", "MoTuPerf.Desktop", "MainWindow.axaml.cs");
+            Assert.Contains("!manual && !result.Manifest.Mandatory && viewModel.IsUpdateSkipped", windowCode);
+            Assert.Contains("_updateFlowGate.Wait(0)", windowCode);
+            Assert.Contains("正在检查或下载更新", windowCode);
+            Assert.Contains("_updateFlowGate.Release()", windowCode);
+            Assert.Contains("if (_isClosed) return;", windowCode);
             string promptCode = LoadText("src", "MoTuPerf.Desktop", "UpdatePromptWindow.axaml.cs");
             Assert.Contains("manifest.ReleaseNotes", promptCode);
             Assert.Contains("此版本暂未提供更新内容", promptCode);

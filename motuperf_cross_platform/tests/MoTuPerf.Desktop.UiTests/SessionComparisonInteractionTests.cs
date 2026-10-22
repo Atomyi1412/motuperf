@@ -1522,13 +1522,16 @@ namespace MoTuPerf.Desktop.UiTests
                 Assert.True(curveButton.Bounds.Left >= versionText.Bounds.Right);
                 Assert.True(titleBarHeader.Bounds.Right <= status.Bounds.Left + 1);
                 Assert.Equal("曲线分析", curveButtonText.Text);
-                Assert.Contains("curveAnalysisButton", curveButton.Classes);
-                Assert.DoesNotContain("themeSelectorButton", curveButton.Classes);
+                Assert.Contains("themeSelectorButton", curveButton.Classes);
+                PathIcon curveIcon = curveButton.GetVisualDescendants().OfType<PathIcon>().Single();
+                PathIcon dataDisplayIcon = window.FindControl<PathIcon>("DataDisplayIcon");
+                Assert.NotNull(dataDisplayIcon);
+                Assert.NotSame(curveIcon.Data, dataDisplayIcon.Data);
                 Assert.Equal("数据显示", window.FindControl<TextBlock>("DataDisplayTitle").Text);
                 Assert.DoesNotContain(window.GetVisualDescendants().OfType<Button>(), button =>
                     button.Content is StackPanel stack && stack.Children.OfType<TextBlock>().Any(text => text.Text == "对比分析"));
 
-                string output = Path.Combine(ScreenshotDirectory(), "integrated-curve-analysis-v0521");
+                string output = Path.Combine(ScreenshotDirectory(), "integrated-curve-analysis-v0541");
                 Directory.CreateDirectory(output);
                 foreach (string theme in new[] { "dark", "light", "retro-sage" })
                 {
