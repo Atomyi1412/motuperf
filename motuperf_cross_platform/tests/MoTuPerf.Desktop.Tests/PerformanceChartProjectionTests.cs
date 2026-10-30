@@ -41,7 +41,22 @@ namespace MoTuPerf.Desktop.Tests
         }
 
         [Fact]
-        public void ValidFpsShowsSourceAndSequenceBreaksWithoutFabricatingValues()
+        public void OrderedFrameMetricSourceChangeStartsANewSegment()
+        {
+            PerfSample first = Frame(0, 16.7, 1);
+            PerfSample second = Frame(1, 33.4, 2);
+            second.FrameSource = "fallback-display";
+
+            IReadOnlyList<IReadOnlyList<PerfSample>> segments = Project(
+                new[] { first, second }, 2400, delegate(PerfSample sample) { return sample.Fps; }, 3, true, false);
+
+            Assert.Equal(2, segments.Count);
+            Assert.Single(segments[0]);
+            Assert.Single(segments[1]);
+        }
+
+        [Fact]
+        public void ValidFpsStaysContinuousAcrossSourceAndSequenceResetWithoutFabricatingValues()
         {
             PerfSample first = Frame(0, 60, 1);
             PerfSample second = Frame(1, 0, 3);
@@ -52,8 +67,8 @@ namespace MoTuPerf.Desktop.Tests
             IReadOnlyList<IReadOnlyList<PerfSample>> segments = Project(
                 new[] { first, second, third }, 2400, delegate(PerfSample sample) { return sample.Fps; }, 3, true, true);
 
-            Assert.Equal(3, segments.Count);
-            Assert.Equal(new[] { 60d, 0d, 58d }, segments.SelectMany(s => s).Select(s => s.Fps).ToArray());
+            Assert.Single(segments);
+            Assert.Equal(new[] { 60d, 0d, 58d }, segments[0].Select(s => s.Fps).ToArray());
         }
 
         [Fact]

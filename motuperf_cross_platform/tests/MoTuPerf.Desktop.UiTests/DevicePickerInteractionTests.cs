@@ -44,6 +44,7 @@ namespace MoTuPerf.Desktop.UiTests
             resources.Styles.Clear();
             foreach (var style in styles) Styles.Add(style);
             AppThemeManager.Apply(this, "dark", false);
+            AppLanguageManager.SetChinese(false, false);
         }
     }
 

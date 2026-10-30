@@ -168,9 +168,10 @@ namespace CSharpIosPerfMonitor
                     {
                         if (DeviceLookupService.IsHarmony(Platform))
                         {
-                            HarmonyScreenshotFailureKind kind = ex is TimeoutException
+                            Exception cause = ex.GetBaseException();
+                            HarmonyScreenshotFailureKind kind = cause is TimeoutException
                                 ? HarmonyScreenshotFailureKind.HdcTimeout
-                                : ex is FileNotFoundException
+                                : cause is FileNotFoundException
                                     ? HarmonyScreenshotFailureKind.HdcUnavailable
                                     : ClassifyHarmonyFailure(new ProcessResult(1, "", ex.Message), false, false, 0, false, false);
                             Raise(Failed, "Screenshot error[" + HarmonyScreenshotFailureCode(kind) + "]: " + HarmonyScreenshotFailureMessage(kind));

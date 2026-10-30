@@ -1,0 +1,72 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MoTuPerf.AndroidTraceLab.MainWindow"
+        Width="1080" Height="720" MinWidth="900" MinHeight="600"
+        Title="MoTuPerf Android 设备侧帧采集实验版 v0.57.0"
+        WindowStartupLocation="CenterScreen">
+  <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="22" RowSpacing="14">
+    <Border Grid.Row="0" Classes="panel" Padding="18,14">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Spacing="5">
+          <TextBlock Text="Android 设备侧帧采集实验版" FontSize="23" FontWeight="SemiBold" Foreground="#F5F8FC" />
+          <TextBlock Text="FPS / Jank / FrameTime 只来自目标应用实际呈现事件，用于验证新方案，不写入正式现场文件。" Classes="muted" />
+        </StackPanel>
+        <Border Grid.Column="1" Background="#5B3A19" CornerRadius="5" Padding="10,7" VerticalAlignment="Center">
+          <TextBlock Text="实验模式 · 不影响主程序" Foreground="#FFD8A8" FontWeight="SemiBold" />
+        </Border>
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="1" ColumnDefinitions="*,*,Auto" ColumnSpacing="12">
+      <Border Classes="panel">
+        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto" RowSpacing="8">
+          <TextBlock Text="1. 选择 Android 设备" Classes="sectionTitle" />
+          <ComboBox x:Name="DeviceCombo" Grid.Row="1" MinWidth="300" HorizontalAlignment="Stretch" PlaceholderText="点击刷新后选择设备" />
+          <Button x:Name="RefreshButton" Grid.Column="1" Grid.Row="1" Content="刷新设备与进程" Click="RefreshClicked" Margin="10,0,0,0" />
+        </Grid>
+      </Border>
+      <Border Grid.Column="1" Classes="panel">
+        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*" RowSpacing="8" ColumnSpacing="10">
+          <TextBlock Text="2. 目标进程" Classes="sectionTitle" Grid.ColumnSpan="2" />
+          <TextBlock Text="PID / 包名" Grid.Row="1" VerticalAlignment="Center" Classes="muted" />
+          <TextBox x:Name="TargetText" Grid.Row="1" Grid.Column="1" PlaceholderText="例如 22655 / com.example.game" />
+        </Grid>
+      </Border>
+      <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="10">
+        <Button x:Name="StartButton" Classes="primary" Content="开始设备侧采集" Click="StartClicked" />
+        <Button x:Name="StopButton" Content="停止" Click="StopClicked" IsEnabled="False" />
+      </StackPanel>
+    </Grid>
+
+    <Grid Grid.Row="2" ColumnDefinitions="340,*" ColumnSpacing="14">
+      <Border Classes="panel">
+        <Grid RowDefinitions="Auto,Auto,*" RowSpacing="10">
+          <TextBlock Text="可选进程（双击填入）" Classes="sectionTitle" />
+          <TextBlock x:Name="ProcessHint" Grid.Row="1" Text="尚未刷新" Classes="muted" />
+          <ListBox x:Name="ProcessList" Grid.Row="2" DoubleTapped="ProcessDoubleTapped" />
+        </Grid>
+      </Border>
+      <Border Grid.Column="1" Classes="panel">
+        <Grid RowDefinitions="Auto,Auto,*" RowSpacing="10">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="实验日志与实时结果" Classes="sectionTitle" />
+            <TextBlock x:Name="ConnectionState" Grid.Column="1" Text="未开始" Foreground="#9DA8BA" />
+          </Grid>
+          <Border Grid.Row="1" Background="#101722" CornerRadius="6" Padding="12">
+            <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="12">
+              <StackPanel><TextBlock Text="FPS" Classes="muted"/><TextBlock x:Name="FpsValue" Text="--" FontSize="21" Foreground="#6FCF97" /></StackPanel>
+              <StackPanel Grid.Column="1"><TextBlock Text="Jank" Classes="muted"/><TextBlock x:Name="JankValue" Text="--" FontSize="21" Foreground="#F2C94C" /></StackPanel>
+              <StackPanel Grid.Column="2"><TextBlock Text="FrameTime" Classes="muted"/><TextBlock x:Name="FrameTimeValue" Text="--" FontSize="21" Foreground="#56CCF2" /></StackPanel>
+              <StackPanel Grid.Column="3"><TextBlock Text="有效窗口" Classes="muted"/><TextBlock x:Name="WindowValue" Text="0" FontSize="21" Foreground="#F2994A" /></StackPanel>
+            </Grid>
+          </Border>
+          <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <TextBlock x:Name="LogText" TextWrapping="Wrap" FontFamily="Consolas, Microsoft YaHei UI" Foreground="#CFD8E5" />
+          </ScrollViewer>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <TextBlock Grid.Row="3" x:Name="FooterText" Classes="muted" Text="说明：每个窗口最多 30 秒；目标进程或 Surface 变化时窗口会丢弃并显示原因，不会补零。" />
+  </Grid>
+</Window>

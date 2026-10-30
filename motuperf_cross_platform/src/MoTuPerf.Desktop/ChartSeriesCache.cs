@@ -59,8 +59,11 @@ namespace MoTuPerf.Desktop
 
         private bool BreakBetween(PerfSample before, PerfSample after)
         {
-            if (_frames && (after.FrameSourceSequenceDiscontinuity || !MetricStatistics.IsSameFrameSeries(before, after))) return true;
-            if (_frames && before.HasFrameSourceSequence && after.HasFrameSourceSequence
+            // Sampled frame counts stay visually continuous across short provenance resets. Exact
+            // ordered-frame metrics still split because their interval crosses incompatible sources.
+            if (_frames && !_measuredGap
+                && (after.FrameSourceSequenceDiscontinuity || !MetricStatistics.IsSameFrameSeries(before, after))) return true;
+            if (_frames && !_measuredGap && before.HasFrameSourceSequence && after.HasFrameSourceSequence
                 && after.FrameSourceSequence != before.FrameSourceSequence
                 && (before.FrameSourceSequence == long.MaxValue || after.FrameSourceSequence != before.FrameSourceSequence + 1)) return true;
             if (after.ElapsedSec - before.ElapsedSec <= _maxGap) return false;
@@ -176,6 +179,7 @@ namespace MoTuPerf.Desktop
 
     internal sealed class ChartDataCache
     {
+        private const double ContinuousSampleGap = double.PositiveInfinity;
         private IReadOnlyList<PerfSample> _source;
         private int _processed;
         private string _mode;
@@ -209,10 +213,21 @@ namespace MoTuPerf.Desktop
                 {
                     case "fps":
                         // State events carry the last FPS but may have a different event Source.
-                        // Only actual frame updates define frame continuity; legacy files lack this metadata.
-                        if (s.HasFreshnessMetadata && !s.FpsUpdated) break;
-                        if (s.HasFps) Add("FPS", s, x => x.Fps, 3, true, true);
-                        if (s.HasJank) { Add("Jank", s, x => x.Jank, 3, true, true); Add("BigJank", s, x => x.BigJank, 3, true, true); }
+                        // Keep the live curve attached to the current timeline while the value is still fresh.
+                        // This is display-only carry-forward; statistics and exports continue to require FpsUpdated.
+                        if (s.HasFreshnessMetadata && !s.FpsUpdated)
+                        {
+                            if (s.HasFps) Add("FPS", s, x => x.Fps, ContinuousSampleGap, true, true);
+                            break;
+                        }
+                        // Sampled frame counts use a continuous display axis like Gears/PerfDog.
+                        // Slow polls and short source resets stay connected; raw samples are not filled.
+                        if (s.HasFps) Add("FPS", s, x => x.Fps, ContinuousSampleGap, true, true);
+                        if (s.HasJank)
+                        {
+                            Add("Jank", s, x => x.Jank, ContinuousSampleGap, true, true);
+                            Add("BigJank", s, x => x.BigJank, ContinuousSampleGap, true, true);
+                        }
                         break;
                     case "frametime": if (FrameTimeChartProjection.IsChartSample(s)) Add("FrameTime", s, x => x.FrameTimeMaxMs, 3, true); break;
                     case "cpu": if (s.HasCpu) Add("CPU", s, x => x.CpuPercent, 7); break;

@@ -33,7 +33,10 @@ namespace MoTuPerf.Desktop.Tests
             }
             var cache = new ChartDataCache();
             cache.Update(new SampleSnapshot(buffer), "fps");
-            foreach (string key in new[] { "FPS", "Jank", "BigJank" })
+            Assert.Equal(80, cache.Get("FPS").Samples.Count);
+            Assert.Empty(cache.Get("FPS").Discontinuities(0, 20));
+            Assert.Single(cache.Get("FPS").Project(0, 20, 300));
+            foreach (string key in new[] { "Jank", "BigJank" })
             {
                 Assert.Equal(20, cache.Get(key).Samples.Count);
                 Assert.Empty(cache.Get(key).Discontinuities(0, 20));
@@ -46,7 +49,7 @@ namespace MoTuPerf.Desktop.Tests
         [Theory]
         [InlineData(false)]
         [InlineData(true)]
-        public void FilteringSnapshotsStillPreservesRealFrameBreaks(bool changeSource)
+        public void FilteringSnapshotsKeepsAdjacentFpsVisuallyContinuousAcrossMetadataReset(bool changeSource)
         {
             var first = Point(0); first.FpsUpdated = true; first.HasFreshnessMetadata = true;
             first.HasFrameSourceSequence = true; first.FrameSourceSequence = 1;
@@ -56,8 +59,30 @@ namespace MoTuPerf.Desktop.Tests
             if (changeSource) next.FrameSource = "fallback";
             var cache = new ChartDataCache();
             cache.Update(new[] { first, state, next }, "fps");
-            Assert.Equal(new[] { 1d }, cache.Get("FPS").Discontinuities(0, 2));
-            Assert.Equal(2, cache.Get("FPS").Project(0, 2, 100).Count);
+            Assert.Empty(cache.Get("FPS").Discontinuities(0, 2));
+            Assert.Single(cache.Get("FPS").Project(0, 2, 100));
+        }
+
+        [Fact]
+        public void FreshCarriedFpsStateReachesTheLiveEdgeWithoutDuplicatingJank()
+        {
+            var measured = Point(10, 58);
+            measured.HasFreshnessMetadata = true;
+            measured.FpsUpdated = true;
+            measured.HasJank = true;
+            measured.Jank = 2;
+            var carried = Point(11, 58);
+            carried.HasFreshnessMetadata = true;
+            carried.FpsUpdated = false;
+            carried.HasJank = true;
+            carried.Jank = 2;
+
+            var cache = new ChartDataCache();
+            cache.Update(new[] { measured, carried }, "fps");
+
+            Assert.Equal(new[] { 10d, 11d }, cache.Get("FPS").Samples.Select(s => s.ElapsedSec).ToArray());
+            Assert.Equal(58, cache.Get("FPS").Samples[cache.Get("FPS").Samples.Count - 1].Fps);
+            Assert.Equal(new[] { 10d }, cache.Get("Jank").Samples.Select(s => s.ElapsedSec).ToArray());
         }
 
         [Fact]
@@ -128,14 +153,31 @@ namespace MoTuPerf.Desktop.Tests
         }
 
         [Fact]
-        public void SourceChangeAndExplicitSequenceBreakRemainSeparateAfterDecimation()
+        public void FpsSourceChangeAndExplicitSequenceBreakRemainOneVisualSegmentAfterDecimation()
         {
             var cache = new ChartSeriesCache(s => s.Fps, 3, true, true);
             cache.Add(Point(0));
             var next = Point(1); next.FrameSource = "fallback"; cache.Add(next);
             var last = Point(2); last.FrameSource = "fallback"; last.FrameSourceSequenceDiscontinuity = true; cache.Add(last);
-            Assert.Equal(3, cache.Project(0, 3, 1).Count);
-            Assert.Equal(new[] { 1d, 2d }, cache.Discontinuities(0, 3));
+            Assert.Single(cache.Project(0, 3, 1));
+            Assert.Empty(cache.Discontinuities(0, 3));
+        }
+
+        [Fact]
+        public void ProductFpsSeriesRemainsContinuousAcrossSlowPollsWithoutFabricatingValues()
+        {
+            var first = Point(0);
+            first.HasFreshnessMetadata = true; first.FpsUpdated = true;
+            var next = Point(10, 58);
+            next.HasFreshnessMetadata = true; next.FpsUpdated = true;
+            next.FrameSource = "fallback";
+            var cache = new ChartDataCache();
+            cache.Update(new[] { first, next }, "fps");
+
+            Assert.Empty(cache.Get("FPS").Discontinuities(0, 10));
+            Assert.Single(cache.Get("FPS").Project(0, 10, 100));
+            Assert.Equal(2, cache.Get("FPS").Samples.Count);
+            Assert.DoesNotContain(cache.Get("FPS").Samples, sample => sample.Fps == 0);
         }
 
         [Fact]

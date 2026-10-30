@@ -1,0 +1,58 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MoTuPerf.Desktop.ChangelogWindow"
+        Title="更新日志"
+        Width="700"
+        SizeToContent="Height"
+        MaxHeight="640"
+        MinWidth="620"
+        CanResize="False"
+        WindowDecorations="BorderOnly"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="0"
+        WindowStartupLocation="CenterOwner">
+  <Border Classes="secondaryWindowFrame">
+    <Grid RowDefinitions="48,*,58">
+      <Border Grid.Row="0" Classes="dialogTitleBar" PointerPressed="DialogTitlePointerPressed">
+        <Grid ColumnDefinitions="*,46">
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="24,0,0,0">
+            <PathIcon Data="{StaticResource IconHistory}" Foreground="{DynamicResource Theme.Accent}" Width="18" Height="18" Margin="0,0,10,0" />
+            <TextBlock Text="更新日志" Classes="sectionTitle" />
+          </StackPanel>
+          <Button Grid.Column="1" Classes="windowButton closeButton" Content="&#x00D7;" Click="CloseWindow" ToolTip.Tip="关闭" />
+        </Grid>
+      </Border>
+      <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Margin="22,10,18,12" Spacing="9">
+          <Border Classes="helpSection">
+            <StackPanel>
+              <TextBlock Text="v0.58.0 · Android 帧实验版" Classes="helpTitle" />
+              <TextBlock Text="2026-10-23" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复 Android FPS 批次末尾等待后续采样才刷新的问题，增加独立定时发送、顺序保护和停止收尾。&#10;• 隔离慢速内存回退与 CPU 共享快照，限制回退时长和重试频率，避免内存查询拖慢 CPU 采样。&#10;• 完善 Android 设备侧帧诊断原型，增加官方 Perfetto 解析与单连接分批回传实验；校验目标归属、时间顺序和缓冲完整性，默认采集继续使用现有路径。&#10;• 修正原型将历史帧误报为当前帧、能力识别及异常窗口处理，报告明确区分采集成功、帧解析成功和开销验证边界。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel>
+              <TextBlock Text="v0.55.8" Classes="helpTitle" />
+              <TextBlock Text="2026-10-23" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 统一采集启动、设备查询和截图输出的外部进程启动检查；异常保留原始 Windows 错误码、原因、程序路径和工作目录，避免不同入口的报错信息不一致。&#10;• 修复输出文件创建失败后采集子进程可能残留的问题；已取消的查询或截图任务不会再启动子进程或清空输出文件。&#10;• 将输出管道排空纳入超时控制，并在异常退出时清理本次启动的子进程，避免设备查询或截图任务一直等待。&#10;• 增加显式选择安卓真机的桌面采集回归，覆盖连续启停、实际指标到达，以及导入现场后重新选择目标再采集。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel>
+              <TextBlock Text="v0.55.7" Classes="helpTitle" />
+              <TextBlock Text="2026-10-23" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 针对部分 Windows 环境中 Android 采集启动报“找不到指定的文件”，绝对路径启动时显式使用可执行文件所在目录作为工作目录；该调整用于排除继承目录异常，尚不能单独证明此前用户侧故障的最终原因。&#10;• 启动前检查 Python、工作目录是否真实存在；遇到 Windows 文件查找错误会重建启动参数并重试一次，日志记录完整的程序路径、工作目录及存在状态。" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+      <Border Grid.Row="2" Classes="dialogFooter">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="8">
+          <Button Classes="helpLinkButton" Content="查看完整在线更新日志" Click="OpenVersionLog" ToolTip.Tip="打开完整在线更新日志" />
+          <Button Classes="primaryToolbarButton" Content="知道了" Click="CloseWindow" Width="104" Margin="0,0,18,0" />
+        </StackPanel>
+      </Border>
+    </Grid>
+  </Border>
+</Window>

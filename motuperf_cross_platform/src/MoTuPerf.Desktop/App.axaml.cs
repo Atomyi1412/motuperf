@@ -15,6 +15,7 @@ namespace MoTuPerf.Desktop
             AvaloniaXamlLoader.Load(this);
             RuntimeTools.PrepareUserDataDirectory();
             AppThemeManager.Initialize(this);
+            AppLanguageManager.Initialize();
             _ = RuntimeTools.MigrateLegacyDataAsync(System.Threading.CancellationToken.None);
         }
 

@@ -3,7 +3,9 @@ param(
   [string]$OutputDirectory,
   [string]$BuildPython = "python",
   [string]$PythonVersion = "3.11.9",
-  [string]$PythonSha256 = "009d6bf7e3b2ddca3d784fa09f90fe54336d5b60f0e0f305c37f400bf83cfd3b"
+  [string]$PythonSha256 = "009d6bf7e3b2ddca3d784fa09f90fe54336d5b60f0e0f305c37f400bf83cfd3b",
+  [string]$CacheDirectory = "",
+  [switch]$AllowOutsideRepository
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,7 +14,7 @@ $projectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Pa
 $repoRoot = Split-Path -Parent $projectRoot
 $requirements = Join-Path $projectRoot "tools\requirements-metrics.txt"
 $constraints = Join-Path $projectRoot "tools\requirements-metrics-lock.txt"
-$cacheDir = Join-Path $repoRoot ".tmp\runtime-cache"
+$cacheDir = if ([string]::IsNullOrWhiteSpace($CacheDirectory)) { Join-Path $repoRoot ".tmp\runtime-cache" } else { [IO.Path]::GetFullPath($CacheDirectory) }
 $archiveName = "python-$PythonVersion-embed-amd64.zip"
 $archivePath = Join-Path $cacheDir $archiveName
 $downloadUrl = "https://www.python.org/ftp/python/$PythonVersion/$archiveName"
@@ -29,7 +31,7 @@ if (!(Get-Command $BuildPython -ErrorAction SilentlyContinue)) {
 
 $repoResolved = [System.IO.Path]::GetFullPath($repoRoot)
 $outputResolved = [System.IO.Path]::GetFullPath($OutputDirectory)
-if (!$outputResolved.StartsWith($repoResolved + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
+if (!$AllowOutsideRepository -and !$outputResolved.StartsWith($repoResolved + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
   throw "Refusing to replace a runtime directory outside the repository: $outputResolved"
 }
 

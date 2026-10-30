@@ -1,0 +1,38 @@
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MoTuPerf.Desktop.FirstRunSetupWindow" Title="欢迎使用 MoTuPerf" Width="620" Height="430"
+        CanResize="False" WindowStartupLocation="CenterOwner" WindowDecorations="BorderOnly"
+        ExtendClientAreaToDecorationsHint="True" ExtendClientAreaTitleBarHeightHint="0">
+  <Border Classes="secondaryWindowFrame">
+    <Grid RowDefinitions="48,*,64">
+      <Border Classes="dialogTitleBar">
+        <Grid ColumnDefinitions="*,46">
+          <TextBlock Text="欢迎使用 MoTuPerf" Classes="sectionTitle" VerticalAlignment="Center" Margin="22,0" />
+          <Button Grid.Column="1" Classes="windowButton closeButton" Content="&#x00D7;" Click="Cancel" ToolTip.Tip="关闭" />
+        </Grid>
+      </Border>
+      <StackPanel Grid.Row="1" Margin="26,20" Spacing="14">
+        <TextBlock Text="选择适合你的界面" FontSize="19" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimary}" />
+        <TextBlock Text="主题" Classes="sectionTitle" />
+        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
+          <RadioButton x:Name="DarkTheme" GroupName="Theme" IsChecked="True" HorizontalContentAlignment="Stretch">
+            <StackPanel Spacing="6"><Border Height="65" Background="#181A24" BorderBrush="#424456" BorderThickness="1" CornerRadius="5"><TextBlock Text="Aa  ▬" Foreground="#EBECF4" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="20" /></Border><TextBlock Text="黑暗 / Dark" /></StackPanel>
+          </RadioButton>
+          <RadioButton x:Name="LightTheme" Grid.Column="1" GroupName="Theme" HorizontalContentAlignment="Stretch">
+            <StackPanel Spacing="6"><Border Height="65" Background="#F3F5F8" BorderBrush="#B8C0CC" BorderThickness="1" CornerRadius="5"><TextBlock Text="Aa  ▬" Foreground="#20232A" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="20" /></Border><TextBlock Text="明亮 / Light" /></StackPanel>
+          </RadioButton>
+          <RadioButton x:Name="GreenTheme" Grid.Column="2" GroupName="Theme" HorizontalContentAlignment="Stretch">
+            <StackPanel Spacing="6"><Border Height="65" Background="#B0C3AE" BorderBrush="#71856F" BorderThickness="1" CornerRadius="5"><TextBlock Text="Aa  ▬" Foreground="#1D2B22" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="20" /></Border><TextBlock Text="绿色 / Green" /></StackPanel>
+          </RadioButton>
+        </Grid>
+        <TextBlock Text="指标名称语言 / Metric labels" Classes="sectionTitle" />
+        <StackPanel Orientation="Horizontal" Spacing="24">
+          <RadioButton x:Name="ChineseLanguage" GroupName="Language" IsChecked="True" Content="中文" />
+          <RadioButton x:Name="EnglishLanguage" GroupName="Language" Content="English" />
+        </StackPanel>
+      </StackPanel>
+      <Border Grid.Row="2" Classes="dialogFooter" Padding="22,0">
+        <Button Classes="dialogPrimaryButton" Content="开始使用" Click="Confirm" HorizontalAlignment="Right" VerticalAlignment="Center" MinWidth="112" />
+      </Border>
+    </Grid>
+  </Border>
+</Window>

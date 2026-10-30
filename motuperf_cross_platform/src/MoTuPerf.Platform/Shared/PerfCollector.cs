@@ -202,10 +202,14 @@ namespace CSharpIosPerfMonitor
             LastDiagnosticsLogPath = diagnostics == null ? "" : diagnostics.Path;
             string runner;
             string transport = "";
+            string pythonPath = "";
+            string adbPath = "";
             try
             {
                 runner = isHarmony ? RuntimeTools.ResolveToolPath("harmony_perf_runner.py") : RunnerPath(isAndroid);
                 transport = isHarmony ? RuntimeTools.HdcExecutable : "";
+                pythonPath = RuntimeTools.PythonExecutable;
+                adbPath = isAndroid ? RuntimeTools.AdbExecutable : "";
             }
             catch (Exception ex)
             {
@@ -217,13 +221,19 @@ namespace CSharpIosPerfMonitor
             string runnerPath = runner;
             if (diagnostics != null)
             {
-                diagnostics.WriteStart(config, isHarmony ? "harmony metrics runner" : isAndroid ? "android metrics runner" : "pyidevice metrics runner", runnerPath);
+                diagnostics.WriteStart(
+                    config,
+                    isHarmony ? "harmony metrics runner" : isAndroid ? "android metrics runner" : "pyidevice metrics runner",
+                    runnerPath,
+                    pythonPath,
+                    adbPath,
+                    transport);
             }
             string androidFpsTarget = string.IsNullOrWhiteSpace(config.TargetName) ? config.BundleId : config.TargetName;
             List<string> args = isHarmony
                 ? BuildHarmonyRunnerArguments(config, targetPid, runner, transport)
                 : isAndroid
-                ? new List<string> { runner, "--adb", RuntimeTools.AdbExecutable, "--serial", config.Udid, "--pid", targetPid.ToString(CultureInfo.InvariantCulture), "--package", androidFpsTarget, "--target-name", config.TargetName ?? "", "--target-start-time-ticks", config.TargetAndroidStartTimeTicks.ToString(CultureInfo.InvariantCulture), "--interval", "1" }
+                ? new List<string> { runner, "--adb", adbPath, "--serial", config.Udid, "--pid", targetPid.ToString(CultureInfo.InvariantCulture), "--package", androidFpsTarget, "--target-name", config.TargetName ?? "", "--target-start-time-ticks", config.TargetAndroidStartTimeTicks.ToString(CultureInfo.InvariantCulture), "--interval", "1" }
                 : new List<string>
                 {
                     runner,
@@ -367,15 +377,16 @@ namespace CSharpIosPerfMonitor
                     await stderrTask;
                     if (IsGenerationCurrent(generation))
                     {
-                        string exitMessage = process.ExitCode == 0
-                            ? "意外结束"
-                            : "已退出，退出码：" + process.ExitCode;
+                        string exitMessage = DescribeRunnerExit(process.ExitCode);
                         string stderr = StderrTail(generation);
                         WriteDiagnosticsRunnerExit(label, process.ExitCode, stderr);
                         string logPath = LastDiagnosticsLogPath;
                         string detail = string.IsNullOrWhiteSpace(stderr) ? "" : "；错误：" + Clip(stderr);
                         string logHint = string.IsNullOrWhiteSpace(logPath) ? "" : "；详细日志：" + logPath;
-                        FailAndStop(label + " " + exitMessage + detail + logHint + "。请重新选择当前在线设备和正在运行的 pid。", "runner_exit");
+                        string recovery = process.ExitCode == 9009 && System.OperatingSystem.IsWindows()
+                            ? "。请检查 Python/ADB 运行环境，或使用完整安装包。"
+                            : "。请重新选择当前在线设备和正在运行的 pid。";
+                        FailAndStop(label + " " + exitMessage + detail + logHint + recovery, "runner_exit");
                     }
                 }
             }
@@ -703,6 +714,16 @@ namespace CSharpIosPerfMonitor
             return RuntimeTools.ResolveToolPath(fileName);
         }
 
+        internal static string DescribeRunnerExit(int exitCode)
+        {
+            if (exitCode == 0) return "意外结束";
+            if (exitCode == 9009 && System.OperatingSystem.IsWindows())
+            {
+                return "启动失败，Windows 错误 9009：找不到有效的 Python 或 ADB";
+            }
+            return "已退出，退出码：" + exitCode.ToString(CultureInfo.InvariantCulture);
+        }
+
         private static string FpsScope(CaptureConfig config)
         {
             if (DeviceLookupService.IsHarmony(config.Platform)) return "unavailable";
@@ -741,9 +762,50 @@ namespace CSharpIosPerfMonitor
             if (firstSpace <= 0) return;
             string kind = line.Substring(0, firstSpace);
             string json = line.Substring(firstSpace + 1);
-            if (kind != "fps" && kind != "memory" && kind != "cpu" && kind != "temperature" && kind != "thermal_state" && kind != "status" && kind != "fatal" && kind != "target" && kind != "target_rebound") return;
             Dictionary<string, object> obj = SimpleJson.Parse(json) as Dictionary<string, object>;
             if (obj == null) return;
+            if (kind == "batch")
+            {
+                ParseBatch(obj, generation, platform);
+                return;
+            }
+            if (!IsKnownEventKind(kind)) return;
+            ParseEvent(kind, obj, generation, platform);
+        }
+
+        private void ParseBatch(Dictionary<string, object> obj, int generation, string platform)
+        {
+            double version;
+            if (!TryAsDouble(Get(obj, "version"), out version) || Math.Abs(version - 1.0) > 0.000001) return;
+            List<object> events = Get(obj, "events") as List<object>;
+            if (events == null) return;
+            foreach (object item in events)
+            {
+                if (!IsGenerationCurrent(generation)) return;
+                Dictionary<string, object> eventObj = item as Dictionary<string, object>;
+                if (eventObj == null) continue;
+                string eventKind = Convert.ToString(Get(eventObj, "kind") ?? "");
+                Dictionary<string, object> payload = Get(eventObj, "payload") as Dictionary<string, object>;
+                if (string.IsNullOrWhiteSpace(eventKind) || payload == null || !IsKnownEventKind(eventKind)) continue;
+                ParseEvent(eventKind, payload, generation, platform);
+            }
+        }
+
+        private static bool IsKnownEventKind(string kind)
+        {
+            return kind == "fps"
+                || kind == "memory"
+                || kind == "cpu"
+                || kind == "temperature"
+                || kind == "thermal_state"
+                || kind == "status"
+                || kind == "fatal"
+                || kind == "target"
+                || kind == "target_rebound";
+        }
+
+        private void ParseEvent(string kind, Dictionary<string, object> obj, int generation, string platform)
+        {
             if (kind == "fatal")
             {
                 if (!IsGenerationCurrent(generation)) return;
@@ -1146,7 +1208,7 @@ namespace CSharpIosPerfMonitor
                         SignalSampleLoop();
                     }
                 }
-                else
+                else if (kind == "thermal_state")
                 {
                     int level;
                     string eventPlatform = Convert.ToString(Get(obj, "platform") ?? "").Trim().ToLowerInvariant();

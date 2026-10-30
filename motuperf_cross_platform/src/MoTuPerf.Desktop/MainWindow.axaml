@@ -23,7 +23,7 @@
           <TextBlock x:Name="VersionText" Text="{Binding Version}" Foreground="{DynamicResource Theme.TextSecondary}" FontSize="12" FontWeight="SemiBold"
                      VerticalAlignment="Center" Margin="9,2,0,0" />
           <Button x:Name="CurveAnalysisButton" Classes="themeSelectorButton" Width="116" Margin="14,0,0,0" Padding="9,0"
-                  Click="OpenCurveAnalysis" IsEnabled="{Binding !IsFileOperationInProgress}"
+                  Click="OpenCurveAnalysis" IsEnabled="{Binding CanUseFileActions}"
                   ToolTip.Tip="进入多现场曲线分析">
             <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
               <PathIcon Data="{StaticResource IconChart}" Classes="themeSelectorIcon" />
@@ -35,6 +35,9 @@
                    VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,18,0"
                    TextTrimming="CharacterEllipsis" />
         <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right">
+          <Button x:Name="LanguageToggleButton" Classes="themeSelectorButton languageSelectorButton"
+                  Content="{Binding LanguageSelectorText}" ToolTip.Tip="{Binding LanguageSelectorToolTip}"
+                  Click="ToggleLanguage" />
           <Button x:Name="ThemeSelectorButton" Classes="themeSelectorButton" ToolTip.Tip="{Binding ThemeSelectorToolTip}">
             <PathIcon Data="{StaticResource IconPalette}" Classes="themeSelectorIcon" />
             <Button.Flyout>
@@ -300,7 +303,7 @@
               <Grid ColumnDefinitions="220,*">
                 <Border Classes="chartLabel">
                   <StackPanel Margin="12,8,8,8">
-                    <TextBlock Text="FPS" Classes="chartTitle" />
+                    <TextBlock Text="{Binding FpsChartTitle}" Classes="chartTitle" />
                     <StackPanel x:Name="FpsLegendPanel" Orientation="Vertical" Margin="0,7,0,0" Spacing="6">
                     </StackPanel>
                   </StackPanel>
@@ -315,37 +318,37 @@
             </Border>
             <Border Classes="chartRow" Height="156" IsVisible="{Binding ShowFrameTime}">
               <Grid ColumnDefinitions="220,*">
-                <Border Classes="chartLabel"><StackPanel Margin="12,8,8,8"><TextBlock Text="Display FrameTime" Classes="chartTitle" /><StackPanel Classes="chartLegendItem" Orientation="Horizontal" Margin="0,7,0,0"><Border Classes="chartLegendSwatch" Background="#FF6B9A" /><TextBlock Text="FrameTime" Classes="chartLegendText" /></StackPanel></StackPanel></Border>
+                <Border Classes="chartLabel"><StackPanel Margin="12,8,8,8"><TextBlock Text="{Binding FrameTimeChartTitle}" Classes="chartTitle" /><StackPanel Classes="chartLegendItem" Orientation="Horizontal" Margin="0,7,0,0"><Border Classes="chartLegendSwatch" Background="#FF6B9A" /><TextBlock Text="{Binding FrameTimeLegend}" Classes="chartLegendText" /></StackPanel></StackPanel></Border>
                 <Border Grid.Column="1" Classes="chartHost"><vm:PerformanceChartControl x:Name="FrameTimeChart" Samples="{Binding Samples}" SelectedTime="{Binding SelectedTime}" ViewStartTime="{Binding ViewStartTime}" ViewEndTime="{Binding ViewEndTime}" Mode="frametime" ZoomEnabled="{Binding IsChartZoomEnabled}" /></Border>
               </Grid>
             </Border>
             <Border Classes="chartRow" Height="156" IsVisible="{Binding ShowMemory}">
               <Grid ColumnDefinitions="220,*">
-                <Border Classes="chartLabel"><StackPanel Margin="12,8,8,8"><TextBlock Text="Process Memory" Classes="chartTitle" /><StackPanel Classes="chartLegendItem" Orientation="Horizontal" Margin="0,7,0,0"><Border Classes="chartLegendSwatch" Background="#F5C256" /><TextBlock Text="Memory" Classes="chartLegendText" /></StackPanel></StackPanel></Border>
+                <Border Classes="chartLabel"><StackPanel Margin="12,8,8,8"><TextBlock Text="{Binding MemoryChartTitle}" Classes="chartTitle" /><StackPanel Classes="chartLegendItem" Orientation="Horizontal" Margin="0,7,0,0"><Border Classes="chartLegendSwatch" Background="#F5C256" /><TextBlock Text="{Binding MemoryLegend}" Classes="chartLegendText" /></StackPanel></StackPanel></Border>
                 <Border Grid.Column="1" Classes="chartHost"><vm:PerformanceChartControl x:Name="MemoryChart" Samples="{Binding Samples}" SelectedTime="{Binding SelectedTime}" ViewStartTime="{Binding ViewStartTime}" ViewEndTime="{Binding ViewEndTime}" Mode="memory" ZoomEnabled="{Binding IsChartZoomEnabled}" /></Border>
               </Grid>
             </Border>
             <Border Classes="chartRow" Height="156" IsVisible="{Binding ShowProcessCpu}">
               <Grid ColumnDefinitions="220,*">
-                <Border Classes="chartLabel"><StackPanel Margin="12,8,8,8"><TextBlock Text="Process CPU Raw" Classes="chartTitle" /><StackPanel Classes="chartLegendItem" Orientation="Horizontal" Margin="0,7,0,0"><Border Classes="chartLegendSwatch" Background="#B0E086" /><TextBlock Text="CPU Raw" Classes="chartLegendText" /></StackPanel></StackPanel></Border>
+                <Border Classes="chartLabel"><StackPanel Margin="12,8,8,8"><TextBlock Text="{Binding CpuRawChartTitle}" Classes="chartTitle" /><StackPanel Classes="chartLegendItem" Orientation="Horizontal" Margin="0,7,0,0"><Border Classes="chartLegendSwatch" Background="#B0E086" /><TextBlock Text="{Binding CpuRawLegend}" Classes="chartLegendText" /></StackPanel></StackPanel></Border>
                 <Border Grid.Column="1" Classes="chartHost"><vm:PerformanceChartControl x:Name="CpuChart" Samples="{Binding Samples}" SelectedTime="{Binding SelectedTime}" ViewStartTime="{Binding ViewStartTime}" ViewEndTime="{Binding ViewEndTime}" Mode="cpu" ZoomEnabled="{Binding IsChartZoomEnabled}" /></Border>
               </Grid>
             </Border>
             <Border Classes="chartRow" Height="156" IsVisible="{Binding ShowNormalizedCpu}">
               <Grid ColumnDefinitions="220,*">
-                <Border Classes="chartLabel"><StackPanel Margin="12,8,8,8"><TextBlock Text="Process CPU Normalized" Classes="chartTitle" /><StackPanel Classes="chartLegendItem" Orientation="Horizontal" Margin="0,7,0,0"><Border Classes="chartLegendSwatch" Background="#7EDEEE" /><TextBlock Text="CPU Normalized" Classes="chartLegendText" /></StackPanel></StackPanel></Border>
+                <Border Classes="chartLabel"><StackPanel Margin="12,8,8,8"><TextBlock Text="{Binding CpuNormalizedChartTitle}" Classes="chartTitle" /><StackPanel Classes="chartLegendItem" Orientation="Horizontal" Margin="0,7,0,0"><Border Classes="chartLegendSwatch" Background="#7EDEEE" /><TextBlock Text="{Binding CpuNormalizedLegend}" Classes="chartLegendText" /></StackPanel></StackPanel></Border>
                 <Border Grid.Column="1" Classes="chartHost"><vm:PerformanceChartControl x:Name="NormalizedCpuChart" Samples="{Binding Samples}" SelectedTime="{Binding SelectedTime}" ViewStartTime="{Binding ViewStartTime}" ViewEndTime="{Binding ViewEndTime}" Mode="cpunormalized" ZoomEnabled="{Binding IsChartZoomEnabled}" /></Border>
               </Grid>
             </Border>
             <Border x:Name="CoreCpuRow" Classes="chartRow" Height="156" MinHeight="156" IsVisible="{Binding ShowCoreCpu}">
               <Grid ColumnDefinitions="220,*">
-                <Border Classes="chartLabel"><StackPanel Margin="12,8,8,8"><TextBlock Text="Device Core CPU" Classes="chartTitle" /><StackPanel x:Name="CoreCpuLegendPanel" Orientation="Vertical" Spacing="5" Margin="0,7,0,0" /></StackPanel></Border>
+                <Border Classes="chartLabel"><StackPanel Margin="12,8,8,8"><TextBlock Text="{Binding CoreCpuChartTitle}" Classes="chartTitle" /><StackPanel x:Name="CoreCpuLegendPanel" Orientation="Vertical" Spacing="5" Margin="0,7,0,0" /></StackPanel></Border>
                 <Border Grid.Column="1" Classes="chartHost"><vm:PerformanceChartControl x:Name="CoreCpuChart" Samples="{Binding Samples}" SelectedTime="{Binding SelectedTime}" ViewStartTime="{Binding ViewStartTime}" ViewEndTime="{Binding ViewEndTime}" Mode="corecpu" ZoomEnabled="{Binding IsChartZoomEnabled}" /></Border>
               </Grid>
             </Border>
             <Border x:Name="TemperatureRow" Classes="chartRow" Height="156" MinHeight="156" IsVisible="{Binding ShowTemperature}">
               <Grid ColumnDefinitions="220,*">
-                <Border Classes="chartLabel"><StackPanel Margin="12,8,8,8"><TextBlock Text="Device Temperature" Classes="chartTitle" /><StackPanel x:Name="TemperatureLegendPanel" Orientation="Vertical" Spacing="5" Margin="0,7,0,0" /></StackPanel></Border>
+                <Border Classes="chartLabel"><StackPanel Margin="12,8,8,8"><TextBlock Text="{Binding TemperatureChartTitle}" Classes="chartTitle" /><StackPanel x:Name="TemperatureLegendPanel" Orientation="Vertical" Spacing="5" Margin="0,7,0,0" /></StackPanel></Border>
                 <Border Grid.Column="1" Classes="chartHost"><vm:PerformanceChartControl x:Name="TemperatureChart" Samples="{Binding Samples}" SelectedTime="{Binding SelectedTime}" ViewStartTime="{Binding ViewStartTime}" ViewEndTime="{Binding ViewEndTime}" Mode="temperature" ZoomEnabled="{Binding IsChartZoomEnabled}" /></Border>
               </Grid>
             </Border>

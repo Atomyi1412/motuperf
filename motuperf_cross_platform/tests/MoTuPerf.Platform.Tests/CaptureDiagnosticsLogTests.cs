@@ -158,7 +158,7 @@ namespace MoTuPerf.Platform.Tests
                         TargetHarmonyStartTimeTicks = 987654,
                         TargetHarmonyNameIsComm = true,
                         ScreenshotIntervalSec = 3
-                    }, "pyidevice metrics runner", "pid_perf_runner.py");
+                    }, "pyidevice metrics runner", "pid_perf_runner.py", "python.exe", "adb.exe", "");
                     log.WriteEvent("runner_fatal", "token=super-secret; device communication failed", "pid_lost");
                     log.WriteStop("runner_fatal", "采集异常停止");
                 }
@@ -173,6 +173,8 @@ namespace MoTuPerf.Platform.Tests
                 Assert.Equal(100, start.RootElement.GetProperty("fields").GetProperty("target_harmony_user_id").GetInt32());
                 Assert.Equal(987654, start.RootElement.GetProperty("fields").GetProperty("target_harmony_start_time_ticks").GetInt64());
                 Assert.True(start.RootElement.GetProperty("fields").GetProperty("target_harmony_name_is_comm").GetBoolean());
+                Assert.Equal("python.exe", start.RootElement.GetProperty("fields").GetProperty("python_path").GetString());
+                Assert.Equal("adb.exe", start.RootElement.GetProperty("fields").GetProperty("adb_path").GetString());
                 Assert.Equal("runner_fatal", fatal.RootElement.GetProperty("event").GetString());
                 string message = fatal.RootElement.GetProperty("fields").GetProperty("message").GetString();
                 Assert.Contains("token=[redacted]", message, StringComparison.Ordinal);

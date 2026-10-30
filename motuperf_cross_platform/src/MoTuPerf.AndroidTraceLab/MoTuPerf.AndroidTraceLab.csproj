@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>MoTuPerf.AndroidTraceLab</AssemblyName>
+    <RootNamespace>MoTuPerf.AndroidTraceLab</RootNamespace>
+    <Version>0.57.0</Version>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.1" />
+    <Content Include="..\..\..\csharp_perf_monitor\tools\*.py" Link="tools\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="app.manifest" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

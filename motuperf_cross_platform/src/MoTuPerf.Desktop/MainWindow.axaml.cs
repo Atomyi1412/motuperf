@@ -40,8 +40,21 @@ namespace MoTuPerf.Desktop
             MainWindowViewModel viewModel = new MainWindowViewModel();
             viewModel.CaptureStoppedUnexpectedly += async delegate { await OfferSaveAsync(); };
             DataContext = viewModel;
+            AppLanguageManager.LanguageChanged += RefreshLanguagePresentation;
+            _curveAnalysisWorkspace?.SetLanguage(AppLanguageManager.IsChinese);
             Opened += async delegate
             {
+                string marker = System.IO.Path.Combine(AppContext.BaseDirectory, ".first-run-setup");
+                if (File.Exists(marker))
+                {
+                    var setup = new FirstRunSetupWindow();
+                    bool confirmed = await setup.ShowDialog<bool>(this);
+                    if (confirmed)
+                    {
+                        (DataContext as MainWindowViewModel)?.RefreshThemePresentation();
+                        try { File.Delete(marker); } catch { }
+                    }
+                }
                 await Task.Delay(800);
                 if (_isClosed) return;
                 await CheckForUpdatesAsync(false);
@@ -61,6 +74,7 @@ namespace MoTuPerf.Desktop
             Closed += delegate
             {
                 _isClosed = true;
+                AppLanguageManager.LanguageChanged -= RefreshLanguagePresentation;
                 viewModel.PropertyChanged -= ViewModelPropertyChanged;
                 viewModel.Dispose();
                 _fileActionGate.Dispose();
@@ -108,13 +122,32 @@ namespace MoTuPerf.Desktop
             StackPanel panel = this.FindControl<StackPanel>("FpsLegendPanel");
             PerformanceChartControl chart = this.FindControl<PerformanceChartControl>("FrameChart");
             if (panel == null || chart == null) return;
-            string signature = viewModel.ShowFps + "|" + viewModel.ShowJank + "|" + viewModel.ShowBigJank;
+            string signature = viewModel.ShowFps + "|" + viewModel.ShowJank + "|" + viewModel.ShowBigJank + "|" + AppLanguageManager.IsChinese;
             if (string.Equals(signature, _renderedFpsLegendSignature, StringComparison.Ordinal)) return;
             _renderedFpsLegendSignature = signature;
             panel.Children.Clear();
-            if (viewModel.ShowFps) panel.Children.Add(CreateLegendItem("FPS", "FPS", Brush.Parse("#FF6B9A"), chart));
-            if (viewModel.ShowJank) panel.Children.Add(CreateLegendItem("Jank", "Jank", Brush.Parse("#4DB5E0"), chart));
-            if (viewModel.ShowBigJank) panel.Children.Add(CreateLegendItem("BigJank", "BigJank", Brush.Parse("#91DB72"), chart));
+            if (viewModel.ShowFps) panel.Children.Add(CreateLegendItem(AppLanguageManager.LegendLabel("FPS"), "FPS", Brush.Parse("#FF6B9A"), chart));
+            if (viewModel.ShowJank) panel.Children.Add(CreateLegendItem(AppLanguageManager.LegendLabel("Jank"), "Jank", Brush.Parse("#4DB5E0"), chart));
+            if (viewModel.ShowBigJank) panel.Children.Add(CreateLegendItem(AppLanguageManager.LegendLabel("BigJank"), "BigJank", Brush.Parse("#91DB72"), chart));
+        }
+
+        private void ToggleLanguage(object sender, RoutedEventArgs e)
+        {
+            AppLanguageManager.SetChinese(!AppLanguageManager.IsChinese);
+        }
+
+        private void RefreshLanguagePresentation()
+        {
+            MainWindowViewModel viewModel = DataContext as MainWindowViewModel;
+            if (viewModel == null) return;
+            viewModel.RefreshLanguagePresentation();
+            _curveAnalysisWorkspace?.SetLanguage(AppLanguageManager.IsChinese);
+            _renderedFpsLegendSignature = null;
+            _renderedCoreLegendCount = -1;
+            _renderedTemperatureLegendSignature = null;
+            UpdateSeriesLegends();
+            PerformanceChartControl.RefreshThemeResources();
+            ComparisonChartControl.RefreshThemeResources();
         }
 
         private void SelectTheme(object sender, RoutedEventArgs e)
@@ -252,7 +285,7 @@ namespace MoTuPerf.Desktop
             panel.Children.Clear();
             if (count == 0)
             {
-                panel.Children.Add(CreateWaitingLegend("等待逐核数据"));
+                panel.Children.Add(CreateWaitingLegend(AppLanguageManager.Text("Waiting for per-core data", "等待逐核数据")));
             }
             else
             {
@@ -277,14 +310,14 @@ namespace MoTuPerf.Desktop
             panel.Children.Clear();
             if (sensors.Count == 0)
             {
-                panel.Children.Add(CreateWaitingLegend("等待温度数据"));
+                panel.Children.Add(CreateWaitingLegend(AppLanguageManager.Text("Waiting for temperature data", "等待温度数据")));
             }
             else
             {
                 for (int index = 0; index < sensors.Count; index++)
                 {
                     string sensor = sensors[index];
-                    panel.Children.Add(CreateLegendItem(sensor, PerformanceChartControl.TemperatureSeriesName(sensor), PerformanceChartControl.TemperatureBrush(index), sensors.Count > 1 ? chart : null));
+                    panel.Children.Add(CreateLegendItem(AppLanguageManager.SensorName(sensor), PerformanceChartControl.TemperatureSeriesName(sensor), PerformanceChartControl.TemperatureBrush(index), sensors.Count > 1 ? chart : null));
                 }
             }
             SetLegendRowHeight("TemperatureRow", sensors.Count);
@@ -632,7 +665,7 @@ namespace MoTuPerf.Desktop
         private async void OpenCurveAnalysis(object sender, RoutedEventArgs e)
         {
             MainWindowViewModel viewModel = DataContext as MainWindowViewModel;
-            if (viewModel == null || viewModel.IsFileOperationInProgress || _curveAnalysisWorkspace == null) return;
+            if (viewModel == null || !viewModel.CanUseFileActions || _curveAnalysisWorkspace == null) return;
             if (_curveAnalysisOpen)
             {
                 ShowPerformanceWorkspace();
@@ -643,6 +676,7 @@ namespace MoTuPerf.Desktop
             this.FindControl<Border>("MainToolbar").IsVisible = false;
             this.FindControl<Grid>("MainContent").IsVisible = false;
             _curveAnalysisWorkspace.IsVisible = true;
+            _curveAnalysisWorkspace.SetLanguage(AppLanguageManager.IsChinese);
             try
             {
                 await _curveAnalysisWorkspace.InitializeAsync(viewModel.HasSessionData ? viewModel.BuildSessionDocument() : null);

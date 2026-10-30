@@ -81,7 +81,7 @@ namespace MoTuPerf.Desktop
             {
                 metric.PropertyChanged += MetricChanged;
             }
-            UpdateAnalysisData();
+            RefreshLanguagePresentation();
             ToggleCaptureCommand = new RelayCommand(ToggleCapture);
 
             _sampleRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
@@ -121,11 +121,24 @@ namespace MoTuPerf.Desktop
 
         public event PropertyChangedEventHandler PropertyChanged;
         public event Action<string> CaptureStoppedUnexpectedly;
-        public string Version { get { return "v0.54.1"; } }
+        public string Version { get { return "v1.0.1"; } }
         public IReadOnlyList<AppThemeDefinition> ThemeOptions { get { return AppThemeManager.Themes; } }
         public string CurrentThemeName { get { return AppThemeManager.Current.DisplayName; } }
         public string CurrentThemePreviewColor { get { return AppThemeManager.Current.PreviewColor; } }
         public string ThemeSelectorToolTip { get { return "选择主题"; } }
+        public string LanguageSelectorText { get { return AppLanguageManager.SelectorText; } }
+        public string LanguageSelectorToolTip { get { return AppLanguageManager.SelectorToolTip; } }
+        public string FpsChartTitle { get { return AppLanguageManager.MetricDisplayName("FPS"); } }
+        public string FrameTimeChartTitle { get { return AppLanguageManager.MetricDisplayName("Display FrameTime"); } }
+        public string MemoryChartTitle { get { return AppLanguageManager.MetricDisplayName("Process Memory"); } }
+        public string CpuRawChartTitle { get { return AppLanguageManager.MetricDisplayName("Process CPU Raw"); } }
+        public string CpuNormalizedChartTitle { get { return AppLanguageManager.MetricDisplayName("Process CPU Normalized"); } }
+        public string CoreCpuChartTitle { get { return AppLanguageManager.Text("Device Core CPU", "设备核心 CPU"); } }
+        public string TemperatureChartTitle { get { return AppLanguageManager.MetricDisplayName("Device Temperature"); } }
+        public string FrameTimeLegend { get { return AppLanguageManager.LegendLabel("FrameTime"); } }
+        public string MemoryLegend { get { return AppLanguageManager.LegendLabel("Memory"); } }
+        public string CpuRawLegend { get { return AppLanguageManager.LegendLabel("CPU Raw"); } }
+        public string CpuNormalizedLegend { get { return AppLanguageManager.LegendLabel("CPU Normalized"); } }
         public string DataDirectory { get { return RuntimeTools.DataDirectory; } }
         public bool CheckForUpdates
         {
@@ -146,19 +159,63 @@ namespace MoTuPerf.Desktop
             OnPropertyChanged(nameof(ThemeSelectorToolTip));
             foreach (MetricRowViewModel metric in Metrics) metric.RefreshThemeColors();
         }
-        public string ThermalMetricTitle { get { return IsAndroidSelection || IsHarmonySelection ? "Thermal Status" : "Thermal State"; } }
+        public void RefreshLanguagePresentation()
+        {
+            foreach (MetricRowViewModel metric in Metrics)
+            {
+                metric.SetPresentation(
+                    AppLanguageManager.MetricDisplayName(metric.Name),
+                    AppLanguageManager.MetricDescription(metric.Name),
+                    AppLanguageManager.MetricUnit(metric.Name, DefaultMetricUnit(metric.Name)));
+            }
+            UpdateThermalMetricPresentation();
+            RefreshDataTileLabels(_liveDataTiles);
+            RefreshDataTileLabels(_selectedDataTiles);
+            UpdateAnalysisData();
+            OnPropertyChanged(nameof(LanguageSelectorText));
+            OnPropertyChanged(nameof(LanguageSelectorToolTip));
+            OnPropertyChanged(nameof(FpsChartTitle));
+            OnPropertyChanged(nameof(FrameTimeChartTitle));
+            OnPropertyChanged(nameof(MemoryChartTitle));
+            OnPropertyChanged(nameof(CpuRawChartTitle));
+            OnPropertyChanged(nameof(CpuNormalizedChartTitle));
+            OnPropertyChanged(nameof(CoreCpuChartTitle));
+            OnPropertyChanged(nameof(TemperatureChartTitle));
+            OnPropertyChanged(nameof(FrameTimeLegend));
+            OnPropertyChanged(nameof(MemoryLegend));
+            OnPropertyChanged(nameof(CpuRawLegend));
+            OnPropertyChanged(nameof(CpuNormalizedLegend));
+        }
+        public string ThermalMetricTitle
+        {
+            get { return AppLanguageManager.MetricDisplayName(IsAndroidSelection || IsHarmonySelection ? "Thermal Status" : "Thermal State"); }
+        }
         public string ThermalMetricLegend
         {
             get
             {
-                if (IsHarmonySelection) return "鸿蒙暂不提供系统热状态";
-                return IsAndroidSelection
-                    ? "0正常 / 1轻微 / 2中度 / 3严重 / 4临界 / 5紧急 / 6关机"
-                    : "0正常 / 1升温 / 2严重 / 3临界";
+                if (IsHarmonySelection) return AppLanguageManager.Text("Not available on HarmonyOS", "鸿蒙暂不提供系统热状态");
+                if (IsAndroidSelection)
+                {
+                    return AppLanguageManager.Text(
+                        "0 Normal / 1 Light / 2 Moderate / 3 Severe / 4 Critical / 5 Emergency / 6 Shutdown",
+                        "0正常 / 1轻微 / 2中度 / 3严重 / 4临界 / 5紧急 / 6关机");
+                }
+                return AppLanguageManager.Text(
+                    "0 Nominal / 1 Fair / 2 Serious / 3 Critical",
+                    "0正常 / 1升温 / 2严重 / 3临界");
             }
         }
         public int ThermalAxisMax { get { return IsHarmonySelection ? 1 : IsAndroidSelection ? 6 : 3; } }
-        public string ThermalWaitingText { get { return IsHarmonySelection ? "鸿蒙暂不提供系统热状态" : "等待 " + ThermalMetricTitle + " 数据"; } }
+        public string ThermalWaitingText
+        {
+            get
+            {
+                return IsHarmonySelection
+                    ? AppLanguageManager.Text("Not available on HarmonyOS", "鸿蒙暂不提供系统热状态")
+                    : AppLanguageManager.Text("Waiting for " + ThermalMetricTitle + " data", "等待" + ThermalMetricTitle + "数据");
+            }
+        }
         public bool IsParametersCollapsed
         {
             get { return _parametersCollapsed; }
@@ -603,10 +660,11 @@ namespace MoTuPerf.Desktop
         private void UpdateThermalMetricPresentation()
         {
             MetricRowViewModel thermal = Metrics.First(delegate(MetricRowViewModel metric) { return metric.Name == "Thermal State"; });
+            string unit = IsHarmonySelection ? "--" : IsAndroidSelection ? "0-6" : "0-3";
             thermal.SetPresentation(
                 ThermalMetricTitle,
-                "系统热状态",
-                IsHarmonySelection ? "--" : IsAndroidSelection ? "0-6" : "0-3");
+                AppLanguageManager.MetricDescription("Thermal State"),
+                unit);
             OnPropertyChanged(nameof(ThermalMetricTitle));
             OnPropertyChanged(nameof(ThermalMetricLegend));
             OnPropertyChanged(nameof(ThermalAxisMax));
@@ -915,9 +973,45 @@ namespace MoTuPerf.Desktop
 
         private static void AddDataTile(ObservableCollection<DataMetricTileViewModel> tiles, Dictionary<string, DataMetricTileViewModel> index, string key, string label)
         {
-            DataMetricTileViewModel tile = new DataMetricTileViewModel(label);
+            DataMetricTileViewModel tile = new DataMetricTileViewModel(AppLanguageManager.DataTileLabel(key, label));
             tiles.Add(tile);
             index[key] = tile;
+        }
+
+        private static void RefreshDataTileLabels(Dictionary<string, DataMetricTileViewModel> tiles)
+        {
+            foreach (KeyValuePair<string, DataMetricTileViewModel> item in tiles)
+            {
+                item.Value.SetLabel(AppLanguageManager.DataTileLabel(item.Key, DefaultDataTileLabel(item.Key)));
+            }
+        }
+
+        private static string DefaultDataTileLabel(string key)
+        {
+            switch (key)
+            {
+                case "pid": return "PID";
+                case "elapsed": return "时长";
+                case "cpu": return "CPU Raw";
+                case "memory": return "内存";
+                case "fps": return "FPS";
+                case "frame": return "FrameTime";
+                case "jank": return "Jank";
+                case "bigJank": return "BigJank";
+                case "temperature": return "Temperature";
+                case "thermalState": return "Thermal State";
+                default: return key;
+            }
+        }
+
+        private static string DefaultMetricUnit(string metricName)
+        {
+            switch (metricName)
+            {
+                case "Process Memory": return "MB";
+                case "Thermal State": return "0-3";
+                default: return "";
+            }
         }
 
         private static void ResetDataTiles(Dictionary<string, DataMetricTileViewModel> tiles)
@@ -1552,7 +1646,7 @@ namespace MoTuPerf.Desktop
 
         public string Label { get; private set; }
         public string Description { get; private set; }
-        public string DisplayLabel { get { return string.IsNullOrWhiteSpace(Unit) ? Label : Label + " (" + Unit + ")"; } }
+        public string DisplayLabel { get { return AppLanguageManager.AnalysisLabel(Label, Unit); } }
         public string Unit { get; private set; }
         public string Maximum { get; private set; }
         public string Minimum { get; private set; }
@@ -1568,9 +1662,17 @@ namespace MoTuPerf.Desktop
     public sealed class DataMetricTileViewModel : INotifyPropertyChanged
     {
         private string _value = "--";
-        public DataMetricTileViewModel(string label) { Label = label; }
+        private string _label;
+        public DataMetricTileViewModel(string label) { _label = label; }
         public event PropertyChangedEventHandler PropertyChanged;
-        public string Label { get; private set; }
+        public string Label { get { return _label; } }
+        public void SetLabel(string label)
+        {
+            string next = label ?? "";
+            if (_label == next) return;
+            _label = next;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Label)));
+        }
         public string Value
         {
             get { return _value; }

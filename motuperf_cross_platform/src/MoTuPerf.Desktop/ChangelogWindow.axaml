@@ -26,23 +26,23 @@
           <StackPanel Margin="22,10,18,12" Spacing="9">
           <Border Classes="helpSection">
             <StackPanel>
-              <TextBlock Text="v0.54.1" Classes="helpTitle" />
-              <TextBlock Text="2026-10-22" Classes="dialogHint" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 修复启动自动检查与手动检查同时进行时可能弹出两个更新提示、分别启动两条下载流程的问题；更新检查、提示与下载现在共用单流程互斥，第二次触发只显示正在检查或下载更新。&#10;• 曲线分析入口恢复为与其他标题栏工具一致的普通按钮外观，保留图表图标和文字，移除描边按钮与方向箭头。&#10;• “数据显示”标题前的图标改为独立的数据行图标，与顶部“曲线分析”图表入口形成更清晰的视觉区分，标题栏布局和按钮样式保持不变。" />
+              <TextBlock Text="v1.0.1" Classes="helpTitle" />
+              <TextBlock Text="2026-10-30" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 首次设置主题时同步预览主界面与设置窗口，取消时恢复原主题。" />
             </StackPanel>
           </Border>
           <Border Classes="helpSection">
             <StackPanel>
-              <TextBlock Text="v0.54.0" Classes="helpTitle" />
-              <TextBlock Text="2026-10-22" Classes="dialogHint" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 曲线分析的每个指标选择栏新增“相同时间趋势”开关，默认关闭；勾选后所有现场曲线按各自完整采集时长等比拉伸到最长现场，取消勾选恢复原始时间轴。&#10;• 该功能只改变图表查看方式，不修改原始采样、统计结果、现场文件或导出数据；同一开关状态会同步应用到帧率、帧耗时、处理器、内存、温度与系统热状态分类。&#10;• 重新设计顶部“曲线分析 / 返回性能监控”入口，改为独立描边导航按钮并使用方向箭头，与“数据显示”页面标题形成明确的动作和内容层级区分。" />
+              <TextBlock Text="v1.0.0" Classes="helpTitle" />
+              <TextBlock Text="2026-10-30" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 保持原有 Windows 安装和卸载界面，避免改变用户熟悉的安装流程。&#10;• 全新安装首次启动时可选择界面主题和指标名称语言，升级时保留已有设置。" />
             </StackPanel>
           </Border>
           <Border Classes="helpSection">
             <StackPanel>
-              <TextBlock Text="v0.53.2" Classes="helpTitle" />
-              <TextBlock Text="2026-10-22" Classes="dialogHint" />
-              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 曲线分析空现场槽中的“添加现场”按钮和文件选择说明改为整体垂直居中，充分利用卡片可用高度。" />
+              <TextBlock Text="v0.56.1" Classes="helpTitle" />
+              <TextBlock Text="2026-10-30" Classes="dialogHint" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="• 采集过程中禁用曲线分析入口，停止采集后恢复，避免误切换界面。" />
             </StackPanel>
           </Border>
         </StackPanel>

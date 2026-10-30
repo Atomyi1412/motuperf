@@ -1,6 +1,7 @@
 param(
   [string]$OutputName = "MoTuPerf-Setup",
-  [string]$Configuration = "Release"
+  [string]$Configuration = "Release",
+  [string]$DistDirectory = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -9,7 +10,11 @@ $packagingRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Split-Path -Parent (Split-Path -Parent $packagingRoot)
 $repoRoot = Split-Path -Parent $projectRoot
 $projectFile = Join-Path $projectRoot "src\MoTuPerf.Desktop\MoTuPerf.Desktop.csproj"
-$dist = Join-Path $projectRoot "dist"
+$dist = if ([string]::IsNullOrWhiteSpace($DistDirectory)) {
+  Join-Path $projectRoot "dist"
+} else {
+  [IO.Path]::GetFullPath($DistDirectory)
+}
 $installerScript = Join-Path $packagingRoot "MoTuPerf.CrossPlatform.nsi"
 $processHelper = Join-Path $packagingRoot "StopInstalledProcesses.ps1"
 $directoryHelper = Join-Path $packagingRoot "ResolveInstallDirectory.ps1"
@@ -70,9 +75,14 @@ Get-ChildItem -LiteralPath $payloadDir -Recurse -File -Filter "*.pdb" | Remove-I
 
 $toolsTarget = Join-Path $payloadDir "tools"
 New-Item -ItemType Directory -Path $toolsTarget -Force | Out-Null
-Get-ChildItem (Join-Path $repoRoot "csharp_perf_monitor\tools") -File | Where-Object { $_.Extension -in @('.py', '.txt') } | Copy-Item -Destination $toolsTarget -Force
+Get-ChildItem (Join-Path $repoRoot "csharp_perf_monitor\tools") -File | Where-Object { $_.Extension -in @('.py', '.txt', '.md') } | Copy-Item -Destination $toolsTarget -Force
 
-& powershell -ExecutionPolicy Bypass -File $runtimeScript -OutputDirectory (Join-Path $payloadDir "runtime\python")
+$runtimeArgs = @("-ExecutionPolicy", "Bypass", "-File", $runtimeScript, "-OutputDirectory", (Join-Path $payloadDir "runtime\python"))
+if (![string]::IsNullOrWhiteSpace($DistDirectory)) {
+  $runtimeArgs += "-AllowOutsideRepository"
+  $runtimeArgs += @("-CacheDirectory", (Join-Path $dist ".runtime-cache"))
+}
+& powershell @runtimeArgs
 if ($LASTEXITCODE -ne 0) { throw "Bundled Python runtime build failed." }
 
 $adbCommand = Get-Command adb -ErrorAction SilentlyContinue
@@ -90,6 +100,9 @@ Copy-Item -LiteralPath $shortcutIcon -Destination (Join-Path $payloadDir "motu-s
   ConvertTo-Json | Set-Content -LiteralPath (Join-Path $payloadDir "motuperf-package.json") -Encoding UTF8
 
 New-Item -ItemType Directory -Path $setupDir -Force | Out-Null
+if (Test-Path -LiteralPath (Join-Path $payloadDir "data")) {
+  throw "Installer payload contains a data directory. Remove runtime data from the build source and rebuild in a clean directory."
+}
 if (Test-Path -LiteralPath $setupFile) { Remove-Item -LiteralPath $setupFile -Force }
 & $makensisPath "/INPUTCHARSET" "UTF8" "/DAPP_VERSION=$appVersion" "/DAPP_FILE_VERSION=$appFileVersion" "/DSOURCE_DIR=$payloadDir" "/DOUTPUT_FILE=$setupFile" "/DSETUP_ICON=$icon" "/DPROCESS_HELPER=$processHelper" "/DDIRECTORY_HELPER=$directoryHelper" $installerScript
 if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $setupFile)) { throw "NSIS installer build failed." }

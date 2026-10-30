@@ -305,6 +305,12 @@
       <Setter Property="VerticalAlignment" Value="Center" />
       <Setter Property="HorizontalAlignment" Value="Center" />
     </Style>
+    <Style Selector="Button.languageSelectorButton">
+      <Setter Property="Width" Value="62" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+    </Style>
     <Style Selector="PathIcon.settingsMenuIcon">
       <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
       <Setter Property="Width" Value="16" />

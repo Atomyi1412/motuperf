@@ -29,6 +29,7 @@
 !define APP_EXE "MoTuPerf.CrossPlatform.exe"
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}"
 Var TestMode
+Var FreshInstall
 Name "MoTuPerf ${APP_VERSION}"
 OutFile "${OUTPUT_FILE}"
 InstallDir "$LOCALAPPDATA\Programs\MoTuPerf-CrossPlatform"
@@ -109,9 +110,17 @@ FunctionEnd
 Section "MoTuPerf" SEC_MAIN
   SectionIn RO
   Call StopInstalledProcesses
+  StrCpy $FreshInstall "0"
+  IfFileExists "$INSTDIR\${APP_EXE}" +2 0
+  StrCpy $FreshInstall "1"
   SetShellVarContext current
   SetOutPath "$INSTDIR"
   File /r "${SOURCE_DIR}\*.*"
+  ${If} $FreshInstall == "1"
+    FileOpen $0 "$INSTDIR\.first-run-setup" w
+    FileWrite $0 "1"
+    FileClose $0
+  ${EndIf}
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   ${If} $TestMode == "1"
     FileOpen $0 "$INSTDIR\.installer-test-mode" w

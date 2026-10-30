@@ -1,0 +1,31 @@
+using System.Diagnostics;
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+
+namespace MoTuPerf.Desktop
+{
+    public partial class ChangelogWindow : Window
+    {
+        private const string VersionLogUrl = "https://github.com/Atomyi1412/motuperf/blob/master/CHANGELOG.md";
+
+        public ChangelogWindow()
+        {
+            Avalonia.Markup.Xaml.AvaloniaXamlLoader.Load(this);
+            ContentDialogSizing.Attach(this);
+        }
+
+        private void DialogTitlePointerPressed(object sender, PointerPressedEventArgs e)
+        {
+            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) BeginMoveDrag(e);
+        }
+
+        private void OpenVersionLog(object sender, RoutedEventArgs e)
+        {
+            try { Process.Start(new ProcessStartInfo { FileName = VersionLogUrl, UseShellExecute = true }); }
+            catch { }
+        }
+
+        private void CloseWindow(object sender, RoutedEventArgs e) { Close(); }
+    }
+}

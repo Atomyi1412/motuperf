@@ -59,8 +59,9 @@ namespace CSharpIosPerfMonitor
 
         internal static string DescribeDiscoveryException(Exception ex)
         {
-            if (ex is TimeoutException) return "ADB 响应超时，请检查 USB 数据线、关闭占用设备的其他工具后刷新。";
-            if (ex is FileNotFoundException || ex is System.ComponentModel.Win32Exception)
+            Exception cause = ex.GetBaseException();
+            if (cause is TimeoutException) return "ADB 响应超时，请检查 USB 数据线、关闭占用设备的其他工具后刷新。";
+            if (cause is FileNotFoundException || cause is System.ComponentModel.Win32Exception)
                 return "ADB 运行组件缺失或无法启动，请重新安装 MoTuPerf，并检查安全软件是否拦截。";
             return "设备检测失败：" + CaptureDiagnosticsLog.Sanitize(ex.Message, 240);
         }

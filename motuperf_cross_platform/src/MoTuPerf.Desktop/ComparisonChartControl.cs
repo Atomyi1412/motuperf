@@ -60,6 +60,8 @@ namespace MoTuPerf.Desktop
         private double _rangeDragOriginEnd;
         private Point? _hoverPoint;
 
+        private static string Text(string english, string chinese) { return AppLanguageManager.Text(english, chinese); }
+
         public ComparisonChartControl()
         {
             Instances.Add(new WeakReference<ComparisonChartControl>(this));
@@ -310,7 +312,7 @@ namespace MoTuPerf.Desktop
             if (visible.Count == 0)
             {
                 DrawGrid(context, plot, 0, 1, 0, maxTime, true);
-                DrawCenteredText(context, plot, EmptyText ?? "当前区间没有可比较的数据", 13, ResourceBrush("Theme.TextMuted", "#8A8F9A"));
+                DrawCenteredText(context, plot, EmptyText ?? Text("No comparable data in the current range", "当前区间没有可比较的数据"), 13, ResourceBrush("Theme.TextMuted", "#8A8F9A"));
                 DrawRangeBar(context, plot, maxTime, rangeTop);
                 DrawLegend(context, legendPlan, legendTop);
                 return;
@@ -463,8 +465,9 @@ namespace MoTuPerf.Desktop
 
             _rangeResetBounds = new Rect(trackRight + 8, top - 5, resetWidth, RangeHeight + 10);
             IBrush resetBrush = isZoomed ? accent : ResourceBrush("Theme.TextMuted", "#777A8C");
-            context.DrawText(Text("还原", 11, resetBrush),
-                new Point(_rangeResetBounds.X + Math.Max(0, (resetWidth - MeasureText("还原", 11)) / 2), top - 2));
+            string resetLabel = Text("Reset", "还原");
+            context.DrawText(Text(resetLabel, 11, resetBrush),
+                new Point(_rangeResetBounds.X + Math.Max(0, (resetWidth - MeasureText(resetLabel, 11)) / 2), top - 2));
         }
 
         private void DrawGrid(DrawingContext context, Rect plot, double minValue, double maxValue, double startTime, double endTime, bool empty)
@@ -500,7 +503,7 @@ namespace MoTuPerf.Desktop
             double y = plot.Bottom - (Threshold.Value - minValue) / Math.Max(0.0001, maxValue - minValue) * plot.Height;
             Pen pen = new Pen(ResourceBrush("Theme.Warning", "#E9A23B"), 1, new DashStyle(new[] { 4.0, 4.0 }, 0));
             context.DrawLine(pen, new Point(plot.Left, y), new Point(plot.Right, y));
-            string label = "阈值 " + FormatValue(Threshold.Value);
+            string label = Text("Threshold ", "阈值 ") + FormatValue(Threshold.Value);
             context.DrawText(Text(label, 10, ResourceBrush("Theme.Warning", "#E9A23B")), new Point(plot.Right - MeasureText(label, 10) - 4, y - 14));
         }
 

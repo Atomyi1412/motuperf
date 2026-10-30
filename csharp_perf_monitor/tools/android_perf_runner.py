@@ -31,6 +31,7 @@ _ADB_EXECUTABLE = "adb"
 MIN_VALID_WECHAT_GFXINFO_FPS = 5.0
 MIN_VALID_WECHAT_GFXINFO_FRAMES = 8
 FPS_LOOP_INTERVAL_SEC = 0.45
+SURFACE_IDLE_POLL_INTERVAL_SEC = 1.0
 DEFAULT_SURFACE_REFRESH_FPS = 60.0
 SURFACE_FRAME_TIME_PERCENTILE = 0.95
 COMMON_DISPLAY_REFRESH_RATES = (24.0, 30.0, 40.0, 48.0, 50.0, 60.0, 72.0, 75.0, 90.0, 96.0, 100.0, 120.0, 144.0, 165.0, 180.0, 240.0)
@@ -45,6 +46,12 @@ SURFACE_ACTIVE_RECENCY_NS = int(STATIC_FRAME_IDLE_SECONDS * 1_000_000_000)
 TARGET_IDENTITY_TIMEOUT_SECONDS = 8.0
 INITIAL_IDENTITY_RETRY_SECONDS = 0.25
 TEMPERATURE_INTERVAL_SECONDS = 5.0
+FRAME_BATCH_VERSION = 1
+FRAME_BATCH_MAX_EVENTS = 64
+FRAME_BATCH_FLUSH_SECONDS = 0.25
+LOW_FREQUENCY_CPU_SECTION = "__MOTUPERF_CPU__"
+LOW_FREQUENCY_MEMORY_ROLLUP_SECTION = "__MOTUPERF_MEMORY_ROLLUP__"
+LOW_FREQUENCY_MEMORY_STATUS_SECTION = "__MOTUPERF_MEMORY_STATUS__"
 
 
 @dataclass
@@ -208,6 +215,13 @@ class MemoryProbeState:
 
 
 @dataclass(frozen=True)
+class LowFrequencySnapshot:
+    cpu: CpuSnapshot | None
+    memory_rollup: MemorySample | None
+    memory_status_stdout: str
+
+
+@dataclass(frozen=True)
 class FrameStatsBlock:
     key: str
     rows: list[tuple[int, int]]
@@ -225,6 +239,64 @@ class GfxInfoResult:
 def emit(kind: str, payload: dict) -> None:
     with _EMIT_LOCK:
         print(f"{kind} {json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}", flush=True)
+
+
+class FrameBatchEmitter:
+    def __init__(
+        self,
+        flush_interval: float = FRAME_BATCH_FLUSH_SECONDS,
+        max_events: int = FRAME_BATCH_MAX_EVENTS,
+        clock=time.monotonic,
+        emit_func=emit,
+    ) -> None:
+        self._flush_interval = max(0.0, flush_interval)
+        self._max_events = max(1, max_events)
+        self._clock = clock
+        self._emit_func = emit_func
+        self._events: list[dict] = []
+        self._last_flush = self._clock()
+        self._lock = threading.Lock()
+        self._timer: threading.Timer | None = None
+        self._closed = False
+
+    def add(self, payload: dict) -> None:
+        with self._lock:
+            if self._closed:
+                return
+            self._events.append({"kind": "fps", "payload": payload})
+            now = self._clock()
+            if (
+                len(self._events) >= self._max_events
+                or now - self._last_flush >= self._flush_interval
+            ):
+                self._flush_locked()
+            elif self._timer is None:
+                self._timer = threading.Timer(self._flush_interval, self.flush)
+                self._timer.daemon = True
+                self._timer.start()
+
+    def flush(self) -> None:
+        with self._lock:
+            self._flush_locked()
+
+    def _flush_locked(self) -> None:
+        if self._timer is not None:
+            self._timer.cancel()
+            self._timer = None
+        events = self._events
+        self._events = []
+        self._last_flush = self._clock()
+        if events:
+            # Serialize the drain and emission so a timer cannot overtake add/close.
+            self._emit_func(
+                "batch",
+                {"version": FRAME_BATCH_VERSION, "events": events},
+            )
+
+    def close(self) -> None:
+        with self._lock:
+            self._closed = True
+            self._flush_locked()
 
 
 def set_adb_executable(value: str) -> None:
@@ -489,14 +561,78 @@ def positive_memory_mb(value: float | None) -> float | None:
     return value if value is not None and math.isfinite(value) and value > 0 else None
 
 
+def parse_marked_sections(stdout: str, markers: tuple[str, ...]) -> dict[str, str]:
+    sections = {marker: [] for marker in markers}
+    current = ""
+    for raw in (stdout or "").splitlines():
+        marker = raw.strip()
+        if marker in sections:
+            current = marker
+            continue
+        if current:
+            sections[current].append(raw)
+    return {marker: "\n".join(lines) for marker, lines in sections.items()}
+
+
+def read_low_frequency_snapshot(serial: str, pid: int, include_rollup: bool = True) -> LowFrequencySnapshot | None:
+    rollup_command = f"cat /proc/{pid}/smaps_rollup; " if include_rollup else ""
+    command = (
+        f"printf '\\n{LOW_FREQUENCY_CPU_SECTION}\\n'; "
+        f"cat /proc/stat /proc/{pid}/stat /sys/devices/system/cpu/online; "
+        f"printf '\\n{LOW_FREQUENCY_MEMORY_ROLLUP_SECTION}\\n'; "
+        f"{rollup_command}"
+        f"printf '\\n{LOW_FREQUENCY_MEMORY_STATUS_SECTION}\\n'; "
+        f"cat /proc/{pid}/status"
+    )
+    result = adb(serial, ["shell", "sh", "-c", shlex.quote(command)], timeout=5.0)
+    if not result.stdout:
+        return None
+    sections = parse_marked_sections(
+        result.stdout,
+        (
+            LOW_FREQUENCY_CPU_SECTION,
+            LOW_FREQUENCY_MEMORY_ROLLUP_SECTION,
+            LOW_FREQUENCY_MEMORY_STATUS_SECTION,
+        ),
+    )
+    rollup_stdout = sections[LOW_FREQUENCY_MEMORY_ROLLUP_SECTION]
+    pss_mb = positive_memory_mb(parse_smaps_rollup_pss_mb(rollup_stdout))
+    memory_rollup = None
+    if pss_mb is not None:
+        memory_rollup = MemorySample(
+            pss_mb,
+            "pss",
+            "adb-proc-smaps-rollup",
+            False,
+            positive_memory_mb(parse_smaps_rollup_rss_mb(rollup_stdout)),
+        )
+    return LowFrequencySnapshot(
+        parse_cpu_snapshot(sections[LOW_FREQUENCY_CPU_SECTION], pid),
+        memory_rollup,
+        sections[LOW_FREQUENCY_MEMORY_STATUS_SECTION],
+    )
+
+
 def read_memory_sample(
     serial: str,
     pid: int,
     probe_state: MemoryProbeState | None = None,
+    include_rollup: bool = True,
+    status_stdout: str | None = None,
+    timeout_budget: float | None = None,
+    stop_event: threading.Event | None = None,
 ) -> MemorySample | None:
     state = probe_state if probe_state is not None else MemoryProbeState()
-    if state.rollup_supported is not False:
-        rollup = adb(serial, ["shell", "cat", f"/proc/{pid}/smaps_rollup"], timeout=4.0)
+    deadline = time.monotonic() + timeout_budget if timeout_budget is not None else math.inf
+
+    def query(args: list[str], timeout: float) -> subprocess.CompletedProcess[str]:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0 or (stop_event is not None and stop_event.is_set()):
+            return subprocess.CompletedProcess(args, 124, stdout="", stderr="memory probe cancelled or budget exhausted")
+        return adb(serial, args, timeout=min(timeout, remaining))
+
+    if include_rollup and state.rollup_supported is not False:
+        rollup = query(["shell", "cat", f"/proc/{pid}/smaps_rollup"], 4.0)
         if rollup.returncode == 0:
             pss_mb = positive_memory_mb(parse_smaps_rollup_pss_mb(rollup.stdout))
             if pss_mb is not None:
@@ -513,10 +649,9 @@ def read_memory_sample(
             state.rollup_supported = False
 
     if state.compact_meminfo_supported is not False:
-        compact = adb(
-            serial,
+        compact = query(
             ["shell", "dumpsys", "meminfo", "--local", "--pssonly", str(pid)],
-            timeout=6.0,
+            6.0,
         )
         if compact.returncode == 0:
             pss_mb = positive_memory_mb(parse_meminfo_pss_mb(compact.stdout))
@@ -539,7 +674,7 @@ def read_memory_sample(
         if any(marker in compact_message for marker in unsupported_markers):
             state.compact_meminfo_supported = False
 
-    result = adb(serial, ["shell", "dumpsys", "meminfo", str(pid)], timeout=8.0)
+    result = query(["shell", "dumpsys", "meminfo", str(pid)], 8.0)
     if result.returncode == 0:
         pss_mb = positive_memory_mb(parse_meminfo_pss_mb(result.stdout))
         if pss_mb is not None:
@@ -550,10 +685,12 @@ def read_memory_sample(
                 False,
                 positive_memory_mb(parse_meminfo_rss_mb(result.stdout)),
             )
-    status = adb(serial, ["shell", "cat", f"/proc/{pid}/status"])
-    if status.returncode != 0:
-        return None
-    for raw in status.stdout.splitlines():
+    if status_stdout is None:
+        status = query(["shell", "cat", f"/proc/{pid}/status"], 4.0)
+        if status.returncode != 0:
+            return None
+        status_stdout = status.stdout
+    for raw in status_stdout.splitlines():
         if raw.startswith("VmRSS:"):
             parts = raw.split()
             if len(parts) >= 2 and parts[1].isdigit() and int(parts[1]) > 0:
@@ -1910,6 +2047,28 @@ def surface_latency_poll_interval(refresh_period_ns: int | None) -> float:
     return max(MIN_SURFACE_LATENCY_POLL_INTERVAL_SEC, min(FPS_LOOP_INTERVAL_SEC, ring_budget_sec))
 
 
+def surface_idle_poll_interval(active_interval: float, refresh_period_ns: int | None) -> float:
+    idle_interval = SURFACE_IDLE_POLL_INTERVAL_SEC
+    if refresh_period_ns is not None and refresh_period_ns > 0:
+        safe_frames = max(1, SURFACE_LATENCY_RING_CAPACITY // 2)
+        idle_interval = min(idle_interval, safe_frames * refresh_period_ns / 1_000_000_000.0)
+    return max(active_interval, idle_interval)
+
+
+def adaptive_fps_poll_interval(
+    active_interval: float,
+    last_new_frame_at: float | None,
+    now: float,
+    received_new_frames: bool,
+    idle_interval: float = SURFACE_IDLE_POLL_INTERVAL_SEC,
+) -> float:
+    if received_new_frames or last_new_frame_at is None:
+        return active_interval
+    if now - last_new_frame_at < STATIC_FRAME_IDLE_SECONDS:
+        return active_interval
+    return max(active_interval, idle_interval)
+
+
 def layer_latency_samples_from_timestamps(
     timestamps: list[int],
     state: OrderedLayerState,
@@ -2739,7 +2898,14 @@ def vendor_current_layer_fps_payload(fps: float, target: str) -> dict:
     }
 
 
-def fps_loop(serial: str, pid: int, package_name: str, interval: float, stop_event: threading.Event) -> None:
+def fps_loop(
+    serial: str,
+    pid: int,
+    package_name: str,
+    interval: float,
+    stop_event: threading.Event,
+    frame_batcher: FrameBatchEmitter | None = None,
+) -> None:
     targets = gfxinfo_targets(package_name, pid)
     if not targets:
         return
@@ -2754,6 +2920,23 @@ def fps_loop(serial: str, pid: int, package_name: str, interval: float, stop_eve
     display_latency_state = LatencyState()
     layer_latency_tracker = LayerLatencyTracker(target_pid=pid)
     display_refresh_period_ns: int | None = None
+    last_new_frame_at: float | None = None
+
+    def emit_frame(payload: dict, new_frames: bool = False) -> None:
+        nonlocal last_new_frame_at
+        if new_frames:
+            last_new_frame_at = time.monotonic()
+        if frame_batcher is None:
+            emit("fps", payload)
+        else:
+            frame_batcher.add(payload)
+
+    def emit_sample(sample: TimestatsSample, source: str, scope: str, frame_source: str) -> None:
+        emit_frame(
+            frame_sample_payload(sample, source, scope, frame_source),
+            sample.frame_count > 0 and not sample.no_present_frames,
+        )
+
     try:
         while not stop_event.is_set():
             loop_started_at = time.monotonic()
@@ -2765,14 +2948,11 @@ def fps_loop(serial: str, pid: int, package_name: str, interval: float, stop_eve
                 layer_latency_tracker,
             )
             for sample in layer_samples:
-                emit(
-                    "fps",
-                    frame_sample_payload(
-                        sample,
-                        "adb-surfaceflinger-layer-latency",
-                        "surface",
-                        "ordered-layer-present",
-                    ),
+                emit_sample(
+                    sample,
+                    "adb-surfaceflinger-layer-latency",
+                    "surface",
+                    "ordered-layer-present",
                 )
                 emitted = True
 
@@ -2816,14 +2996,11 @@ def fps_loop(serial: str, pid: int, package_name: str, interval: float, stop_eve
                     if gfxinfo is None:
                         continue
                     if gfxinfo.sample.has_jank_metrics:
-                        emit(
-                            "fps",
-                            frame_sample_payload(
-                                gfxinfo.sample,
-                                "adb-gfxinfo-framestats",
-                                "app",
-                                gfxinfo.frame_source,
-                            ),
+                        emit_sample(
+                            gfxinfo.sample,
+                            "adb-gfxinfo-framestats",
+                            "app",
+                            gfxinfo.frame_source,
                         )
                         emitted = True
                         break
@@ -2847,55 +3024,59 @@ def fps_loop(serial: str, pid: int, package_name: str, interval: float, stop_eve
                     sample = None
                 if sample is not None:
                     frame_source = "present2present-histogram" if sample.histogram else "surface-total-frame-count"
-                    emit(
-                        "fps",
-                        frame_sample_payload(
-                            sample,
-                            "adb-surfaceflinger-timestats",
-                            "surface",
-                            frame_source,
-                        ),
+                    emit_sample(
+                        sample,
+                        "adb-surfaceflinger-timestats",
+                        "surface",
+                        frame_source,
                     )
                     emitted = True
 
             if not layer_source_available and not emitted:
                 if gfxinfo_fallback is not None:
-                    emit(
-                        "fps",
-                        frame_sample_payload(
-                            gfxinfo_fallback.sample,
-                            "adb-gfxinfo-framestats",
-                            "app",
-                            gfxinfo_fallback.frame_source,
-                        ),
+                    emit_sample(
+                        gfxinfo_fallback.sample,
+                        "adb-gfxinfo-framestats",
+                        "app",
+                        gfxinfo_fallback.frame_source,
                     )
                     emitted = True
 
             if not layer_source_available and not emitted:
                 fps, used_target = read_surface_flinger_fps(serial, package_name)
                 if fps is not None:
-                    emit("fps", vendor_current_layer_fps_payload(fps, used_target))
+                    emit_frame(vendor_current_layer_fps_payload(fps, used_target), fps > 0)
                     emitted = True
 
             if not layer_source_available and not emitted:
                 sample = read_surface_flinger_display_latency_sample(serial, display_latency_state)
                 if sample is not None:
-                    emit(
-                        "fps",
-                        frame_sample_payload(
-                            sample,
-                            "adb-surfaceflinger-display-latency",
-                            "display",
-                            "ordered-display-present",
-                        ),
+                    emit_sample(
+                        sample,
+                        "adb-surfaceflinger-display-latency",
+                        "display",
+                        "ordered-display-present",
                     )
                     emitted = True
+            now = time.monotonic()
+            if last_new_frame_at is None and (layer_source_available or emitted):
+                last_new_frame_at = now
             if layer_source_available:
-                poll_interval = surface_latency_poll_interval(
-                    layer_latency_tracker.selected_state.refresh_period_ns
+                refresh_period_ns = layer_latency_tracker.selected_state.refresh_period_ns
+                active_poll_interval = surface_latency_poll_interval(
+                    refresh_period_ns
                 )
+                idle_poll_interval = surface_idle_poll_interval(active_poll_interval, refresh_period_ns)
             else:
-                poll_interval = max(0.8, interval)
+                active_poll_interval = max(0.8, interval)
+                idle_poll_interval = max(active_poll_interval, SURFACE_IDLE_POLL_INTERVAL_SEC)
+            poll_interval = adaptive_fps_poll_interval(
+                active_poll_interval,
+                last_new_frame_at,
+                now,
+                False,
+                idle_poll_interval,
+            )
             stop_event.wait(remaining_poll_delay(loop_started_at, poll_interval))
     finally:
         if timestats_enabled and timestats_enabled_by_us:
@@ -3070,6 +3251,57 @@ def read_process_uid(serial: str, pid: int) -> int | None:
     return parse_process_uid(result.stdout) if result.returncode == 0 else None
 
 
+def cpu_payload(
+    pid: int,
+    cpu: float,
+    prior_cpu: CpuSnapshot | None,
+    current_cpu: CpuSnapshot | None,
+) -> dict:
+    payload = {
+        "platform": "android",
+        "value": cpu,
+        "unit": "%",
+        "source": "adb-proc-stat-per-core",
+        "scope": "process",
+        "semantics": "raw_process_cpu",
+        "pid": pid,
+    }
+    if prior_cpu is not None and current_cpu is not None:
+        normalized = normalized_cpu_percent_from_raw(
+            cpu,
+            average_online_cpu_count(prior_cpu, current_cpu),
+        )
+        core_values = core_percent_from_snapshots(prior_cpu, current_cpu)
+        if normalized is not None:
+            payload["normalized_value"] = normalized
+            payload["normalized_unit"] = "%"
+            payload["normalized_source"] = "raw_process_cpu_divided_by_online_cores"
+            payload["normalized_semantics"] = "raw_process_cpu_divided_by_online_cores"
+        if core_values is not None:
+            payload["core_values"] = core_values
+            payload["core_count"] = len(core_values)
+            payload["core_source"] = "adb-proc-stat-per-core"
+            payload["core_scope"] = "device"
+            payload["core_semantics"] = "device_core_cpu_per_core_total_delta"
+    return payload
+
+
+def memory_payload(pid: int, memory: MemorySample) -> dict:
+    payload = {
+        "platform": "android",
+        "value": memory.value_mb,
+        "unit": "MB",
+        "metric": memory.metric,
+        "fallback": memory.fallback,
+        "source": memory.source,
+        "scope": "process",
+        "pid": pid,
+    }
+    if memory.rss_mb is not None:
+        payload["rss_value"] = memory.rss_mb
+    return payload
+
+
 def cpu_loop(serial: str, pid: int, interval: float, stop_event: threading.Event) -> None:
     previous_cpu: CpuSnapshot | None = None
     unavailable_count = 0
@@ -3082,38 +3314,7 @@ def cpu_loop(serial: str, pid: int, interval: float, stop_event: threading.Event
             previous_cpu = current_cpu
             if cpu is not None:
                 unavailable_count = 0
-                normalized = None
-                core_values = None
-                if prior_cpu is not None and current_cpu is not None:
-                    normalized = normalized_cpu_percent_from_raw(
-                        cpu,
-                        average_online_cpu_count(prior_cpu, current_cpu),
-                    )
-                    core_values = core_percent_from_snapshots(prior_cpu, current_cpu)
-                payload = {
-                    "platform": "android",
-                    "value": cpu,
-                    "unit": "%",
-                    "source": "adb-proc-stat-per-core",
-                    "scope": "process",
-                    "semantics": "raw_process_cpu",
-                    "pid": pid,
-                }
-                if normalized is not None:
-                    payload["normalized_value"] = normalized
-                    payload["normalized_unit"] = "%"
-                    payload["normalized_source"] = "raw_process_cpu_divided_by_online_cores"
-                    payload["normalized_semantics"] = "raw_process_cpu_divided_by_online_cores"
-                if core_values is not None and current_cpu is not None:
-                    payload["core_values"] = core_values
-                    payload["core_count"] = len(core_values)
-                    payload["core_source"] = "adb-proc-stat-per-core"
-                    payload["core_scope"] = "device"
-                    payload["core_semantics"] = "device_core_cpu_per_core_total_delta"
-                emit(
-                    "cpu",
-                    payload,
-                )
+                emit("cpu", cpu_payload(pid, cpu, prior_cpu, current_cpu))
             else:
                 unavailable_count += 1
                 if unavailable_count >= 3 and not unavailable_notice_shown:
@@ -3140,19 +3341,7 @@ def memory_loop(serial: str, pid: int, interval: float, stop_event: threading.Ev
         try:
             memory = read_memory_sample(serial, pid, probe_state)
             if memory is not None:
-                payload = {
-                    "platform": "android",
-                    "value": memory.value_mb,
-                    "unit": "MB",
-                    "metric": memory.metric,
-                    "fallback": memory.fallback,
-                    "source": memory.source,
-                    "scope": "process",
-                    "pid": pid,
-                }
-                if memory.rss_mb is not None:
-                    payload["rss_value"] = memory.rss_mb
-                emit("memory", payload)
+                emit("memory", memory_payload(pid, memory))
                 unavailable_notice_shown = False
             elif not unavailable_notice_shown:
                 emit(
@@ -3167,6 +3356,126 @@ def memory_loop(serial: str, pid: int, interval: float, stop_event: threading.Ev
             if not unavailable_notice_shown:
                 emit("status", {"code": "android_memory_unavailable", "message": f"Android 进程内存暂不可用：{exc}；缺测保持 --。"})
                 unavailable_notice_shown = True
+        stop_event.wait(remaining_poll_delay(loop_started_at, max(0.5, interval)))
+
+
+class MemoryFallbackWorker:
+    """At most one slow probe per target, with no backlog or late emissions after stop."""
+
+    def __init__(self, serial: str, pid: int, stop_event: threading.Event) -> None:
+        self.serial = serial
+        self.pid = pid
+        self.stop_event = stop_event
+        self.state = MemoryProbeState(rollup_supported=False)
+        self.thread: threading.Thread | None = None
+        self.next_probe_at = 0.0
+        self.notice_shown = False
+
+    def request(self, status_stdout: str) -> None:
+        if self.stop_event.is_set() or time.monotonic() < self.next_probe_at:
+            return
+        if self.thread is not None and self.thread.is_alive():
+            return
+        self.next_probe_at = time.monotonic() + 5.0
+        self.thread = threading.Thread(target=self._run, args=(status_stdout,), daemon=True)
+        self.thread.start()
+
+    def _run(self, status_stdout: str) -> None:
+        started = time.monotonic()
+        try:
+            sample = read_memory_sample(
+                self.serial, self.pid, self.state, include_rollup=False,
+                status_stdout=status_stdout, timeout_budget=3.0, stop_event=self.stop_event,
+            )
+            if self.stop_event.is_set():
+                return
+            if sample is not None and time.monotonic() - started <= 3.1:
+                emit("memory", memory_payload(self.pid, sample))
+                self.notice_shown = False
+            elif not self.notice_shown:
+                emit("status", {"code": "android_memory_unavailable", "message": "Android 内存查询未在时限内返回可用数据；CPU 继续采样，内存缺测保持 --。"})
+                self.notice_shown = True
+        except (OSError, subprocess.SubprocessError):
+            # The next bounded request retries; failure is missing, never zero.
+            pass
+
+
+def low_frequency_resource_loop(
+    serial: str,
+    pid: int,
+    interval: float,
+    stop_event: threading.Event,
+) -> None:
+    previous_cpu: CpuSnapshot | None = None
+    memory_fallback = MemoryFallbackWorker(serial, pid, stop_event)
+    next_rollup_probe_at = 0.0
+    cpu_unavailable_count = 0
+    cpu_notice_shown = False
+    memory_notice_shown = False
+    while not stop_event.is_set():
+        loop_started_at = time.monotonic()
+        try:
+            include_rollup = loop_started_at >= next_rollup_probe_at
+            snapshot = read_low_frequency_snapshot(serial, pid, include_rollup)
+            if snapshot is None:
+                cpu_unavailable_count += 1
+                if cpu_unavailable_count >= 3 and not cpu_notice_shown:
+                    emit(
+                        "status",
+                        {
+                            "code": "android_cpu_unavailable",
+                            "message": "Android 进程 CPU 暂无可用采样，可能是 PID 已退出、权限不足或设备通信暂时中断；缺测保持 --。",
+                        },
+                    )
+                    cpu_notice_shown = True
+                if not memory_notice_shown:
+                    emit(
+                        "status",
+                        {
+                            "code": "android_memory_unavailable",
+                            "message": "Android 进程内存暂无可用采样，PSS/RSS 均未返回；缺测保持 --。",
+                        },
+                    )
+                    memory_notice_shown = True
+            else:
+                prior_cpu = previous_cpu
+                current_cpu = snapshot.cpu
+                if current_cpu is not None:
+                    previous_cpu = current_cpu
+                cpu = None
+                if prior_cpu is not None and current_cpu is not None:
+                    cpu = cpu_percent_from_snapshots(prior_cpu, current_cpu)
+                if cpu is not None:
+                    cpu_unavailable_count = 0
+                    cpu_notice_shown = False
+                    emit("cpu", cpu_payload(pid, cpu, prior_cpu, current_cpu))
+                else:
+                    cpu_unavailable_count += 1
+                    if cpu_unavailable_count >= 3 and not cpu_notice_shown:
+                        emit(
+                            "status",
+                            {
+                                "code": "android_cpu_unavailable",
+                                "message": "Android 进程 CPU 暂无可用采样，可能是 PID 已退出、权限不足或设备通信暂时中断；缺测保持 --。",
+                            },
+                        )
+                        cpu_notice_shown = True
+
+                memory = snapshot.memory_rollup
+                if memory is None:
+                    if include_rollup:
+                        next_rollup_probe_at = loop_started_at + 30.0
+                    memory_fallback.request(snapshot.memory_status_stdout)
+                if memory is not None:
+                    emit("memory", memory_payload(pid, memory))
+                    memory_notice_shown = False
+        except (OSError, subprocess.SubprocessError) as exc:
+            if not cpu_notice_shown:
+                emit("status", {"code": "android_cpu_unavailable", "message": f"Android 进程 CPU 暂不可用：{exc}；缺测保持 --。"})
+                cpu_notice_shown = True
+            if not memory_notice_shown:
+                emit("status", {"code": "android_memory_unavailable", "message": f"Android 进程内存暂不可用：{exc}；缺测保持 --。"})
+                memory_notice_shown = True
         stop_event.wait(remaining_poll_delay(loop_started_at, max(0.5, interval)))
 
 
@@ -3348,21 +3657,33 @@ def main(argv: Iterable[str]) -> int:
     last_identity_confirmed_at = time.monotonic()
     failure_event = threading.Event()
     failure_lock = threading.Lock()
+    frame_batcher = FrameBatchEmitter() if not args.no_fps else None
     fps_thread = threading.Thread(
         target=guarded_metric_loop,
-        args=("Android FPS", fps_loop, (args.serial, args.pid, args.package, FPS_LOOP_INTERVAL_SEC, stop_event), stop_event, failure_event, failure_lock),
+        args=("Android FPS", fps_loop, (args.serial, args.pid, args.package, FPS_LOOP_INTERVAL_SEC, stop_event, frame_batcher), stop_event, failure_event, failure_lock),
         daemon=True,
     )
-    cpu_thread = threading.Thread(
-        target=guarded_metric_loop,
-        args=("Android PID CPU", cpu_loop, (args.serial, args.pid, args.interval, stop_event), stop_event, failure_event, failure_lock),
-        daemon=True,
-    )
-    memory_thread = threading.Thread(
-        target=guarded_metric_loop,
-        args=("Android PID 内存", memory_loop, (args.serial, args.pid, args.interval, stop_event), stop_event, failure_event, failure_lock),
-        daemon=True,
-    )
+    resource_thread = None
+    cpu_thread = None
+    memory_thread = None
+    if not args.no_cpu and not args.no_memory:
+        resource_thread = threading.Thread(
+            target=guarded_metric_loop,
+            args=("Android PID CPU/内存", low_frequency_resource_loop, (args.serial, args.pid, args.interval, stop_event), stop_event, failure_event, failure_lock),
+            daemon=True,
+        )
+    elif not args.no_cpu:
+        cpu_thread = threading.Thread(
+            target=guarded_metric_loop,
+            args=("Android PID CPU", cpu_loop, (args.serial, args.pid, args.interval, stop_event), stop_event, failure_event, failure_lock),
+            daemon=True,
+        )
+    elif not args.no_memory:
+        memory_thread = threading.Thread(
+            target=guarded_metric_loop,
+            args=("Android PID 内存", memory_loop, (args.serial, args.pid, args.interval, stop_event), stop_event, failure_event, failure_lock),
+            daemon=True,
+        )
     temperature_thread = threading.Thread(
         target=temperature_loop,
         args=(
@@ -3377,9 +3698,11 @@ def main(argv: Iterable[str]) -> int:
     )
     if not args.no_fps:
         fps_thread.start()
-    if not args.no_cpu:
+    if resource_thread is not None:
+        resource_thread.start()
+    elif cpu_thread is not None:
         cpu_thread.start()
-    if not args.no_memory:
+    elif memory_thread is not None:
         memory_thread.start()
     if not args.no_temperature or not args.no_thermal_state:
         temperature_thread.start()
@@ -3393,6 +3716,10 @@ def main(argv: Iterable[str]) -> int:
             )
             if pid_alive is False:
                 stop_event.set()
+                if not args.no_fps:
+                    fps_thread.join(timeout=2.0)
+                if frame_batcher is not None:
+                    frame_batcher.close()
                 emit(
                     "fatal",
                     {
@@ -3405,6 +3732,10 @@ def main(argv: Iterable[str]) -> int:
                 last_identity_confirmed_at = time.monotonic()
             elif time.monotonic() - last_identity_confirmed_at >= TARGET_IDENTITY_TIMEOUT_SECONDS:
                 stop_event.set()
+                if not args.no_fps:
+                    fps_thread.join(timeout=2.0)
+                if frame_batcher is not None:
+                    frame_batcher.close()
                 emit(
                     "fatal",
                     {
@@ -3419,9 +3750,13 @@ def main(argv: Iterable[str]) -> int:
         stop_event.set()
         if not args.no_fps:
             fps_thread.join(timeout=2.0)
-        if not args.no_cpu:
+        if frame_batcher is not None:
+            frame_batcher.close()
+        if resource_thread is not None:
+            resource_thread.join(timeout=2.0)
+        elif cpu_thread is not None:
             cpu_thread.join(timeout=2.0)
-        if not args.no_memory:
+        elif memory_thread is not None:
             memory_thread.join(timeout=2.0)
         if not args.no_temperature or not args.no_thermal_state:
             temperature_thread.join(timeout=2.0)

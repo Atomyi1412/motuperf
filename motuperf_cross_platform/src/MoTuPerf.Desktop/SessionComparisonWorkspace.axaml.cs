@@ -35,7 +35,7 @@ namespace MoTuPerf.Desktop
         private ComparisonReport _report;
         private bool _ready;
         private bool _busy;
-        private bool _isChinese;
+        private bool _isChinese = AppLanguageManager.IsChinese;
         private bool _alignTimeTrends;
         private bool _syncingTimeTrendToggles;
         private int _currentSlotIndex = -1;
@@ -47,6 +47,7 @@ namespace MoTuPerf.Desktop
             Avalonia.Markup.Xaml.AvaloniaXamlLoader.Load(this);
             CreateSessionCards();
             CreateTabs();
+            UpdateLanguageTexts();
             _ready = true;
             Render();
         }
@@ -141,22 +142,18 @@ namespace MoTuPerf.Desktop
             }
         }
 
-        private void ToggleLanguage(object sender, RoutedEventArgs e)
+        internal void SetLanguage(bool isChinese)
         {
-            if (_busy) return;
             string category = _activeCategory;
-            _isChinese = !_isChinese;
-            UpdateLanguageToggle();
+            _isChinese = isChinese;
+            UpdateLanguageTexts();
+            if (_busy) return;
             Render();
             Dispatcher.UIThread.Post(() => NavigateToCategory(category), DispatcherPriority.Loaded);
         }
 
-        private void UpdateLanguageToggle()
+        private void UpdateLanguageTexts()
         {
-            Button button = this.FindControl<Button>("LanguageToggleButton");
-            if (button == null) return;
-            button.Content = _isChinese ? "English" : "中文";
-            ToolTip.SetTip(button, _isChinese ? "Switch metric names to English" : "切换到中文指标名称");
             TextBlock emptyState = this.FindControl<TextBlock>("EmptyStateMessage");
             if (emptyState != null)
             {
@@ -302,7 +299,7 @@ namespace MoTuPerf.Desktop
         {
             if (!_ready) return;
             int count = OccupiedInputs().Count;
-            UpdateLanguageToggle();
+            UpdateLanguageTexts();
             this.FindControl<TextBlock>("SlotSummaryText").Text = count + " / 5";
             this.FindControl<Border>("EmptyState").IsVisible = count == 0;
             RenderSessionCards();
@@ -666,7 +663,9 @@ namespace MoTuPerf.Desktop
                 Minimum = metric.Minimum,
                 Maximum = metric.Maximum,
                 IntegerAxis = metric.IntegerAxis,
-                EmptyText = "当前区间没有 " + MetricLabel(metric) + " 数据",
+                EmptyText = _isChinese
+                    ? "当前区间没有 " + MetricLabel(metric) + " 数据"
+                    : "No " + MetricLabel(metric) + " data in the current range",
                 HorizontalAlignment = HorizontalAlignment.Stretch
             };
             stack.Children.Add(chart);

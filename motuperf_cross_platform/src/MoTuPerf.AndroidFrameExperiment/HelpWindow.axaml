@@ -1,0 +1,169 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MoTuPerf.Desktop.HelpWindow"
+        Title="MoTuPerf 使用帮助"
+        Width="700"
+        Height="640"
+        MinWidth="620"
+        MinHeight="520"
+        WindowDecorations="BorderOnly"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="0"
+        WindowStartupLocation="CenterOwner">
+  <Border Classes="secondaryWindowFrame">
+    <Grid RowDefinitions="48,*,58">
+      <Border Grid.Row="0" Classes="dialogTitleBar"
+              PointerPressed="DialogTitlePointerPressed">
+        <Grid ColumnDefinitions="*,46">
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="24,0,0,0">
+            <PathIcon Data="{StaticResource IconHelp}" Foreground="{DynamicResource Theme.Accent}" Width="18" Height="18" Margin="0,0,10,0" />
+            <TextBlock Text="使用帮助" Classes="sectionTitle" />
+          </StackPanel>
+          <Button Grid.Column="1" Classes="windowButton closeButton" Content="&#x00D7;" Click="CloseWindow" ToolTip.Tip="关闭" />
+        </Grid>
+      </Border>
+      <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="22,10,18,12" Spacing="8">
+          <Border Classes="helpSection">
+            <StackPanel Spacing="2">
+              <TextBlock Text="快速开始" Classes="helpTitle" />
+              <TextBlock Classes="helpItemTitle" Text="1. 连接设备" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="MoTuPerf 支持 Windows x64 和 macOS Apple Silicon（M 系列），可连接 Android、iOS 和鸿蒙设备。先解锁设备并完成授权。" />
+              <TextBlock Classes="helpItemTitle" Text="2. 选择目标" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="点击“选择设备及应用”，依次选择设备、应用和目标进程；微信小游戏等场景应确认实际宿主进程。" />
+              <TextBlock Classes="helpItemTitle" Text="3. 开始采集" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="勾选需要的指标，点击“开始采集”；再次点击停止。采集中不能更换设备或应用，工具只保留真实数据，缺失值显示为 --。" />
+              <TextBlock Classes="dialogHint" Foreground="{DynamicResource Theme.Accent}" FontWeight="SemiBold" TextWrapping="Wrap" Text="提示：鸿蒙首次使用可进入“选择设备及应用 → 查看检测详情 → 下载鸿蒙连接工具”准备 HDC。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel Spacing="2">
+              <TextBlock Text="设备、应用与进程" Classes="helpTitle" />
+              <TextBlock Classes="helpItemTitle" Text="1. 选择设备与应用" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="点击刷新获取当前连接设备；选择应用后，应用名称、图标和可用进程会同步更新。列表中的平台、名称和状态用于辅助判断，不代表一定可以采集。" />
+              <TextBlock Classes="helpItemTitle" Text="2. 选择真实目标" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="1. 进程按应用分组，显示 PID、主进程/小游戏/WebKit 等角色，支持名称、包名和 PID 搜索。&#xA;2. “当前前台”来自实际前台证据；“常用宿主”只表示微信等常用入口，不代表它正在前台。WebKit 宿主未确认时不会自动归给当前 APP。&#xA;3. Android/鸿蒙可开启“显示全部目标”；搜索会查找默认隐藏的真实目标。刷新保留本窗口内的手动选择，原进程退出或实例变化后请重新选择。&#xA;4. Android/iOS 的 APP 和进程分别读取，单项失败可继续使用成功的一项；鸿蒙使用同一轮完整清单，避免混用不同轮次的目标。设备断开后禁止确认，新接入设备需手动选择。" />
+              <TextBlock Classes="helpItemTitle" Text="iOS 默认选择规则" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="重新打开选择框时，优先选择当前唯一确认的前台应用，不沿用上次采集目标；本窗口内手动选择后，刷新会保留选择。锁屏、应用挂起或多个应用同时处于前台时，可能无法唯一推荐，请解锁并打开目标应用，刷新或手动选择。" />
+              <TextBlock Classes="helpItemTitle" Text="3. 启动 APP" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="需要启动应用时，在“启动 APP”页选择设备返回的真实入口；启动后回到进程页确认目标。最终采集目标以确认时的所选 PID 为准，目标重启后 PID 变化需要重新选择。" />
+              <TextBlock Classes="dialogHint" Foreground="{DynamicResource Theme.Accent}" FontWeight="SemiBold" TextWrapping="Wrap" Text="重点：启动 APP 以应用为准，选择进程以进程为准；应用列表和进程列表的推荐结果可能不同。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel Spacing="2">
+              <TextBlock Text="连接与权限" Classes="helpTitle" />
+              <TextBlock Classes="helpItemTitle" Text="1. Android" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="解锁设备，开启“USB 调试”，在设备上允许此电脑调试，并保持 USB 连接稳定。未授权、离线或未开启 USB 调试时，先处理设备提示再刷新。" />
+              <TextBlock Classes="helpItemTitle" Text="2. iOS" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="解锁设备并点击“信任此电脑”；iOS 17 及以上还需要开启“开发者模式”。Windows 上如果检测不到 iOS 设备，请按提示安装或修复 Apple 设备驱动，完成后重新插拔并刷新；macOS 不使用 Windows 驱动。" />
+              <TextBlock Classes="helpItemTitle" Text="3. 鸿蒙" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="设备端开启开发者调试，连接 USB 后解锁并允许调试。首次使用 HDC 时按“鸿蒙连接与指标”中的向导准备连接工具。" />
+              <TextBlock Classes="helpItemTitle" Text="4. 无设备或突然断开" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="按顺序检查数据线、USB 端口、授权状态、系统驱动和 HDC，再点击设备刷新。设备拔出会停止采集，并询问是否保存已有数据。" />
+              <TextBlock Classes="dialogHint" Foreground="{DynamicResource Theme.Accent}" FontWeight="SemiBold" TextWrapping="Wrap" Text="重点：Windows 检测不到 Apple 设备时，优先查看 Apple 设备驱动提示；不要把驱动问题当成应用进程问题。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel Spacing="2">
+              <TextBlock Text="鸿蒙连接与指标" Classes="helpTitle" />
+              <TextBlock Classes="helpItemTitle" Text="1. 准备 HDC" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="进入“选择设备及应用 → 查看检测详情 → 下载鸿蒙连接工具”，按向导操作；不需要单独安装 DevEco Studio。工具会检查常见 SDK 位置；找不到时，从官方下载中心下载 Command Line Tools，解压后选择最外层的 command-line-tools 文件夹，MoTuPerf 会自动寻找 HDC。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="普通用户不需要自己找 hdc.exe，也不需要手动设置环境变量；高级用户也可以选择 HDC 文件，或设置 MOTUPERF_HDC 为 HDC 可执行文件的完整路径。Windows 使用 hdc.exe，macOS 使用对应芯片版本的 hdc。" />
+              <TextBlock Classes="helpItemTitle" Text="2. 选择鸿蒙目标" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="应用列表合并 Bundle Manager 清单、兼容包和运行中进程。默认只显示可测目标，可打开“显示全部目标”查看完整清单。多用户设备上，同一 Bundle 的不同用户资料必须分别确认；不要跨用户选择 PID。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="有真实 UI Ability 时使用设备返回的真实入口；服务、扩展等非 UI 目标没有页面入口，只能选择真实运行 PID 进行采集。Android 兼容应用也要以设备返回的真实 Launcher 组件为准。" />
+              <TextBlock Classes="helpItemTitle" Text="3. 鸿蒙可采集指标" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="当前可采集进程 CPU、内存、截图、应用图标及设备允许读取的温度。Process CPU Raw、Normalized 和逐核 CPU 的区别见“指标口径”；内存优先 PSS，否则明确标明 RSS。" />
+              <TextBlock Classes="helpItemTitle" Text="4. 帧指标与缺测" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="FPS、FrameTime、Jank/BigJank 只有在能唯一确认所选 PID 的 RenderService Surface 且帧记录连续时，才使用真实有序显示帧统计。Surface 缺失、存在多个无法归属的 Surface 或帧历史被覆盖时保持缺测，不用其他指标推算。" />
+              <TextBlock Classes="dialogHint" Foreground="{DynamicResource Theme.Accent}" FontWeight="SemiBold" TextWrapping="Wrap" Text="重点：鸿蒙系统热状态暂未接入；应用图标已支持。任何平台缺测都显示 --，不补零、不插值。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel Spacing="2">
+              <TextBlock Text="指标口径" Classes="helpTitle" />
+              <TextBlock Classes="helpItemTitle" Text="1. FPS 与 FrameTime" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="FPS 来自设备实际提供的显示帧；高刷新率设备可能超过 60。iOS 通常是屏幕级数据，不按所选 PID 过滤；Android 取决于可用帧源；鸿蒙要求唯一确认所选 PID 的 Surface。FrameTime 是相邻显示帧的实际间隔，曲线使用当前采样窗口的最大值，CSV 还提供 Mean 和 P95。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="FPS 图左轴为帧/秒，Jank、BigJank 使用右轴，单位为次/采样窗口。虚线标记表示来源切换、序列断点或采集缺口；断点两侧不连线，真实测得的 0 FPS 仍保留。" />
+              <TextBlock Classes="helpItemTitle" Text="2. Jank 与 BigJank" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="Jank：帧间隔同时超过前 3 帧平均值的 2 倍和 83.33ms；BigJank：在此基础上超过 125ms。Jank 是总次数，包含 BigJank；普通 Jank = Jank - BigJank，CSV 会分别导出，不能把 Jank 和 BigJank 相加。没有可信有序帧时保持缺测，不从 FPS 波动或无序直方图推算。" />
+              <TextBlock Classes="helpItemTitle" Text="3. CPU 与内存" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="Process CPU Raw 是所选 PID 的原始 CPU 使用率，占满一核约为 100%，多核可能超过 100%；Normalized 是按设备总 CPU 能力归一化的视图；Core 是每个 CPU 核心使用自身工作时间/总时间增量计算的设备逐核负载，不是所选进程的逐核 CPU。Android/鸿蒙内存优先 PSS，iOS 优先 Physical Footprint；RSS 仅为明确标注的备用口径，不与 PSS/Footprint 混合统计。" />
+              <TextBlock Classes="helpItemTitle" Text="4. 温度与系统状态" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="Device Temperature 是设备传感器温度，属于设备级数据。Thermal State（iOS）为 0 正常、1 升温、2 严重、3 临界；Thermal Status（Android）为 0 正常、1 轻微、2 中度、3 严重、4 临界、5 紧急、6 关机。鸿蒙系统热状态暂未接入。" />
+              <TextBlock Classes="helpItemTitle" Text="5. 鸿蒙温度传感器" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="鸿蒙温度曲线中的名称来自设备 Thermal Manager 的传感器类型，单位为 °C；它们是设备级传感器，不是所选进程的温度，也不等同于 CPU/GPU 芯片温度。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="ambient：环境温度参考；Battery：电池相关温度；charger：充电/电源管理区域相关温度；rfboard：射频/通信电路板相关温度。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="shell_back：机身背部区域；shell_frame：机身中框/边框区域；shell_front：机身正面/屏幕侧区域；system_h：系统级/主板附近传感器。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="传感器名称和具体物理位置由设备厂商定义，不同型号可能缺失、改名或复用。适合观察同一设备的温度趋势，不建议跨设备直接比较绝对值。" />
+              <TextBlock Classes="helpItemTitle" Text="6. 汇总与缺测" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="CSV 默认按秒汇总：FrameTime Mean 按帧数加权；WindowP95Max 是这一秒各窗口 P95 的最大值，不是整秒 P95。Stat 的 FrameTime P95 仅在完整逐帧记录存在时计算，表示至少 95% 的帧间隔不超过该值。原始明细新增逐帧间隔列；现场文件保留原始帧，旧文件无法恢复的最小值/P95 显示 --。" />
+              <TextBlock Classes="helpItemTitle" Text="7. 分析数据与缩放范围" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="实时数据：查看最新采样；选中数据：查看时间游标处的采样；分析数据：查看各指标的最大值、最小值和平均值。采集中隐藏分析页签，停止采集或导入现场后显示并默认切换到分析页签。未缩放时分析全程，不需要先选中数据；没有有效数据时显示 --。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="FPS 分析与 CSV Stat 使用同一来源筛选和时长加权；CPU、内存、温度等仅统计真实更新。FrameTime 分析为逐帧最大、最小、平均间隔，曲线仍为窗口最大值。缩放后统计结束时刻落入区间的完整窗口，不拆分边界帧；还原后统计全程。缩放不改变采集、保存或全程 CSV。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel Spacing="2">
+              <TextBlock Text="时间线与截图" Classes="helpTitle" />
+              <TextBlock Classes="helpItemTitle" Text="1. 定位数据" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="采集开始后横轴从 0 秒计时；未手动定位时曲线跟随最新数据。点击或拖动任意曲线可移动时间游标，并在全部曲线和截图区域同步定位；手动选中历史时刻后不会强制跳回最新。Android 帧源发生轮询超时、历史覆盖或 Surface 变化时会重建时间线，日志和 CSV 会记录原因，不跨断点计算 FrameTime/Jank。" />
+              <TextBlock Classes="helpItemTitle" Text="2. 缩放曲线" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="勾选“缩放曲线”后，可按住鼠标左键框选时间范围，最小查看窗口为 60 秒，纵轴最大值保持不变；点击还原或取消勾选恢复全程。缩放会改变分析数据的统计区间，但不改变实际采集、保存的原始数据或全程 CSV 导出。暂不支持鼠标滚轮缩放。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="长记录按显示宽度保留首尾和峰谷，放大后可查看更细的数据；绘制抽稀不影响分析、保存或导出。选中时间不在当前区间时隐藏游标，不移动已选中的原始数据。标题过长时显示省略号，悬浮可查看完整文字及断点说明。" />
+              <TextBlock Classes="helpItemTitle" Text="3. 查看截图" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="启用截图后，每 3 秒尝试采集一次，实际间隔受设备响应和采集耗时影响。点击缩略图定位时间，双击打开大图；大图支持适应窗口、放大、缩小和切换相邻截图，切换时同步定位选中数据。截图失败会保留原因，不保证每次尝试都有图片。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel Spacing="2">
+              <TextBlock Text="现场文件、导出与主题" Classes="helpTitle" />
+              <TextBlock Classes="helpItemTitle" Text="1. 保存与打开" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="保存生成 .motuperf 现场文件，包含设备、应用、进程、原始采样、截图索引和查看状态。采集中打开、保存、导出按钮置灰，请先停止采集。打开或保存时显示进度弹框，请等待完成后再操作或退出；现场中的设备和进程是历史记录，仅用于查看。" />
+              <TextBlock Classes="helpItemTitle" Text="2. 导出数据" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="导出会生成 CSV，包含设备信息、目标 PID、指标统计和采样数据。默认按秒汇总，便于阅读和对比；需要完整时间戳时选择原始明细，现场文件本身不受导出方式影响。" />
+              <TextBlock Classes="helpItemTitle" Text="3. 再次采集" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="打开现场后再次采集，点击“开始采集”会要求重新确认当前设备、应用和进程。停止采集、设备断开或退出时选择“保存”，功能与顶部保存按钮一致。" />
+              <TextBlock Classes="helpItemTitle" Text="4. 主题与数据目录" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="右上角调色板图标可选择深色、明亮或绿色主题，不改变采集数据或指标口径。在“设置 → 设置目录”查看或更换当前数据目录；Windows 默认使用软件目录下的 data，macOS 默认使用 ~/Library/Application Support/MoTuPerf/data，以设置中显示的实际目录为准。手动保存的现场文件以所选位置为准。" />
+              <TextBlock Classes="helpItemTitle" Text="5. 清理与迁移数据" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="“设置 → 清理数据”可按类型查看大小、选择清理，或打开目录自行整理。清理和目录迁移期间显示进度及预估时间，请等待完成，避免关闭软件或同时修改相关文件；预估时间会随处理速度调整。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel Spacing="2">
+              <TextBlock Text="曲线分析" Classes="helpTitle" />
+              <TextBlock Classes="helpItemTitle" Text="1. 选择记录" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="点击顶部版本号后的“曲线分析”，主内容会切换为全界面分析工作区；当前现场自动放入 A 槽，B～E 槽可复用已加载记录或导入其他 .motuperf 文件。进入分析不会停止正在进行的采集，分析基于进入时的现场快照；同一按钮会切换为“返回性能监控”，再次点击即可恢复原界面。彩色槽位与曲线、表格列一一对应。" />
+              <TextBlock Classes="helpItemTitle" Text="2. 查看统计与曲线" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="概览、FPS、FrameTime/Jank、CPU、内存、温度与热状态在同一纵向长页中依次展示。概览只汇总关键统计；FPS、FrameTime、CPU 等分类区块显示对应统计表和叠加曲线，避免同一曲线重复出现。点击顶部页签可定位到对应区块，手动滚动时当前页签也会同步更新。切换子页签时，统计表只显示当前口径的指标列。点击图例可隐藏或显示曲线，悬停可查看读数。不同平台热状态、不同内存口径和逐核负载分开显示，缺测保持 --，不会按 0 计算。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="曲线图例位于图表底部居中。横轴下方的蓝色区间条用于查看缩放：拖动左右端柄缩小时间区间，拖动中间平移区间，双击区间条或点击“还原”恢复全程。缩放只改变曲线可见时间段，纵轴最大值、统计表、采集数据、现场文件和导出结果保持不变。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="每个指标选择栏右侧的“相同时间趋势”默认关闭。勾选后，所有现场会按各自完整采集时长等比拉伸到最长现场，便于比较运行过程形状；该开关只影响曲线显示，不改变统计、原始样本、现场文件或导出结果，取消勾选即恢复原始时间轴。" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="FPS 子页签按 FPS、Smooth、1%Low(FPS)、SmallJank、Jank、BigJank、Stutter 分开；FPS 页签展示 Avg/Std/Var/阈值占比/Drop/Min/Median/MedRange，其余页签只展示对应统计。1% Low 取完整逐帧数据中耗时最高的 1% 帧换算 FPS；Smooth、TinyJank、SmallJank 当前没有采集字段，固定显示 --。" />
+              <TextBlock Classes="helpItemTitle" Text="3. 判断可比性" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="长页统计固定使用全时间范围平均值，不提供均值/峰值、时间范围和 CSV 导出控件。PerfDog 与 MoTuPerf 的可信样本筛选、时长权重和设备帧源可能不同，同名指标只用于同口径参考，不保证逐位一致。跨设备请核对帧来源、显示范围、传感器、刷新率和统计说明；曲线分析只影响查看，不修改采集数据或现场文件。" />
+            </StackPanel>
+          </Border>
+          <Border Classes="helpSection">
+            <StackPanel Spacing="2">
+              <TextBlock Text="常见问题与日志" Classes="helpTitle" />
+              <TextBlock Classes="helpItemTitle" Text="1. 没有设备" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="确认设备已解锁并授权；Android 检查 USB 调试，iOS 检查信任、开发者模式和 Apple 设备驱动，鸿蒙检查 HDC，再点击设备刷新。" />
+              <TextBlock Classes="helpItemTitle" Text="2. 没有 CPU 或内存" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="确认选中了有效应用进程和 PID；目标重启后 PID 可能变化，刷新进程并重新选择。缺测显示 --，不代表占用为 0。" />
+              <TextBlock Classes="helpItemTitle" Text="3. 没有 FPS、FrameTime 或 Jank" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="这些指标依赖设备实际提供的显示帧源，先等待采集器建立帧源；仍无数据时不要用其他指标替代，查看状态提示和导出中的 Source、Scope、Updated 字段。" />
+              <TextBlock Classes="helpItemTitle" Text="4. 采集中断或报错" />
+              <TextBlock Classes="helpBody" TextWrapping="Wrap" Text="先保存现场文件，在“设置 → 设置目录”确认当前数据目录，再到该目录的 logs 文件夹查找对应时间的 collector-*.log。日志中的 source、PID、设备断开和帧源状态可用于定位问题。采集中不要拔线或切换设备。" />
+              <TextBlock Classes="dialogHint" Foreground="{DynamicResource Theme.Accent}" FontWeight="SemiBold" TextWrapping="Wrap" Text="重点：日志用于定位原因，不能把缺测数据补成 0；需要对比时同时查看指标来源和统计范围。" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+      <Border Grid.Row="2" Classes="dialogFooter">
+        <Button Classes="primaryToolbarButton" Content="知道了" Click="CloseWindow" Width="104" HorizontalAlignment="Right" Margin="0,0,18,0" />
+      </Border>
+    </Grid>
+  </Border>
+</Window>

@@ -104,8 +104,7 @@ class AndroidPerfRunnerTests(unittest.TestCase):
                 "probe:None",
                 "probe:True",
                 "start:Android FPS",
-                "start:Android PID CPU",
-                "start:Android PID 内存",
+                "start:Android PID CPU/内存",
                 "start:Android device thermal metrics",
                 "probe:False",
             ],
@@ -167,8 +166,7 @@ class AndroidPerfRunnerTests(unittest.TestCase):
         self.assertEqual(exit_code, 2)
         target_index = events.index("emit:target")
         self.assertLess(target_index, events.index("start:Android FPS"))
-        self.assertLess(target_index, events.index("start:Android PID CPU"))
-        self.assertLess(target_index, events.index("start:Android PID 内存"))
+        self.assertLess(target_index, events.index("start:Android PID CPU/内存"))
         self.assertLess(target_index, events.index("start:Android device thermal metrics"))
 
     def test_disabled_metric_sources_do_not_start_worker_threads(self) -> None:
@@ -2492,6 +2490,123 @@ present2present histogram is as below:
         self.assertEqual(snapshot.core_jiffies, ((0, 6),))
         self.assertEqual(snapshot.core_total_jiffies, ((0, 8),))
 
+    def test_low_frequency_snapshot_reads_cpu_and_memory_in_one_adb_call(self) -> None:
+        stdout = "\n".join(
+            [
+                runner.LOW_FREQUENCY_CPU_SECTION,
+                "cpu  100 10 20 200 5 2 3 4 50 6",
+                "cpu0 1 1 1 1 1 1 1 1 0 0",
+                "42 (game process) R 0 0 0 0 0 0 0 0 0 0 7 8 0 0 0",
+                "0",
+                runner.LOW_FREQUENCY_MEMORY_ROLLUP_SECTION,
+                "Rss: 307200 kB",
+                "Pss: 204800 kB",
+                runner.LOW_FREQUENCY_MEMORY_STATUS_SECTION,
+                "Name:\tgame",
+                "Uid:\t10123",
+                "VmRSS:\t307200 kB",
+            ]
+        )
+        calls: list[list[str]] = []
+        original_adb = runner.adb
+        try:
+            def fake_adb(_serial, args, **_kwargs):
+                calls.append(args)
+                return type("Result", (), {"returncode": 0, "stdout": stdout, "stderr": ""})()
+
+            runner.adb = fake_adb  # type: ignore[assignment]
+            snapshot = runner.read_low_frequency_snapshot("", 42)
+        finally:
+            runner.adb = original_adb
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][:3], ["shell", "sh", "-c"])
+        self.assertIn("/proc/stat", calls[0][3])
+        self.assertIn("/proc/42/smaps_rollup", calls[0][3])
+        self.assertIsNotNone(snapshot)
+        assert snapshot is not None
+        self.assertIsNotNone(snapshot.cpu)
+        assert snapshot.cpu is not None
+        self.assertEqual(snapshot.cpu.total_jiffies, 344)
+        self.assertEqual(snapshot.cpu.process_jiffies, 15)
+        self.assertIsNotNone(snapshot.memory_rollup)
+        assert snapshot.memory_rollup is not None
+        self.assertEqual(snapshot.memory_rollup.value_mb, 200.0)
+        self.assertIn("VmRSS", snapshot.memory_status_stdout)
+
+    def test_shared_memory_status_is_reused_without_another_status_read(self) -> None:
+        calls: list[list[str]] = []
+        original_adb = runner.adb
+        try:
+            def fake_adb(_serial, args, **_kwargs):
+                calls.append(args)
+                return type("Result", (), {"returncode": 0, "stdout": "TOTAL PSS: 409600\n"})()
+
+            runner.adb = fake_adb  # type: ignore[assignment]
+            sample = runner.read_memory_sample(
+                "",
+                42,
+                runner.MemoryProbeState(compact_meminfo_supported=False),
+                include_rollup=False,
+                status_stdout="VmRSS:\t614400 kB\n",
+            )
+        finally:
+            runner.adb = original_adb
+
+        self.assertIsNotNone(sample)
+        assert sample is not None
+        self.assertEqual(sample.value_mb, 400.0)
+        self.assertEqual(sum(args[-2:] == ["meminfo", "42"] for args in calls), 1)
+        self.assertFalse(any(args[:2] == ["shell", "cat"] and "status" in " ".join(args) for args in calls))
+
+    def test_low_frequency_resource_loop_uses_one_snapshot_per_sample(self) -> None:
+        snapshots = iter(
+            [
+                runner.LowFrequencySnapshot(
+                    runner.CpuSnapshot(1_000, 100, 1, ((0, 100),), (0,), ((0, 1_000),)),
+                    runner.MemorySample(200.0, "pss", "shared-pss", False, 300.0),
+                    "VmRSS:\t300 kB\n",
+                ),
+                runner.LowFrequencySnapshot(
+                    runner.CpuSnapshot(1_200, 150, 1, ((0, 150),), (0,), ((0, 1_200),)),
+                    runner.MemorySample(201.0, "pss", "shared-pss", False, 301.0),
+                    "VmRSS:\t301 kB\n",
+                ),
+            ]
+        )
+        emitted: list[tuple[str, dict]] = []
+        reads = 0
+
+        class TwoSampleStop:
+            waits = 0
+
+            def is_set(self) -> bool:
+                return self.waits >= 2
+
+            def wait(self, _delay: float) -> bool:
+                self.waits += 1
+                return self.waits >= 2
+
+        original_snapshot = runner.read_low_frequency_snapshot
+        original_emit = runner.emit
+        try:
+            def read_snapshot(*_args, **_kwargs):
+                nonlocal reads
+                reads += 1
+                return next(snapshots)
+
+            runner.read_low_frequency_snapshot = read_snapshot  # type: ignore[assignment]
+            runner.emit = lambda kind, payload: emitted.append((kind, payload))  # type: ignore[assignment]
+            runner.low_frequency_resource_loop("", 42, 0, TwoSampleStop())  # type: ignore[arg-type]
+        finally:
+            runner.read_low_frequency_snapshot = original_snapshot
+            runner.emit = original_emit
+
+        self.assertEqual(reads, 2)
+        self.assertEqual([kind for kind, _ in emitted], ["memory", "cpu", "memory"])
+        self.assertEqual(emitted[1][1]["source"], "adb-proc-stat-per-core")
+        self.assertEqual(emitted[2][1]["source"], "shared-pss")
+
     def test_android_cpu_reset_or_nonadvancing_clock_is_unavailable(self) -> None:
         previous = runner.CpuSnapshot(total_jiffies=10_000, process_jiffies=1_000, online_cpus=8)
 
@@ -2701,6 +2816,39 @@ present2present histogram is as below:
         self.assertEqual(sample.metric, "pss")
         self.assertEqual(sample.source, "adb-proc-smaps-rollup")
         self.assertFalse(sample.fallback)
+
+    def test_adaptive_fps_polling_uses_active_then_idle_interval(self) -> None:
+        self.assertEqual(runner.adaptive_fps_poll_interval(0.2, 10.0, 10.8, False), 0.2)
+        self.assertEqual(runner.adaptive_fps_poll_interval(0.2, 10.0, 11.0, False), 1.0)
+        self.assertEqual(runner.adaptive_fps_poll_interval(0.2, 10.0, 11.0, True), 0.2)
+        self.assertEqual(runner.adaptive_fps_poll_interval(0.2, None, 11.0, False), 0.2)
+
+    def test_surface_idle_polling_stays_inside_ring_buffer_budget(self) -> None:
+        self.assertAlmostEqual(runner.surface_idle_poll_interval(0.45, 16_666_667), 1.0, places=6)
+        self.assertAlmostEqual(runner.surface_idle_poll_interval(0.45, 8_333_333), 0.533333312, places=6)
+        self.assertEqual(runner.surface_idle_poll_interval(0.45, 4_166_667), 0.45)
+        self.assertEqual(runner.surface_idle_poll_interval(0.45, None), 1.0)
+
+    def test_frame_batch_emitter_flushes_ordered_versioned_events(self) -> None:
+        emitted: list[tuple[str, dict]] = []
+        batcher = runner.FrameBatchEmitter(
+            flush_interval=999.0,
+            max_events=2,
+            clock=lambda: 100.0,
+            emit_func=lambda kind, payload: emitted.append((kind, payload)),
+        )
+
+        batcher.add({"fps": 60.0, "source": "first"})
+        self.assertEqual(emitted, [])
+        batcher.add({"fps": 59.0, "source": "second"})
+        batcher.close()
+
+        self.assertEqual(len(emitted), 1)
+        kind, payload = emitted[0]
+        self.assertEqual(kind, "batch")
+        self.assertEqual(payload["version"], 1)
+        self.assertEqual([event["payload"]["source"] for event in payload["events"]], ["first", "second"])
+        self.assertTrue(all(event["kind"] == "fps" for event in payload["events"]))
 
     def test_wechat_appbrand_sparse_framestats_rows_are_unavailable(self) -> None:
         def frame_row(intended: int, completed: int) -> str:

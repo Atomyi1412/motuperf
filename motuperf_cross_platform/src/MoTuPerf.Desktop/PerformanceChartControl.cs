@@ -50,6 +50,7 @@ namespace MoTuPerf.Desktop
         private static IBrush GridBrush { get { return ThemeResourceBrush("Theme.ChartGrid", "#383A4A"); } }
         private static IBrush TextBrush { get { return ThemeResourceBrush("Theme.TextPrimary", "#D3D5E2"); } }
         private static IBrush MutedBrush { get { return ThemeResourceBrush("Theme.TextMuted", "#888B9C"); } }
+        private static string Text(string english, string chinese) { return AppLanguageManager.Text(english, chinese); }
         private static readonly IBrush[] CoreBrushes = CreateBrushes("#F3C44F", "#91DB72", "#4DB5E0", "#FF6B9A", "#F08A60", "#B78DEB", "#51D6CE", "#A7CF5A");
         private static readonly IBrush[] TemperatureBrushes = CreateBrushes("#F05A3C", "#4DB5E0", "#F3C44F", "#B78DEB", "#91DB72", "#51D6CE", "#FF6B9A", "#F08A60");
         private static readonly List<WeakReference<PerformanceChartControl>> Instances = new List<WeakReference<PerformanceChartControl>>();
@@ -248,8 +249,8 @@ namespace MoTuPerf.Desktop
             if (mode == "fps") DrawFps(context, area, samples, maxTime);
             else if (mode == "frametime") DrawFrameTime(context, area, samples, maxTime);
             else if (mode == "memory") DrawMemory(context, area, samples, maxTime);
-            else if (mode == "cpu") DrawSingle(context, area, samples, maxTime, "Process CPU Raw", "%", "#91DB72", 0, 100, 5, delegate(PerfSample sample) { return sample.CpuPercent; }, delegate(PerfSample sample) { return sample.HasCpu; }, 7);
-            else if (mode == "cpunormalized") DrawSingle(context, area, samples, maxTime, "Process CPU Normalized", "%", "#4DB5E0", 0, 100, 5, delegate(PerfSample sample) { return sample.CpuNormalizedPercent; }, delegate(PerfSample sample) { return sample.HasCpuNormalized; }, 7);
+            else if (mode == "cpu") DrawSingle(context, area, samples, maxTime, Text("Process CPU Raw", "进程原始 CPU"), "%", "#91DB72", 0, 100, 5, delegate(PerfSample sample) { return sample.CpuPercent; }, delegate(PerfSample sample) { return sample.HasCpu; }, 7);
+            else if (mode == "cpunormalized") DrawSingle(context, area, samples, maxTime, Text("Process CPU Normalized", "进程归一化 CPU"), "%", "#4DB5E0", 0, 100, 5, delegate(PerfSample sample) { return sample.CpuNormalizedPercent; }, delegate(PerfSample sample) { return sample.HasCpuNormalized; }, 7);
             else if (mode == "corecpu") DrawCoreCpu(context, area, samples, maxTime);
             else if (mode == "temperature") DrawTemperature(context, area, samples, maxTime);
             else if (mode == "thermalstate") DrawThermalState(context, area, samples, maxTime);
@@ -321,14 +322,14 @@ namespace MoTuPerf.Desktop
             AxisRange range = RangeFor(new[] { _data.Get("FPS") }, 0, 60, 5);
             AxisRange counts = RangeFor(new[] { _data.Get("Jank"), _data.Get("BigJank") }, 0, 1, 0);
             counts.Max = Math.Max(1, Math.Ceiling(counts.Max));
-            DrawGrid(context, area, range.Min, range.Max, "帧/s", maxTime);
+            DrawGrid(context, area, range.Min, range.Max, Text("frames/s", "帧/秒"), maxTime);
             if (showJank || showBigJank) DrawCountAxis(context, area, counts.Max);
             if (showFps) DrawIndexed(context, area, "FPS", range, Brush.Parse("#FF6B9A"), 2, x => x.Fps, frames: true);
             if (showJank) DrawIndexed(context, area, "Jank", counts, Brush.Parse("#4DB5E0"), 1.4, x => x.Jank, frames: true);
             if (showBigJank) DrawIndexed(context, area, "BigJank", counts, Brush.Parse("#91DB72"), 1.4, x => x.BigJank, frames: true);
-            DrawTitle(context, area, "FPS（左轴） / Jank、BigJank（右轴：次/窗口）");
-            if (!showFps && !showJank && !showBigJank) DrawWaiting(context, area, "已隐藏全部曲线");
-            else if (!(showFps && HasVisible("FPS")) && !(showJank && HasVisible("Jank")) && !(showBigJank && HasVisible("BigJank"))) DrawWaiting(context, area, "当前区间无 FPS / Jank 数据");
+            DrawTitle(context, area, Text("FPS (left axis) / Jank, BigJank (right axis: events/window)", "帧率（左轴） / 卡顿、严重卡顿（右轴：次/窗口）"));
+            if (!showFps && !showJank && !showBigJank) DrawWaiting(context, area, Text("All curves are hidden", "已隐藏全部曲线"));
+            else if (!(showFps && HasVisible("FPS")) && !(showJank && HasVisible("Jank")) && !(showBigJank && HasVisible("BigJank"))) DrawWaiting(context, area, Text("No FPS / Jank data in the current range", "当前区间无帧率 / 卡顿数据"));
         }
 
         private void DrawFrameTime(DrawingContext context, Rect area, IReadOnlyList<PerfSample> samples, double maxTime)
@@ -336,8 +337,8 @@ namespace MoTuPerf.Desktop
             AxisRange range = RangeFor(new[] { _data.Get("FrameTime") }, 0, 35, 3);
             DrawGrid(context, area, range.Min, range.Max, "ms", maxTime);
             DrawIndexed(context, area, "FrameTime", range, Brush.Parse("#FF6B9A"), 2, x => x.FrameTimeMaxMs, frames: true);
-            DrawTitle(context, area, "Display FrameTime (Max)");
-            if (!HasVisible("FrameTime")) DrawWaiting(context, area, "当前区间无 Display FrameTime 数据");
+            DrawTitle(context, area, Text("Display FrameTime (Max)", "显示帧耗时（最大值）"));
+            if (!HasVisible("FrameTime")) DrawWaiting(context, area, Text("No Display FrameTime data in the current range", "当前区间无显示帧耗时数据"));
         }
 
         private void DrawMemory(DrawingContext context, Rect area, IReadOnlyList<PerfSample> samples, double maxTime)
@@ -346,8 +347,8 @@ namespace MoTuPerf.Desktop
             AxisRange range = RangeFor(new[] { _data.Get(preferred) }, 0, 100, 50);
             DrawGrid(context, area, range.Min, range.Max, "MB", maxTime);
             DrawIndexed(context, area, preferred, range, Brush.Parse("#F3C44F"), 2, x => x.MemoryMb);
-            DrawTitle(context, area, "Process Memory" + (string.IsNullOrWhiteSpace(preferred) ? "" : " · " + preferred));
-            if (!HasVisible(preferred)) DrawWaiting(context, area, "当前区间无进程内存数据");
+            DrawTitle(context, area, Text("Process Memory", "进程内存") + (string.IsNullOrWhiteSpace(preferred) ? "" : " · " + preferred));
+            if (!HasVisible(preferred)) DrawWaiting(context, area, Text("No process memory data in the current range", "当前区间无进程内存数据"));
         }
 
         private void DrawSingle(DrawingContext context, Rect area, IReadOnlyList<PerfSample> samples, double maxTime, string title, string unit, string color, double floor, double defaultMax, double padding, Func<PerfSample, double> value, Func<PerfSample, bool> has, double maxGap)
@@ -356,7 +357,7 @@ namespace MoTuPerf.Desktop
             DrawGrid(context, area, range.Min, range.Max, unit, maxTime);
             DrawIndexed(context, area, "CPU", range, Brush.Parse(color), 2, value);
             DrawTitle(context, area, title);
-            if (!HasVisible("CPU")) DrawWaiting(context, area, "当前区间无" + title + "数据");
+            if (!HasVisible("CPU")) DrawWaiting(context, area, Text("No " + title + " data in the current range", "当前区间无" + title + "数据"));
         }
 
         private void DrawCoreCpu(DrawingContext context, Rect area, IReadOnlyList<PerfSample> samples, double maxTime)
@@ -370,8 +371,8 @@ namespace MoTuPerf.Desktop
                 int core = index;
                 DrawIndexed(context, area, CoreSeriesName(core), range, CoreBrushes[core % CoreBrushes.Length], 1.3, x => x.CpuCorePercents[core]);
             }
-            DrawTitle(context, area, "Device Core CPU" + (count > 0 ? " · " + count + " cores" : ""));
-            if (!_data.Keys.Any(IsSeriesVisible)) DrawWaiting(context, area, count == 0 ? "等待设备逐核 CPU 数据" : "已隐藏全部曲线");
+            DrawTitle(context, area, Text("Device Core CPU", "设备核心 CPU") + (count > 0 ? Text(" · " + count + (count == 1 ? " core" : " cores"), " · " + count + " 核") : ""));
+            if (!_data.Keys.Any(IsSeriesVisible)) DrawWaiting(context, area, count == 0 ? Text("Waiting for per-core CPU data", "等待设备逐核 CPU 数据") : Text("All curves are hidden", "已隐藏全部曲线"));
         }
 
         private void DrawTemperature(DrawingContext context, Rect area, IReadOnlyList<PerfSample> samples, double maxTime)
@@ -386,15 +387,15 @@ namespace MoTuPerf.Desktop
                 DrawIndexed(context, area, sensor, range, TemperatureBrushes[index % TemperatureBrushes.Length], 1.7,
                     x => ChartDataCache.TemperatureValue(x, sensor), project: (points, end) => TemperatureChartProjection.ForSensor(points, sensor, end));
             }
-            DrawTitle(context, area, "Device Temperature" + (sensors.Count > 0 ? " · " + string.Join(" / ", sensors) : ""));
-            if (!sensors.Any(x => IsSeriesVisible(TemperatureSeriesName(x)))) DrawWaiting(context, area, sensors.Count == 0 ? "等待设备温度数据" : "已隐藏全部曲线");
+            DrawTitle(context, area, Text("Device Temperature", "设备温度") + (sensors.Count > 0 ? " · " + string.Join(" / ", sensors.Select(AppLanguageManager.SensorName)) : ""));
+            if (!sensors.Any(x => IsSeriesVisible(TemperatureSeriesName(x)))) DrawWaiting(context, area, sensors.Count == 0 ? Text("Waiting for device temperature data", "等待设备温度数据") : Text("All curves are hidden", "已隐藏全部曲线"));
         }
 
         private void DrawThermalState(DrawingContext context, Rect area, IReadOnlyList<PerfSample> samples, double maxTime)
         {
             double thermalMax = Math.Max(1, ThermalStateMax);
             AxisRange range = new AxisRange { Min = 0, Max = thermalMax };
-            DrawGrid(context, area, 0, thermalMax, "级别", maxTime, true);
+            DrawGrid(context, area, 0, thermalMax, Text("level", "级别"), maxTime, true);
             DrawIndexed(context, area, "Thermal", range, Brush.Parse("#F08A60"), 2, x => x.ThermalStateLevel,
                 step: true, project: (points, end) => ThermalStateChartProjection.ForChart(points, end));
             DrawTitle(context, area, ThermalStateTitle + " · " + ThermalStateLegend);
@@ -532,8 +533,8 @@ namespace MoTuPerf.Desktop
 
         private void DrawTitle(DrawingContext context, Rect area, string title)
         {
-            string full = title + (_hasDiscontinuity ? " · 虚线：来源切换/采集缺口" : "")
-                + (_denseDiscontinuities ? " · 断点密集，仅显示峰谷点，请放大查看" : "");
+            string full = title + (_hasDiscontinuity ? Text(" · dashed: source change / collection gap", " · 虚线：来源切换/采集缺口") : "")
+                + (_denseDiscontinuities ? Text(" · dense breaks: extrema only; zoom in for detail", " · 断点密集，仅显示峰谷点，请放大查看") : "");
             ToolTip.SetTip(this, full);
             var text = new FormattedText(full, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
                 new Typeface("Inter, Microsoft YaHei UI"), 13, TextBrush)

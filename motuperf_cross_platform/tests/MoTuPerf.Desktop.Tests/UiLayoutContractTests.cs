@@ -925,6 +925,33 @@ namespace MoTuPerf.Desktop.Tests
         }
 
         [Fact]
+        public void TitleBarLanguageThemeAndSettingsButtonsShareOneGlobalRow()
+        {
+            XDocument main = LoadXaml("src", "MoTuPerf.Desktop", "MainWindow.axaml");
+            XElement language = Named(main, "LanguageToggleButton");
+            XElement theme = Named(main, "ThemeSelectorButton");
+            XElement settings = Named(main, "SettingsButton");
+            XElement row = theme.Parent;
+
+            Assert.Same(row, language.Parent);
+            Assert.Same(row, settings.Parent);
+            Assert.Equal(new[] { "LanguageToggleButton", "ThemeSelectorButton", "SettingsButton" },
+                row.Elements(Avalonia + "Button")
+                    .Select(button => button.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml"))?.Value)
+                    .Where(name => name != null)
+                    .Take(3));
+            Assert.Contains("themeSelectorButton", Attribute(language, "Classes"));
+            Assert.Contains("languageSelectorButton", Attribute(language, "Classes"));
+            Assert.Equal("{Binding LanguageSelectorText}", Attribute(language, "Content"));
+            Assert.Equal("{Binding LanguageSelectorToolTip}", Attribute(language, "ToolTip.Tip"));
+            Assert.Equal("ToggleLanguage", Attribute(language, "Click"));
+
+            XDocument comparison = LoadXaml("src", "MoTuPerf.Desktop", "SessionComparisonWorkspace.axaml");
+            Assert.DoesNotContain(comparison.Descendants(Avalonia + "Button"),
+                button => button.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml"))?.Value == "LanguageToggleButton");
+        }
+
+        [Fact]
         public void ThemeSelectorIsDropdownWithNamedColorSwatchesAndChartsUseThemePalette()
         {
             XDocument main = LoadXaml("src", "MoTuPerf.Desktop", "MainWindow.axaml");

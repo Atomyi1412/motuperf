@@ -1,0 +1,215 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:MoTuPerf.Desktop"
+        xmlns:model="using:CSharpIosPerfMonitor"
+        x:Class="MoTuPerf.Desktop.DevicePickerWindow"
+        Title="选择设备及应用"
+        Width="680"
+        Height="640"
+        MinWidth="680"
+        MinHeight="640"
+        WindowDecorations="BorderOnly"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="0"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner">
+  <Window.Resources>
+    <local:IconPathConverter x:Key="IconPathConverter" />
+    <local:IconPathVisibilityConverter x:Key="IconPathVisibilityConverter" />
+    <local:IconGlyphConverter x:Key="IconGlyphConverter" />
+    <local:EmptyTextVisibilityConverter x:Key="EmptyTextVisibilityConverter" />
+    <DataTemplate x:Key="DeviceTemplate" x:DataType="model:DeviceInfo">
+      <TextBlock Text="{Binding PickerLabel}" Foreground="{DynamicResource Theme.TextPrimary}" TextTrimming="CharacterEllipsis" />
+    </DataTemplate>
+    <DataTemplate x:Key="AppTemplate" x:DataType="model:AppInfo">
+      <Grid ColumnDefinitions="34,*,Auto" MinHeight="38" ClipToBounds="True" Margin="0,0,14,0">
+        <Border Width="28" Height="28" Background="{DynamicResource Theme.InputBackground}" CornerRadius="4" VerticalAlignment="Center">
+          <Grid>
+            <Image Source="{Binding IconPath, Converter={StaticResource IconPathConverter}}" IsVisible="{Binding IconPath, Converter={StaticResource IconPathVisibilityConverter}}" Stretch="UniformToFill" Margin="2" />
+            <TextBlock Text="{Binding IconKey, Converter={StaticResource IconGlyphConverter}}" IsVisible="{Binding IconPath, Converter={StaticResource IconPathVisibilityConverter}, ConverterParameter=fallback}" Foreground="{DynamicResource Theme.TextPrimary}" FontSize="12" FontWeight="Bold"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+        <Grid Grid.Column="1" RowDefinitions="Auto,Auto" Margin="8,0,6,0" VerticalAlignment="Center" MinWidth="0">
+          <TextBlock Text="{Binding Name}" Classes="pickerRowText" FontSize="14" FontWeight="SemiBold"
+                     TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+          <TextBlock Grid.Row="1" Text="{Binding PickerTargetIdentifier}" Classes="dialogHint pickerRowText" FontSize="11"
+                     TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PickerTargetIdentifier}" />
+        </Grid>
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" HorizontalAlignment="Right">
+          <Border Background="{DynamicResource Theme.Accent}" BorderBrush="{DynamicResource Theme.BorderStrong}" BorderThickness="1"
+                  CornerRadius="3" Padding="5,1" IsVisible="{Binding PickerBadge, Converter={StaticResource EmptyTextVisibilityConverter}, ConverterParameter=notEmpty}">
+            <TextBlock Text="{Binding PickerBadge}" Foreground="{DynamicResource Theme.TextOnAccent}" FontSize="11" FontWeight="SemiBold" />
+          </Border>
+        </StackPanel>
+      </Grid>
+    </DataTemplate>
+    <DataTemplate x:Key="ProcessTemplate" x:DataType="model:ProcessInfo">
+      <StackPanel Margin="0,0,14,0">
+      <Border Background="{DynamicResource Theme.DialogSurface}" BorderBrush="{DynamicResource Theme.DialogSeparator}" BorderThickness="0,0,0,1" Padding="8,6"
+              IsVisible="{Binding PickerGroupHeader, Converter={StaticResource EmptyTextVisibilityConverter}, ConverterParameter=notEmpty}">
+        <TextBlock Text="{Binding PickerGroupHeader}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource Theme.TextPrimary}"
+                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PickerGroupHeader}" />
+      </Border>
+      <Border Classes="processRow" MinHeight="26" Padding="6,3" ClipToBounds="True">
+        <Grid ColumnDefinitions="34,64,*">
+          <Border Width="22" Height="22" Background="{DynamicResource Theme.InputBackground}" CornerRadius="4" VerticalAlignment="Center" HorizontalAlignment="Center">
+            <Grid>
+              <Image Source="{Binding IconPath, Converter={StaticResource IconPathConverter}}" IsVisible="{Binding IconPath, Converter={StaticResource IconPathVisibilityConverter}}" Stretch="UniformToFill" />
+              <TextBlock Text="{Binding IconKey, Converter={StaticResource IconGlyphConverter}}" IsVisible="{Binding IconPath, Converter={StaticResource IconPathVisibilityConverter}, ConverterParameter=fallback}" Foreground="{DynamicResource Theme.TextPrimary}" FontSize="12" FontWeight="Bold"
+                         HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Grid>
+          </Border>
+          <TextBlock Grid.Column="1" Text="{Binding Pid}" Classes="pickerRowText" FontSize="14"
+                     VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+          <DockPanel Grid.Column="2" LastChildFill="True">
+            <Border DockPanel.Dock="Right" Background="{DynamicResource Theme.Accent}" BorderBrush="{DynamicResource Theme.BorderStrong}" BorderThickness="1"
+                    CornerRadius="3" Padding="5,1" Margin="8,1,4,1" VerticalAlignment="Top"
+                    IsVisible="{Binding ForegroundApplication}">
+              <TextBlock Text="{Binding PickerBadge}" Foreground="{DynamicResource Theme.TextOnAccent}" FontSize="11" FontWeight="SemiBold" />
+            </Border>
+            <Grid RowDefinitions="Auto,Auto" VerticalAlignment="Center" MinWidth="0">
+              <TextBlock Text="{Binding PickerName}" Classes="pickerRowText" FontSize="14"
+                         TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PickerName}" />
+              <TextBlock Grid.Row="1" Text="{Binding PickerDetails}" Classes="dialogHint pickerRowText" FontSize="11"
+                         TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PickerDetails}" />
+            </Grid>
+          </DockPanel>
+        </Grid>
+      </Border>
+      </StackPanel>
+    </DataTemplate>
+  </Window.Resources>
+  <Border Classes="secondaryWindowFrame">
+    <Grid RowDefinitions="48,*,72" Background="{DynamicResource Theme.DialogBackground}">
+      <Border Grid.Row="0" Classes="dialogTitleBar"
+              PointerPressed="DialogTitlePointerPressed">
+        <Grid ColumnDefinitions="*,50">
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="26,0,0,0">
+            <PathIcon Data="{StaticResource IconDevice}" Classes="symbol" Foreground="{DynamicResource Theme.TextPrimary}" Width="17" Height="17" Margin="0,0,10,0" />
+            <TextBlock Text="选择设备及应用" Classes="sectionTitle" />
+          </StackPanel>
+          <Button Grid.Column="1" Classes="dialogCloseButton" Content="&#x00D7;" Click="Cancel"
+                  ToolTip.Tip="关闭" />
+        </Grid>
+      </Border>
+
+      <Grid Grid.Row="1" Margin="32,32,38,0" RowDefinitions="46,Auto,48,42,*" ColumnDefinitions="112,*">
+        <TextBlock Text="选择设备" Classes="dialogLabel" Grid.Row="0" />
+        <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,48">
+          <ComboBox x:Name="DeviceList" Classes="dialogCombo" Height="38" VerticalAlignment="Top" HorizontalAlignment="Stretch"
+                    ItemTemplate="{StaticResource DeviceTemplate}"
+                    SelectionChanged="DeviceSelectionChanged" />
+          <Button Grid.Column="1" Classes="iconDialogButton" Content="↻" Click="RefreshDevices"
+                  ToolTip.Tip="刷新设备" HorizontalAlignment="Right" />
+        </Grid>
+        <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,0,0,6" Spacing="3">
+          <Grid ColumnDefinitions="*,Auto" Margin="112,0,0,0">
+            <TextBlock x:Name="DeviceCountText" Text="正在检测设备..." Classes="dialogHint"
+                       TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,10,0" />
+            <StackPanel Grid.Column="1" Orientation="Vertical" HorizontalAlignment="Right" Spacing="4">
+              <Button x:Name="DeviceDiagnosticsButton" Classes="smallDialogButton" Content="查看检测详情"
+                      Click="ShowDeviceDiagnostics" IsEnabled="False" />
+              <Button x:Name="AppleDriverButton" Classes="driverDownloadButton" Content="下载苹果设备驱动"
+                      Click="DownloadAppleDriver" IsVisible="False" />
+            </StackPanel>
+          </Grid>
+        </StackPanel>
+
+        <TextBlock Text="选择应用" Classes="dialogLabel" Grid.Row="2" />
+        <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,48">
+          <Border x:Name="SelectedAppSummary" Height="42" Background="{DynamicResource Theme.DialogSurface}" BorderBrush="{DynamicResource Theme.BorderStrong}" BorderThickness="1"
+                  Padding="6,3,10,3">
+            <Grid ColumnDefinitions="32,*">
+              <Border Width="26" Height="26" Background="{DynamicResource Theme.InputBackground}" CornerRadius="5" VerticalAlignment="Center">
+                <Grid>
+                  <Image x:Name="SelectedAppIcon" Stretch="UniformToFill" />
+                  <TextBlock x:Name="SelectedAppGlyph" Foreground="{DynamicResource Theme.TextPrimary}" FontSize="13" FontWeight="Bold"
+                             HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Grid>
+              </Border>
+              <Grid Grid.Column="1" RowDefinitions="Auto,Auto" Margin="8,0,0,0" VerticalAlignment="Center" MinWidth="0">
+                <TextBlock x:Name="SelectedAppName" Text="请选择 APP" Foreground="{DynamicResource Theme.TextPrimary}" FontSize="14"
+                           FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Row="1" x:Name="SelectedAppBundle" Classes="dialogHint" FontSize="12"
+                           TextTrimming="CharacterEllipsis" />
+              </Grid>
+            </Grid>
+          </Border>
+          <Button Grid.Column="1" Classes="iconDialogButton" Content="↻" Click="RefreshTargetLists"
+                  ToolTip.Tip="刷新应用和进程" HorizontalAlignment="Right" />
+        </Grid>
+
+        <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+          <StackPanel Orientation="Horizontal">
+            <Button x:Name="ProcessTab" Classes="dialogTab activeDialogTab"
+                    Click="ShowProcessTab"><TextBlock Text="选择进程" Classes="dialogTabText" /></Button>
+            <Button x:Name="LaunchTab" Classes="dialogTab" Click="ShowLaunchTab">
+              <TextBlock Text="启动 APP" Classes="dialogTabText" />
+            </Button>
+          </StackPanel>
+          <CheckBox x:Name="HarmonyShowAllCheckBox" Grid.Column="1" Content="显示全部目标"
+                    Foreground="{DynamicResource Theme.TextMuted}" VerticalAlignment="Center"
+                    IsVisible="False" Click="HarmonyShowAllTargetsChanged" />
+        </Grid>
+
+        <Grid Grid.Row="4" Grid.Column="1">
+          <Grid x:Name="ProcessPanel" RowDefinitions="32,26,*">
+            <Grid>
+              <TextBox x:Name="ProcessSearch" Classes="dialogSearch"
+                       Height="32" Padding="38,6,8,6" TextChanged="ProcessSearchChanged"
+                       ScrollViewer.VerticalScrollBarVisibility="Hidden" ScrollViewer.HorizontalScrollBarVisibility="Hidden" />
+              <TextBlock Text="⌕" Foreground="{DynamicResource Theme.TextMuted}" FontSize="20" Margin="11,-1,0,0"
+                         HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False" />
+              <TextBlock Text="请输入进程名称进行搜索" Foreground="{DynamicResource Theme.TextMuted}" FontSize="13" Margin="38,0,8,0"
+                         VerticalAlignment="Center" IsHitTestVisible="False"
+                         IsVisible="{Binding #ProcessSearch.Text, Converter={StaticResource EmptyTextVisibilityConverter}}" />
+            </Grid>
+            <Border Grid.Row="1" Classes="processHeader" BorderBrush="{DynamicResource Theme.DialogSeparator}" BorderThickness="1,0,1,1">
+              <Grid ColumnDefinitions="34,64,*" Background="{DynamicResource Theme.DialogSurface}">
+                <Border Grid.Column="0" BorderBrush="{DynamicResource Theme.DialogSeparator}" BorderThickness="0,0,1,0" />
+                <Border Grid.Column="1" BorderBrush="{DynamicResource Theme.DialogSeparator}" BorderThickness="0,0,1,0" Padding="6,0">
+                  <TextBlock Text="PID" Foreground="{DynamicResource Theme.TextPrimary}" FontSize="13" VerticalAlignment="Center" />
+                </Border>
+                <Border Grid.Column="2" Padding="6,0">
+                  <TextBlock Text="Process" Foreground="{DynamicResource Theme.TextPrimary}" FontSize="13" VerticalAlignment="Center" />
+                </Border>
+              </Grid>
+            </Border>
+            <ListBox Grid.Row="2" x:Name="ProcessList" Classes="dialogList processList"
+                     SelectionChanged="ProcessSelectionChanged" ItemTemplate="{StaticResource ProcessTemplate}"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto" />
+          </Grid>
+          <Grid x:Name="LaunchPanel" IsVisible="False" RowDefinitions="32,*">
+            <Grid ColumnDefinitions="*,88">
+              <Grid Margin="0,0,8,0">
+                <TextBox x:Name="AppSearch" Classes="dialogSearch"
+                         Height="32" Padding="38,6,8,6" TextChanged="AppSearchChanged"
+                         ScrollViewer.VerticalScrollBarVisibility="Hidden" ScrollViewer.HorizontalScrollBarVisibility="Hidden" />
+                <TextBlock Text="⌕" Foreground="{DynamicResource Theme.TextMuted}" FontSize="20" Margin="11,-1,0,0"
+                           HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False" />
+                <TextBlock Text="请输入应用名称进行搜索" Foreground="{DynamicResource Theme.TextMuted}" FontSize="13" Margin="38,0,8,0"
+                           VerticalAlignment="Center" IsHitTestVisible="False"
+                           IsVisible="{Binding #AppSearch.Text, Converter={StaticResource EmptyTextVisibilityConverter}}" />
+              </Grid>
+              <Button x:Name="LaunchButton" Grid.Column="1" Classes="dialogLaunchButton" Content="启动" Click="LaunchSelectedApp"
+                      VerticalAlignment="Top" />
+            </Grid>
+            <ListBox Grid.Row="1" x:Name="AppList" Classes="dialogList appList"
+                     SelectionChanged="AppSelectionChanged" ItemTemplate="{StaticResource AppTemplate}"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto" />
+          </Grid>
+        </Grid>
+      </Grid>
+
+      <Border Grid.Row="2" Classes="dialogFooter">
+        <Grid ColumnDefinitions="*,112,112">
+          <CheckBox x:Name="AutoStartCheckBox" Content="自动开始采集" Foreground="{DynamicResource Theme.TextPrimary}"
+                    Grid.Column="0" VerticalAlignment="Center" Margin="122,0,0,0" />
+          <Button Grid.Column="1" Classes="dialogFooterButton" Content="关闭" Click="Cancel" VerticalAlignment="Center" />
+          <Button x:Name="ConfirmButton" Grid.Column="2" Classes="dialogPrimaryButton" Content="选择" Click="Confirm" IsEnabled="False" Width="100" Margin="6,0" VerticalAlignment="Center" />
+        </Grid>
+      </Border>
+    </Grid>
+  </Border>
+</Window>

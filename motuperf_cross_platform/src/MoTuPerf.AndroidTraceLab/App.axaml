@@ -1,0 +1,31 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="MoTuPerf.AndroidTraceLab.App">
+  <Application.Styles>
+    <FluentTheme />
+    <Style Selector="Window">
+      <Setter Property="FontFamily" Value="Microsoft YaHei UI, Inter, sans-serif" />
+      <Setter Property="Background" Value="#111722" />
+    </Style>
+    <Style Selector="TextBlock.muted">
+      <Setter Property="Foreground" Value="#9DA8BA" />
+    </Style>
+    <Style Selector="TextBlock.sectionTitle">
+      <Setter Property="Foreground" Value="#F1F5FA" />
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Border.panel">
+      <Setter Property="Background" Value="#192231" />
+      <Setter Property="BorderBrush" Value="#2D3B4F" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="16" />
+    </Style>
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="#1976D2" />
+      <Setter Property="Foreground" Value="White" />
+      <Setter Property="Padding" Value="18,9" />
+    </Style>
+  </Application.Styles>
+</Application>

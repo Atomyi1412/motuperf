@@ -16,9 +16,11 @@ namespace CSharpIosPerfMonitor
     {
         public const string PackageManifestFileName = "motuperf-package.json";
         private static readonly RuntimeToolResolver Resolver = CreateResolver();
+        private static readonly RetryableRuntimePath PythonExecutablePath = new RetryableRuntimePath(ResolvePythonExecutable, File.Exists);
+        private static readonly RetryableRuntimePath AdbExecutablePath = new RetryableRuntimePath(ResolveAdbExecutable, File.Exists);
 
-        public static string PythonExecutable { get { return ResolveExecutable(Resolver.PythonExecutable, Resolver.OperatingSystem == "macos" ? "python3" : "python"); } }
-        public static string AdbExecutable { get { return ResolveExecutable(Resolver.AdbExecutable, "adb"); } }
+        public static string PythonExecutable { get { return PythonExecutablePath.Value; } }
+        public static string AdbExecutable { get { return AdbExecutablePath.Value; } }
         public static string HdcExecutable
         {
             get
@@ -96,19 +98,12 @@ namespace CSharpIosPerfMonitor
             string currentPath = startInfo.Environment.ContainsKey("PATH")
                 ? startInfo.Environment["PATH"]
                 : Environment.GetEnvironmentVariable("PATH");
-            if (!string.IsNullOrWhiteSpace(adbDirectory) && Directory.Exists(adbDirectory))
-            {
-                startInfo.Environment["PATH"] = string.IsNullOrWhiteSpace(currentPath)
-                    ? adbDirectory
-                    : adbDirectory + Path.PathSeparator + currentPath;
-            }
+            currentPath = PrependPathDirectory(currentPath, adbDirectory);
             if (!string.IsNullOrWhiteSpace(hdcDirectory) && Directory.Exists(hdcDirectory))
             {
-                string path = startInfo.Environment.ContainsKey("PATH") ? startInfo.Environment["PATH"] : Environment.GetEnvironmentVariable("PATH");
-                startInfo.Environment["PATH"] = string.IsNullOrWhiteSpace(path)
-                    ? hdcDirectory
-                    : hdcDirectory + Path.PathSeparator + path;
+                currentPath = PrependPathDirectory(currentPath, hdcDirectory);
             }
+            startInfo.Environment["PATH"] = currentPath ?? "";
         }
 
         public static bool HasAppleMobileDeviceSupport()
@@ -253,11 +248,78 @@ namespace CSharpIosPerfMonitor
             return packaged ? new RuntimeToolResolver(baseDirectory, true) : development;
         }
 
-        private static string ResolveExecutable(string bundled, string fallback)
+        private static string ResolvePythonExecutable()
         {
+            string bundled = Resolver.PythonExecutable;
             if (File.Exists(bundled)) return bundled;
-            if (IsPackagedBuild) throw new FileNotFoundException("安装包内置运行环境缺失或损坏。", bundled);
-            return fallback;
+            if (IsPackagedBuild) throw new FileNotFoundException("安装包内置 Python 运行环境缺失或损坏。", bundled);
+
+            return DevelopmentExecutableResolver.ResolvePython(
+                bundled,
+                Environment.GetEnvironmentVariable("MOTUPERF_PYTHON"),
+                Resolver.OperatingSystem,
+                PreferredLocalApplicationData(),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                ReadPathDirectories(),
+                File.Exists,
+                LocalApplicationDataRoots(),
+                RegisteredPythonCandidates());
+        }
+
+        private static string ResolveAdbExecutable()
+        {
+            string bundled = Resolver.AdbExecutable;
+            if (File.Exists(bundled)) return bundled;
+            if (IsPackagedBuild) throw new FileNotFoundException("安装包内置 Android ADB 缺失或损坏。", bundled);
+
+            return DevelopmentExecutableResolver.ResolveAdb(
+                bundled,
+                Environment.GetEnvironmentVariable("MOTUPERF_ADB"),
+                Resolver.OperatingSystem,
+                PreferredLocalApplicationData(),
+                Environment.GetEnvironmentVariable("ANDROID_HOME"),
+                Environment.GetEnvironmentVariable("ANDROID_SDK_ROOT"),
+                ReadPathDirectories(),
+                File.Exists);
+        }
+
+        private static string PreferredLocalApplicationData()
+        {
+            string specialFolder = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (!string.IsNullOrWhiteSpace(specialFolder)) return specialFolder;
+            return Environment.GetEnvironmentVariable("LOCALAPPDATA") ?? "";
+        }
+
+        private static IEnumerable<string> LocalApplicationDataRoots()
+        {
+            string localAppData = Environment.GetEnvironmentVariable("LOCALAPPDATA") ?? "";
+            string userProfile = Environment.GetEnvironmentVariable("USERPROFILE") ?? "";
+            yield return localAppData;
+            if (!string.IsNullOrWhiteSpace(userProfile))
+            {
+                yield return Path.Combine(userProfile, "AppData", "Local");
+            }
+        }
+
+        private static IEnumerable<string> RegisteredPythonCandidates()
+        {
+            if (!OperatingSystem.IsWindows()) return null;
+            return WindowsPythonRegistry.FindExecutablePaths();
+        }
+
+        private static IEnumerable<string> ReadPathDirectories()
+        {
+            string path = Environment.GetEnvironmentVariable("PATH") ?? "";
+            return path.Split(new[] { Path.PathSeparator }, StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        private static string PrependPathDirectory(string currentPath, string directory)
+        {
+            if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory)) return currentPath;
+            return string.IsNullOrWhiteSpace(currentPath)
+                ? directory
+                : directory + Path.PathSeparator + currentPath;
         }
 
         private static string FirstLine(string value)

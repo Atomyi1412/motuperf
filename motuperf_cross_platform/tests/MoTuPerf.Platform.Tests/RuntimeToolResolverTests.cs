@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CSharpIosPerfMonitor;
 using MoTuPerf.Platform;
 using Xunit;
 
@@ -45,6 +46,217 @@ namespace MoTuPerf.Platform.Tests
             RuntimeToolResolver resolver = new RuntimeToolResolver(Path.GetTempPath(), false, "macos", "arm64");
 
             Assert.Empty(resolver.ValidatePackagedRuntime());
+        }
+
+        [Fact]
+        public void PythonResolutionRejectsWindowsAppsAliasOverride()
+        {
+            string alias = Path.Combine(Path.GetTempPath(), "Microsoft", "WindowsApps", "python.exe");
+
+            FileNotFoundException error = Assert.Throws<FileNotFoundException>(delegate
+            {
+                DevelopmentExecutableResolver.ResolvePython(
+                    "",
+                    alias,
+                    "windows",
+                    "",
+                    "",
+                    "",
+                    Array.Empty<string>(),
+                    delegate(string path) { return !string.IsNullOrWhiteSpace(path); });
+            });
+
+            Assert.Contains("MOTUPERF_PYTHON", error.Message);
+            Assert.Contains("WindowsApps", error.Message);
+        }
+
+        [Fact]
+        public void PythonResolutionPrefersKnownRealInstallationOverWindowsAppsPath()
+        {
+            string local = Path.GetTempPath();
+            string windowsApps = Path.Combine(local, "Microsoft", "WindowsApps");
+            string expected = Path.Combine(local, "Programs", "Python", "Python311", "python.exe");
+            HashSet<string> files = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                expected,
+                Path.Combine(windowsApps, "python.exe")
+            };
+
+            string resolved = DevelopmentExecutableResolver.ResolvePython(
+                "",
+                "",
+                "windows",
+                local,
+                "",
+                "",
+                new[] { windowsApps },
+                delegate(string path) { return files.Contains(path); });
+
+            Assert.Equal(expected, resolved);
+        }
+
+        [Fact]
+        public void PythonResolutionFallsBackToEnvironmentLocalAppDataRoot()
+        {
+            string local = Path.Combine(Path.GetTempPath(), "motuperf-profile-" + Guid.NewGuid().ToString("N"));
+            string expected = Path.Combine(local, "Programs", "Python", "Python312", "python.exe");
+
+            string resolved = DevelopmentExecutableResolver.ResolvePython(
+                "",
+                "",
+                "windows",
+                "",
+                "",
+                "",
+                Array.Empty<string>(),
+                delegate(string path) { return string.Equals(path, expected, StringComparison.OrdinalIgnoreCase); },
+                new[] { local });
+
+            Assert.Equal(expected, resolved);
+        }
+
+        [Fact]
+        public void PythonResolutionUsesRegisteredFallbackWhenFileProbeFails()
+        {
+            const string registered = @"C:\Users\tester\AppData\Local\Programs\Python\Python312\python.exe";
+
+            string resolved = DevelopmentExecutableResolver.ResolvePython(
+                "",
+                "",
+                "windows",
+                "",
+                "",
+                "",
+                Array.Empty<string>(),
+                delegate(string path) { return false; },
+                Array.Empty<string>(),
+                new[] { registered });
+
+            Assert.Equal(registered, resolved);
+        }
+
+        [Fact]
+        public void PythonRegistryDiscoveryReadsOfficialPerUserInstallation()
+        {
+            if (!OperatingSystem.IsWindows()) return;
+
+            string expected = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Programs",
+                "Python",
+                "Python312",
+                "python.exe");
+            if (!File.Exists(expected)) return;
+
+            string[] resolved = WindowsPythonRegistry.FindExecutablePaths().ToArray();
+
+            Assert.Contains(resolved, path => string.Equals(path, expected, StringComparison.OrdinalIgnoreCase));
+
+            string fallback = DevelopmentExecutableResolver.ResolvePython(
+                "",
+                "",
+                "windows",
+                "",
+                "",
+                "",
+                Array.Empty<string>(),
+                delegate(string path) { return false; },
+                Array.Empty<string>(),
+                resolved);
+            Assert.Equal(expected, fallback);
+        }
+
+        [Fact]
+        public void RuntimePathRetriesAfterTransientResolutionFailure()
+        {
+            int attempts = 0;
+            RetryableRuntimePath path = new RetryableRuntimePath(
+                delegate
+                {
+                    attempts++;
+                    if (attempts == 1) throw new FileNotFoundException("temporary profile failure");
+                    return @"C:\tools\python.exe";
+                },
+                delegate(string candidate) { return !string.IsNullOrWhiteSpace(candidate); });
+
+            Assert.Throws<FileNotFoundException>(delegate { return path.Value; });
+            Assert.Equal(@"C:\tools\python.exe", path.Value);
+            Assert.Equal(2, attempts);
+        }
+
+        [Fact]
+        public void PythonResolutionSkipsWindowsAppsWhenScanningPath()
+        {
+            string local = Path.GetTempPath();
+            string windowsApps = Path.Combine(local, "Microsoft", "WindowsApps");
+            string realDirectory = Path.Combine(local, "custom-python");
+            string expected = Path.Combine(realDirectory, "python.exe");
+            HashSet<string> files = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                Path.Combine(windowsApps, "python.exe"),
+                expected
+            };
+
+            string resolved = DevelopmentExecutableResolver.ResolvePython(
+                "",
+                "",
+                "windows",
+                "",
+                "",
+                "",
+                new[] { windowsApps, realDirectory },
+                delegate(string path) { return files.Contains(path); });
+
+            Assert.Equal(expected, resolved);
+        }
+
+        [Fact]
+        public void AdbResolutionUsesAndroidSdkRoot()
+        {
+            string sdk = Path.Combine(Path.GetTempPath(), "android-sdk");
+            string expected = Path.Combine(sdk, "platform-tools", "adb.exe");
+
+            string resolved = DevelopmentExecutableResolver.ResolveAdb(
+                "",
+                "",
+                "windows",
+                "",
+                "",
+                sdk,
+                Array.Empty<string>(),
+                delegate(string path) { return string.Equals(path, expected, StringComparison.OrdinalIgnoreCase); });
+
+            Assert.Equal(expected, resolved);
+        }
+
+        [Fact]
+        public void ConfiguredPythonPathIsUsedWhenItIsARealFile()
+        {
+            string configured = Path.Combine(Path.GetTempPath(), "custom", "python.exe");
+
+            string resolved = DevelopmentExecutableResolver.ResolvePython(
+                "",
+                configured,
+                "windows",
+                "",
+                "",
+                "",
+                Array.Empty<string>(),
+                delegate(string path) { return string.Equals(path, configured, StringComparison.OrdinalIgnoreCase); });
+
+            Assert.Equal(Path.GetFullPath(configured), resolved);
+        }
+
+        [Fact]
+        public void WindowsExit9009IsReportedAsRuntimeStartupFailure()
+        {
+            if (!OperatingSystem.IsWindows()) return;
+
+            string message = PerfCollector.DescribeRunnerExit(9009);
+
+            Assert.Contains("Windows 错误 9009", message);
+            Assert.Contains("Python", message);
+            Assert.Contains("ADB", message);
         }
 
         [Fact]

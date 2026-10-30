@@ -6,6 +6,7 @@ using Xunit;
 
 namespace MoTuPerf.Desktop.Tests
 {
+    [Collection("Global language state")]
     public sealed class MainWindowViewModelTests
     {
         [Fact]
@@ -56,6 +57,63 @@ namespace MoTuPerf.Desktop.Tests
                     Assert.Equal("--", row.Minimum);
                     Assert.Equal("--", row.Average);
                 });
+            }
+        }
+
+        [Fact]
+        public void GlobalLanguageRefreshUpdatesMonitorPresentationWithoutChangingData()
+        {
+            bool previousLanguage = AppLanguageManager.IsChinese;
+            AppLanguageManager.SetChinese(false, false);
+            try
+            {
+                using MainWindowViewModel viewModel = new MainWindowViewModel();
+                viewModel.ApplySample(new PerfSample
+                {
+                    ElapsedSec = 1,
+                    TargetPid = 42,
+                    HasFps = true,
+                    FpsUpdated = true,
+                    Fps = 59,
+                    HasMemory = true,
+                    MemoryUpdated = true,
+                    MemoryMb = 256,
+                    MemoryMetric = "rss"
+                });
+
+                MetricRowViewModel fps = viewModel.Metrics.First(row => row.Name == "FPS");
+                AnalysisMetricRowViewModel analysis = viewModel.AnalysisDataRows.First(row => row.Label == "FPS");
+                DataMetricTileViewModel tile = viewModel.LiveDataTiles.First(item => item.Label == "FPS");
+                string value = fps.Value;
+                string maximum = analysis.Maximum;
+                string tileValue = tile.Value;
+
+                AppLanguageManager.SetChinese(true, false);
+                viewModel.RefreshLanguagePresentation();
+
+                Assert.Equal("帧率", fps.DisplayName);
+                Assert.Equal("帧率 (帧/秒)", analysis.DisplayLabel);
+                Assert.Equal("帧率", tile.Label);
+                Assert.Equal("帧率", viewModel.FpsChartTitle);
+                Assert.Equal(value, fps.Value);
+                Assert.Equal(maximum, analysis.Maximum);
+                Assert.Equal(tileValue, tile.Value);
+                Assert.Equal("FPS", analysis.Label);
+
+                AppLanguageManager.SetChinese(false, false);
+                viewModel.RefreshLanguagePresentation();
+
+                Assert.Equal("FPS", fps.DisplayName);
+                Assert.Equal("FPS (帧/s)", analysis.DisplayLabel);
+                Assert.Equal("FPS", tile.Label);
+                Assert.Equal("FPS", viewModel.FpsChartTitle);
+                Assert.Equal(value, fps.Value);
+                Assert.Equal(maximum, analysis.Maximum);
+                Assert.Equal(tileValue, tile.Value);
+            }
+            finally
+            {
+                AppLanguageManager.SetChinese(previousLanguage, false);
             }
         }
 
@@ -892,10 +950,10 @@ namespace MoTuPerf.Desktop.Tests
                     new ProcessInfo { Pid = 42, Name = "com.example.game", BundleId = "com.example.game" }));
 
                 Assert.Equal("Thermal Status", viewModel.ThermalMetricTitle);
-                Assert.Equal("0正常 / 1轻微 / 2中度 / 3严重 / 4临界 / 5紧急 / 6关机", viewModel.ThermalMetricLegend);
+                Assert.Equal("0 Normal / 1 Light / 2 Moderate / 3 Severe / 4 Critical / 5 Emergency / 6 Shutdown", viewModel.ThermalMetricLegend);
                 Assert.Equal(6, viewModel.ThermalAxisMax);
                 Assert.Equal("Thermal Status", thermal.DisplayName);
-                Assert.Equal("系统热状态", thermal.Description);
+                Assert.Equal("System thermal status", thermal.Description);
                 Assert.Equal("0-6", thermal.Unit);
 
                 viewModel.ApplySelection(new DeviceSelection(
@@ -904,10 +962,10 @@ namespace MoTuPerf.Desktop.Tests
                     new ProcessInfo { Pid = 43, Name = "Game", BundleId = "com.example.ios" }));
 
                 Assert.Equal("Thermal State", viewModel.ThermalMetricTitle);
-                Assert.Equal("0正常 / 1升温 / 2严重 / 3临界", viewModel.ThermalMetricLegend);
+                Assert.Equal("0 Nominal / 1 Fair / 2 Serious / 3 Critical", viewModel.ThermalMetricLegend);
                 Assert.Equal(3, viewModel.ThermalAxisMax);
                 Assert.Equal("Thermal State", thermal.DisplayName);
-                Assert.Equal("系统热状态", thermal.Description);
+                Assert.Equal("System thermal status", thermal.Description);
                 Assert.Equal("0-3", thermal.Unit);
             }
         }

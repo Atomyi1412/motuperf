@@ -1097,6 +1097,8 @@ namespace MoTuPerf.Desktop.UiTests
         public Task LanguageToggleTranslatesMetricDisplayWithoutChangingDataOrIds() => OnUi(async () =>
         {
             string previousTheme = AppThemeManager.Current.Id;
+            bool previousLanguage = AppLanguageManager.IsChinese;
+            AppLanguageManager.SetChinese(false, false);
             var workspace = new SessionComparisonWorkspace();
             var window = new Window { Content = workspace, Width = 1180, Height = 760 };
             window.Show();
@@ -1114,9 +1116,7 @@ namespace MoTuPerf.Desktop.UiTests
                 await Until(() => workspace.ActiveMetricForTest == "bigjank");
                 window.UpdateLayout();
 
-                Button toggle = workspace.FindControl<Button>("LanguageToggleButton");
-                Assert.NotNull(toggle);
-                Assert.Equal("中文", toggle.Content);
+                Assert.Equal("中文", AppLanguageManager.SelectorText);
                 Assert.Equal("FPS", workspace.TabButtonForTest("fps").Content);
                 Assert.Equal("FrameTime / Jank", workspace.TabButtonForTest("frametime").Content);
                 ComparisonReport report = workspace.ReportForTest;
@@ -1142,8 +1142,9 @@ namespace MoTuPerf.Desktop.UiTests
                 AppThemeManager.Apply(Application.Current, previousTheme, false);
                 window.UpdateLayout();
 
-                toggle.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                await Until(() => Equals(toggle.Content, "English") && workspace.ActiveCategoryForTest == "fps");
+                AppLanguageManager.SetChinese(true, false);
+                workspace.SetLanguage(true);
+                await Until(() => AppLanguageManager.IsChinese && workspace.ActiveCategoryForTest == "fps");
                 window.UpdateLayout();
 
                 Assert.Equal("概览", workspace.TabButtonForTest("overview").Content);
@@ -1186,8 +1187,9 @@ namespace MoTuPerf.Desktop.UiTests
                 Assert.Contains("FPS-A", ReportCells(section).Keys);
                 Assert.Contains("FPS Std-A", ReportCells(section).Keys);
 
-                toggle.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                await Until(() => Equals(toggle.Content, "中文") && workspace.ActiveCategoryForTest == "fps");
+                AppLanguageManager.SetChinese(false, false);
+                workspace.SetLanguage(false);
+                await Until(() => !AppLanguageManager.IsChinese && workspace.ActiveCategoryForTest == "fps");
                 window.UpdateLayout();
                 section = workspace.SectionForTest("fps");
                 Assert.Equal("FPS", workspace.TabButtonForTest("fps").Content);
@@ -1204,6 +1206,7 @@ namespace MoTuPerf.Desktop.UiTests
             {
                 window.Close();
                 AppThemeManager.Apply(Application.Current, previousTheme, false);
+                AppLanguageManager.SetChinese(previousLanguage, false);
             }
         });
 
@@ -1502,6 +1505,215 @@ namespace MoTuPerf.Desktop.UiTests
         });
 
         [Fact]
+        public Task GlobalTitleBarLanguageButtonControlsBothWorkspaces() => OnUi(async () =>
+        {
+            bool previousLanguage = AppLanguageManager.IsChinese;
+            string previousTheme = AppThemeManager.Current.Id;
+            AppLanguageManager.SetChinese(false, false);
+            var window = new MainWindow { Width = 1180, Height = 760 };
+            window.Show();
+            try
+            {
+                await Task.Delay(30);
+                window.UpdateLayout();
+                Button language = window.FindControl<Button>("LanguageToggleButton");
+                Button theme = window.FindControl<Button>("ThemeSelectorButton");
+                Button settings = window.FindControl<Button>("SettingsButton");
+                Assert.NotNull(language);
+                Assert.Equal("中文", language.Content);
+                Assert.True(language.Bounds.Right <= theme.Bounds.Left + 1);
+                Assert.True(theme.Bounds.Right <= settings.Bounds.Left + 1);
+
+                MainWindowViewModel viewModel = Assert.IsType<MainWindowViewModel>(window.DataContext);
+                Assert.Equal("FPS", viewModel.Metrics.Single(metric => metric.Name == "FPS").DisplayName);
+
+                language.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                await Until(() => AppLanguageManager.IsChinese && Equals(language.Content, "English"));
+                window.UpdateLayout();
+                Assert.Equal("帧率", viewModel.Metrics.Single(metric => metric.Name == "FPS").DisplayName);
+                using (var localizedFrame = new RenderTargetBitmap(new PixelSize(1180, 760)))
+                {
+                    localizedFrame.Render(window);
+                }
+                Assert.Equal("显示帧耗时（最大值）", ToolTip.GetTip(window.FindControl<PerformanceChartControl>("FrameTimeChart")) as string);
+
+                window.FindControl<Button>("CurveAnalysisButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                SessionComparisonWorkspace workspace = window.FindControl<SessionComparisonWorkspace>("CurveAnalysisWorkspace");
+                await Until(() => workspace.IsVisible && !workspace.IsBusy);
+                Assert.Equal("帧率", workspace.TabButtonForTest("fps").Content);
+                Assert.Null(workspace.FindControl<Button>("LanguageToggleButton"));
+
+                language.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                await Until(() => !AppLanguageManager.IsChinese && Equals(language.Content, "中文"));
+                window.UpdateLayout();
+                Assert.Equal("FPS", viewModel.Metrics.Single(metric => metric.Name == "FPS").DisplayName);
+                Assert.Equal("FPS", workspace.TabButtonForTest("fps").Content);
+                window.FindControl<Button>("CurveAnalysisButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                await Until(() => !workspace.IsVisible);
+                window.UpdateLayout();
+                using (var englishFrame = new RenderTargetBitmap(new PixelSize(1180, 760)))
+                {
+                    englishFrame.Render(window);
+                }
+                Assert.Equal("Display FrameTime (Max)", ToolTip.GetTip(window.FindControl<PerformanceChartControl>("FrameTimeChart")) as string);
+            }
+            finally
+            {
+                window.Close();
+                AppLanguageManager.SetChinese(previousLanguage, false);
+                AppThemeManager.Apply(Application.Current, previousTheme, false);
+            }
+        });
+
+        [Fact]
+        public Task PerformanceChartCanvasLabelsFollowGlobalLanguage() => OnUi(async () =>
+        {
+            bool previousLanguage = AppLanguageManager.IsChinese;
+            string previousTheme = AppThemeManager.Current.Id;
+            AppLanguageManager.SetChinese(false, false);
+            IReadOnlyList<PerfSample> samples = CurveDocument("曲线翻译", "android", 40).Samples;
+            var chart = new PerformanceChartControl { Samples = samples, Width = 760, Height = 156 };
+            var window = new Window { Content = chart, Width = 760, Height = 156 };
+            window.Show();
+            try
+            {
+                await Task.Delay(20);
+                void RenderChart()
+                {
+                    window.UpdateLayout();
+                    using var bitmap = new RenderTargetBitmap(new PixelSize(760, 156));
+                    bitmap.Render(window);
+                }
+                string RenderedTitle() => ToolTip.GetTip(chart) as string;
+
+                var expectedEnglish = new Dictionary<string, string>
+                {
+                    ["fps"] = "FPS (left axis) / Jank, BigJank (right axis: events/window)",
+                    ["frametime"] = "Display FrameTime (Max)",
+                    ["memory"] = "Process Memory · pss",
+                    ["cpu"] = "Process CPU Raw",
+                    ["cpunormalized"] = "Process CPU Normalized",
+                    ["corecpu"] = "Device Core CPU · 8 cores",
+                    ["temperature"] = "Device Temperature · CPU / Battery / NPU"
+                };
+                foreach (KeyValuePair<string, string> item in expectedEnglish)
+                {
+                    chart.Mode = item.Key;
+                    RenderChart();
+                    Assert.Equal(item.Value, RenderedTitle());
+                }
+
+                AppLanguageManager.SetChinese(true, false);
+                PerformanceChartControl.RefreshThemeResources();
+                var expectedChinese = new Dictionary<string, string>
+                {
+                    ["fps"] = "帧率（左轴） / 卡顿、严重卡顿（右轴：次/窗口）",
+                    ["frametime"] = "显示帧耗时（最大值）",
+                    ["memory"] = "进程内存 · pss",
+                    ["cpu"] = "进程原始 CPU",
+                    ["cpunormalized"] = "进程归一化 CPU",
+                    ["corecpu"] = "设备核心 CPU · 8 核",
+                    ["temperature"] = "设备温度 · CPU / 电池 / NPU"
+                };
+                foreach (KeyValuePair<string, string> item in expectedChinese)
+                {
+                    chart.Mode = item.Key;
+                    RenderChart();
+                    Assert.Equal(item.Value, RenderedTitle());
+                }
+
+                string output = Path.Combine(ScreenshotDirectory(), "performance-chart-language-v0543");
+                Directory.CreateDirectory(output);
+                foreach (string theme in new[] { "dark", "light", "retro-sage" })
+                {
+                    AppThemeManager.Apply(Application.Current, theme, false);
+                    var screenshotWindow = new MainWindow { Width = 1500, Height = 940 };
+                    screenshotWindow.Show();
+                    try
+                    {
+                        await Task.Delay(20);
+                        screenshotWindow.UpdateLayout();
+                        using var bitmap = new RenderTargetBitmap(new PixelSize(1500, 940));
+                        bitmap.Render(screenshotWindow);
+                        bitmap.Save(Path.Combine(output, "performance-chart-zh-" + theme + "-1500.png"), PngBitmapEncoderOptions.Default);
+                    }
+                    finally
+                    {
+                        screenshotWindow.Close();
+                    }
+                }
+            }
+            finally
+            {
+                window.Close();
+                AppLanguageManager.SetChinese(previousLanguage, false);
+                AppThemeManager.Apply(Application.Current, previousTheme, false);
+                PerformanceChartControl.RefreshThemeResources();
+            }
+        });
+
+        [Fact]
+        public Task CurveAnalysisIsDisabledDuringCaptureAndRestoredAfterward() => OnUi(async () =>
+        {
+            var window = new MainWindow();
+            window.Show();
+            try
+            {
+                await Task.Delay(20);
+                var button = window.FindControl<Button>("CurveAnalysisButton");
+                var workspace = window.FindControl<SessionComparisonWorkspace>("CurveAnalysisWorkspace");
+                var viewModel = (MainWindowViewModel)window.DataContext;
+                var capturing = typeof(MainWindowViewModel).GetProperty("IsCapturing");
+                Assert.True(button.IsEnabled);
+                capturing.SetValue(viewModel, true);
+                Assert.False(button.IsEnabled);
+                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.False(workspace.IsVisible);
+                capturing.SetValue(viewModel, false);
+                Assert.True(button.IsEnabled);
+                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                await Until(() => workspace.IsVisible && !workspace.IsBusy);
+            }
+            finally { window.Close(); }
+        });
+
+        [Fact]
+        public Task FirstRunOffersIndependentThemeAndLanguageChoices() => OnUi(async () =>
+        {
+            string previousTheme = AppThemeManager.Current.Id;
+            AppThemeManager.Apply(Application.Current, "dark", false);
+            var window = new FirstRunSetupWindow();
+            window.Show();
+            try
+            {
+                await Task.Delay(20);
+                var dark = window.FindControl<RadioButton>("DarkTheme");
+                var light = window.FindControl<RadioButton>("LightTheme");
+                var green = window.FindControl<RadioButton>("GreenTheme");
+                var chinese = window.FindControl<RadioButton>("ChineseLanguage");
+                var english = window.FindControl<RadioButton>("EnglishLanguage");
+                Assert.True(dark.IsChecked);
+                Assert.True(chinese.IsChecked);
+                light.IsChecked = true;
+                Assert.Equal("light", AppThemeManager.Current.Id);
+                Assert.False(dark.IsChecked);
+                green.IsChecked = true;
+                Assert.Equal("retro-sage", AppThemeManager.Current.Id);
+                Assert.False(light.IsChecked);
+                Assert.True(green.IsChecked);
+                english.IsChecked = true;
+                Assert.False(chinese.IsChecked);
+                Assert.True(green.IsChecked);
+            }
+            finally
+            {
+                window.Close();
+                Assert.Equal("dark", AppThemeManager.Current.Id);
+                AppThemeManager.Apply(Application.Current, previousTheme, false);
+            }
+        });
+
+        [Fact]
         public Task MainTitleBarFitsAndOpensIntegratedCurveAnalysis() => OnUi(async () =>
         {
             string previousTheme = AppThemeManager.Current.Id;
@@ -1531,16 +1743,32 @@ namespace MoTuPerf.Desktop.UiTests
                 Assert.DoesNotContain(window.GetVisualDescendants().OfType<Button>(), button =>
                     button.Content is StackPanel stack && stack.Children.OfType<TextBlock>().Any(text => text.Text == "对比分析"));
 
-                string output = Path.Combine(ScreenshotDirectory(), "integrated-curve-analysis-v0541");
+                string output = Path.Combine(ScreenshotDirectory(), "integrated-curve-analysis-v0543");
                 Directory.CreateDirectory(output);
                 foreach (string theme in new[] { "dark", "light", "retro-sage" })
                 {
                     AppThemeManager.Apply(Application.Current, theme, false);
-                    window.UpdateLayout();
-                    Assert.All(titleBar.Children, child => Assert.True(child.Bounds.Right <= titleBar.Bounds.Width + 1));
-                    using var bitmap = new RenderTargetBitmap(new PixelSize(1180, 760));
-                    bitmap.Render(window);
-                    bitmap.Save(Path.Combine(output, "main-" + theme + "-1180.png"), PngBitmapEncoderOptions.Default);
+                    foreach ((int width, int height) in new[] { (1180, 760), (1500, 940) })
+                    {
+                        var screenshotWindow = new MainWindow { Width = width, Height = height };
+                        screenshotWindow.Show();
+                        try
+                        {
+                            await Task.Delay(20);
+                            screenshotWindow.UpdateLayout();
+                            Assert.InRange(Math.Abs(screenshotWindow.Bounds.Width - width), 0, 1);
+                            Assert.InRange(Math.Abs(screenshotWindow.Bounds.Height - height), 0, 1);
+                            var screenshotTitleBar = (Grid)((StackPanel)screenshotWindow.FindControl<Button>("CurveAnalysisButton").Parent).Parent;
+                            Assert.All(screenshotTitleBar.Children, child => Assert.True(child.Bounds.Right <= screenshotTitleBar.Bounds.Width + 1));
+                            using var bitmap = new RenderTargetBitmap(new PixelSize(width, height));
+                            bitmap.Render(screenshotWindow);
+                            bitmap.Save(Path.Combine(output, "main-" + theme + "-" + width + ".png"), PngBitmapEncoderOptions.Default);
+                        }
+                        finally
+                        {
+                            screenshotWindow.Close();
+                        }
+                    }
                 }
 
                 curveButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));

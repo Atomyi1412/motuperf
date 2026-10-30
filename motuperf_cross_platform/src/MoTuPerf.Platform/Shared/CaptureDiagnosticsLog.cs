@@ -54,7 +54,7 @@ namespace CSharpIosPerfMonitor
             }
         }
 
-        internal void WriteStart(CaptureConfig config, string runner, string runnerPath)
+        internal void WriteStart(CaptureConfig config, string runner, string runnerPath, string pythonPath, string adbPath, string transportPath)
         {
             Dictionary<string, object> fields = new Dictionary<string, object>
             {
@@ -70,6 +70,9 @@ namespace CSharpIosPerfMonitor
                 { "target_owner_pid", config == null ? 0 : config.TargetOwnerPid },
                 { "runner", runner ?? "" },
                 { "runner_path", runnerPath ?? "" },
+                { "python_path", pythonPath ?? "" },
+                { "adb_path", adbPath ?? "" },
+                { "transport_path", transportPath ?? "" },
                 { "screenshot_interval_sec", config == null ? 0 : config.ScreenshotIntervalSec },
                 { "collect_fps", config != null && config.CollectFps },
                 { "collect_memory", config != null && config.CollectMemory },

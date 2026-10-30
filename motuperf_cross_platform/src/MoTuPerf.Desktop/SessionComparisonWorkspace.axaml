@@ -136,8 +136,6 @@
           </StackPanel>
           <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
             <TextBlock x:Name="SlotSummaryText" Text="0 / 5" Classes="analysisMuted" VerticalAlignment="Center" />
-            <Button x:Name="LanguageToggleButton" Content="中文" Classes="analysisToolbarButton" MinWidth="60"
-                    Padding="11,6" ToolTip.Tip="切换到中文指标名称" Click="ToggleLanguage" />
           </StackPanel>
         </Grid>
       </Border>
